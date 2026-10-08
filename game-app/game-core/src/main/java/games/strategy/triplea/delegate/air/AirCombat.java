@@ -125,6 +125,28 @@ public class AirCombat {
     };
   }
 
+  /**
+   * Whether this nation's aircraft of this type in the zone may attack the target: the type must
+   * suit the target and the target must be in range. In a Bomb zone every aircraft of the attacking
+   * side there flies at the shortest range among them (escorts limit the bombers).
+   */
+  public static boolean mayAttack(
+      final GamePlayer player, final Territory zone, final UnitType type, final Target target) {
+    if (!mayAttack(type, target.kind())) {
+      return false;
+    }
+    final int range;
+    if (AirZoneAttachment.get(zone).orElseThrow().getZoneType() == ZoneType.BOMB) {
+      final List<Unit> side =
+          zone.getUnitCollection()
+              .getMatches(u -> Matches.unitIsAir().test(u) && !atWar(player, u.getOwner()));
+      range = AirRange.shortestRange(side);
+    } else {
+      range = AirRange.range(type, player);
+    }
+    return AirRange.canReach(player, zone, type, range, target.territory());
+  }
+
   /** Enemy units an air attack on this land territory may hit. */
   public static List<Unit> getLandTargetUnits(final GamePlayer attacker, final Territory t) {
     return t.getUnitCollection()

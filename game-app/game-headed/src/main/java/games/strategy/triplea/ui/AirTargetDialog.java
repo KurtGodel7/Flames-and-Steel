@@ -39,6 +39,7 @@ import org.triplea.java.collections.IntegerMap;
  */
 public final class AirTargetDialog {
   private final GamePlayer player;
+  private final GameData data;
   private final Map<Territory, IntegerMap<UnitType>> available = new LinkedHashMap<>();
   private final Map<Territory, List<Target>> targets = new LinkedHashMap<>();
   private final DefaultListModel<TargetAssignment> assignments = new DefaultListModel<>();
@@ -51,6 +52,7 @@ public final class AirTargetDialog {
   private AirTargetDialog(
       final GamePlayer player, final GameData data, final List<TargetAssignment> start) {
     this.player = player;
+    this.data = data;
     try (GameData.Unlocker ignored = data.acquireReadLock()) {
       for (final Territory zone : AirZoneAttachment.getAirZones(data.getMap())) {
         final List<Target> zoneTargets = AirCombat.getTargets(player, zone);
@@ -215,9 +217,14 @@ public final class AirTargetDialog {
     if (zone == null || type == null) {
       return;
     }
-    targets.get(zone).stream()
-        .filter(t -> AirCombat.mayAttack(type, t.kind()))
-        .forEach(targetBox::addItem);
+    try (GameData.Unlocker ignored = data.acquireReadLock()) {
+      targets.get(zone).stream()
+          .filter(t -> AirCombat.mayAttack(player, zone, type, t))
+          .forEach(targetBox::addItem);
+    }
+    if (targetBox.getItemCount() == 0) {
+      status.setText("No target in range for these aircraft.");
+    }
     updateCount();
   }
 

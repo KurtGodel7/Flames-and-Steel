@@ -101,6 +101,14 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
       if (!AirCombat.mayAttack(a.unitType(), a.target().kind())) {
         return a.unitType().getName() + " cannot attack " + a.target().describe() + ".";
       }
+      if (!AirCombat.mayAttack(player, a.zone(), a.unitType(), a.target())) {
+        return a.target().describe()
+            + " is out of range for "
+            + a.unitType().getName()
+            + " from "
+            + a.zone().getName()
+            + ".";
+      }
       final String key = a.zone().getName() + "|" + a.unitType().getName();
       used.add(key, a.count());
       final long available =

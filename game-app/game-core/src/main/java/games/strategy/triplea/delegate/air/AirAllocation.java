@@ -137,19 +137,36 @@ public class AirAllocation {
       final GamePlayer player, final Stage stage, final List<AirMove> moves, final GameMap map) {
     final Set<Territory> destinations = new HashSet<>();
     for (final AirMove move : moves) {
-      if (AirZoneAttachment.get(move.to()).orElseThrow().getZoneType() == ZoneType.OCEAN) {
+      final ZoneType type = AirZoneAttachment.get(move.to()).orElseThrow().getZoneType();
+      if (type == ZoneType.OCEAN || type == ZoneType.COASTAL) {
         destinations.add(move.to());
       }
     }
     for (final Territory zone : destinations) {
-      final List<UnitType> aircraft = aircraftAfterMoves(player, stage, moves, zone);
+      final AirZoneAttachment zoneAttachment = AirZoneAttachment.get(zone).orElseThrow();
+      final List<UnitType> aircraft =
+          new ArrayList<>(aircraftAfterMoves(player, stage, moves, zone));
+      if (zoneAttachment.getZoneType() == ZoneType.COASTAL) {
+        // in a coastal zone only aircraft without friendly land in range need carriers
+        aircraft.removeIf(
+            type ->
+                AirRange.landWithinReach(
+                    player, zoneAttachment.getCoveredTerritories(), AirRange.range(type, player)));
+        if (aircraft.isEmpty()) {
+          continue;
+        }
+      }
       int cost = 0;
       int jetCost = 0;
       for (final UnitType type : aircraft) {
         final int carrierCost = type.getUnitAttachment().getCarrierCost();
         if (carrierCost < 1) {
           return Optional.of(
-              type.getName() + " cannot fly from carriers, so cannot go to " + zone.getName());
+              type.getName()
+                  + (zoneAttachment.getZoneType() == ZoneType.COASTAL
+                      ? " has no friendly land in range and cannot fly from carriers, so cannot go to "
+                      : " cannot fly from carriers, so cannot go to ")
+                  + zone.getName());
         }
         cost += carrierCost;
         if (AirUnitAttachment.get(type).map(AirUnitAttachment::isFleetCarrierOnly).orElse(false)) {

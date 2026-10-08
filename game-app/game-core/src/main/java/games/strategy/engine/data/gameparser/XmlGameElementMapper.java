@@ -24,6 +24,7 @@ import games.strategy.triplea.attachments.UnitAttachment;
 import games.strategy.triplea.attachments.UnitSupportAttachment;
 import games.strategy.triplea.attachments.UserActionAttachment;
 import games.strategy.triplea.delegate.AirAllocationDelegate;
+import games.strategy.triplea.delegate.AirCarrierCheckDelegate;
 import games.strategy.triplea.delegate.AirCombatDelegate;
 import games.strategy.triplea.delegate.BidPlaceDelegate;
 import games.strategy.triplea.delegate.BidPurchaseDelegate;
@@ -88,6 +89,7 @@ public final class XmlGameElementMapper {
       final Map<String, Supplier<IDelegate>> auxiliaryDelegateFactoriesByTypeName) {
     return ImmutableMap.<String, Supplier<IDelegate>>builder()
         .put("AirAllocationDelegate", AirAllocationDelegate::new)
+        .put("AirCarrierCheckDelegate", AirCarrierCheckDelegate::new)
         .put("AirCombatDelegate", AirCombatDelegate::new)
         .put("BattleDelegate", BattleDelegate::new)
         .put("BidPlaceDelegate", BidPlaceDelegate::new)
