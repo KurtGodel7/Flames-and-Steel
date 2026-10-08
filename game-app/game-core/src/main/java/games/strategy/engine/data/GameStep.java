@@ -176,6 +176,11 @@ public class GameStep extends GameDataComponent {
         && (stepName.endsWith("AirBombers") || stepName.endsWith("AirFighters"));
   }
 
+  /** Flames and Steel bomber target step, e.g. "germanAirTargets". */
+  public static boolean isAirTargetStepName(final @NonNls String stepName) {
+    return stepName != null && stepName.endsWith("AirTargets");
+  }
+
   public static boolean isMoveStepName(final @NonNls String stepName) {
     return stepName != null && stepName.endsWith("Move");
   }

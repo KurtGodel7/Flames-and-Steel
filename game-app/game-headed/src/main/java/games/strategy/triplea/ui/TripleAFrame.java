@@ -53,6 +53,7 @@ import games.strategy.triplea.delegate.TechAdvance;
 import games.strategy.triplea.delegate.TerritoryEffectHelper;
 import games.strategy.triplea.delegate.air.AirAllocation.AirMove;
 import games.strategy.triplea.delegate.air.AirAllocation.Stage;
+import games.strategy.triplea.delegate.air.AirCombat.TargetAssignment;
 import games.strategy.triplea.delegate.battle.AirBattle;
 import games.strategy.triplea.delegate.battle.BattleState;
 import games.strategy.triplea.delegate.battle.ScrambleLogic;
@@ -1632,6 +1633,19 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
                       return AirAllocationDialog.show(
                           TripleAFrame.this, gamePlayer, stage, data, start);
                     }))
+        .result
+        .orElse(List.of());
+  }
+
+  /** Flames and Steel: asks where this nation's surviving bombers attack. */
+  public List<TargetAssignment> getAirTargets(
+      final GamePlayer gamePlayer, final List<TargetAssignment> start) {
+    messageAndDialogThreadPool.waitForAll();
+    requestWindowFocus();
+    return Interruptibles.awaitResult(
+            () ->
+                SwingAction.invokeAndWaitResult(
+                    () -> AirTargetDialog.show(TripleAFrame.this, gamePlayer, data, start)))
         .result
         .orElse(List.of());
   }

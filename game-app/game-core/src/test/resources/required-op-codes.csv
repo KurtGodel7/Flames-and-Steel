@@ -235,3 +235,6 @@
 12,games.strategy.triplea.delegate.remote.IAirAllocationDelegate,allocate,java.util.List
 0,games.strategy.triplea.delegate.remote.IAirAllocationDelegate,delegateCurrentlyRequiresUserInput
 11,games.strategy.triplea.delegate.remote.IAirAllocationDelegate,start
+12,games.strategy.triplea.delegate.remote.IAirCombatDelegate,assignTargets,java.util.List
+0,games.strategy.triplea.delegate.remote.IAirCombatDelegate,delegateCurrentlyRequiresUserInput
+11,games.strategy.triplea.delegate.remote.IAirCombatDelegate,start

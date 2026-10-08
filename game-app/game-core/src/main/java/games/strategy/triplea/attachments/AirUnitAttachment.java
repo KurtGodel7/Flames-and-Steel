@@ -26,6 +26,17 @@ public class AirUnitAttachment extends DefaultAttachment {
   @Getter private boolean fleetCarrier = false;
   // aircraft: may only use fleet carriers (jets)
   @Getter private boolean fleetCarrierOnly = false;
+  // aircraft: firing value in dogfights, and how many times it fires
+  @Getter private int dogfight = 0;
+  @Getter private int dogfightRolls = 1;
+  // aircraft: PUs of damage per strategic bombing run (0 = cannot bomb strategically)
+  @Getter private int bombingDamage = 0;
+  // aircraft: double attack against land targets (dive bombers)
+  @Getter private boolean doubleVsLand = false;
+  // aircraft: double attack against surface ships (torpedo bombers)
+  @Getter private boolean doubleVsSurface = false;
+  // aircraft: may attack submarines (torpedo and medium bombers)
+  @Getter private boolean canAttackSubs = false;
 
   public AirUnitAttachment(
       final String name, final Attachable attachable, final GameData gameData) {
@@ -72,6 +83,54 @@ public class AirUnitAttachment extends DefaultAttachment {
     fleetCarrierOnly = value;
   }
 
+  private void setDogfight(final String value) {
+    dogfight = getInt(value);
+  }
+
+  private void setDogfight(final Integer value) {
+    dogfight = value;
+  }
+
+  private void setDogfightRolls(final String value) {
+    dogfightRolls = getInt(value);
+  }
+
+  private void setDogfightRolls(final Integer value) {
+    dogfightRolls = value;
+  }
+
+  private void setBombingDamage(final String value) {
+    bombingDamage = getInt(value);
+  }
+
+  private void setBombingDamage(final Integer value) {
+    bombingDamage = value;
+  }
+
+  private void setDoubleVsLand(final String value) {
+    doubleVsLand = getBool(value);
+  }
+
+  private void setDoubleVsLand(final Boolean value) {
+    doubleVsLand = value;
+  }
+
+  private void setDoubleVsSurface(final String value) {
+    doubleVsSurface = getBool(value);
+  }
+
+  private void setDoubleVsSurface(final Boolean value) {
+    doubleVsSurface = value;
+  }
+
+  private void setCanAttackSubs(final String value) {
+    canAttackSubs = getBool(value);
+  }
+
+  private void setCanAttackSubs(final Boolean value) {
+    canAttackSubs = value;
+  }
+
   @Override
   public void validate(final GameState data) {}
 
@@ -96,6 +155,45 @@ public class AirUnitAttachment extends DefaultAttachment {
                   this::setFleetCarrierOnly,
                   this::isFleetCarrierOnly,
                   () -> fleetCarrierOnly = false));
+      case "dogfight" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setDogfight, this::setDogfight, this::getDogfight, () -> dogfight = 0));
+      case "dogfightRolls" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setDogfightRolls,
+                  this::setDogfightRolls,
+                  this::getDogfightRolls,
+                  () -> dogfightRolls = 1));
+      case "bombingDamage" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setBombingDamage,
+                  this::setBombingDamage,
+                  this::getBombingDamage,
+                  () -> bombingDamage = 0));
+      case "doubleVsLand" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setDoubleVsLand,
+                  this::setDoubleVsLand,
+                  this::isDoubleVsLand,
+                  () -> doubleVsLand = false));
+      case "doubleVsSurface" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setDoubleVsSurface,
+                  this::setDoubleVsSurface,
+                  this::isDoubleVsSurface,
+                  () -> doubleVsSurface = false));
+      case "canAttackSubs" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setCanAttackSubs,
+                  this::setCanAttackSubs,
+                  this::isCanAttackSubs,
+                  () -> canAttackSubs = false));
       default -> Optional.empty();
     };
   }
