@@ -74,6 +74,8 @@ public abstract class AbstractPlaceDelegate extends BaseTripleADelegate
   public void end() {
     super.end();
     doAfterEnd();
+    // Flames and Steel: newly placed aircraft go to the aircraft reserve
+    AirReserve.sendAircraftToReserve(bridge, bridge.getGamePlayer());
   }
 
   private void doAfterEnd() {

@@ -8,6 +8,7 @@ import games.strategy.engine.data.Attachable;
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.IAttachment;
 import games.strategy.engine.delegate.IDelegate;
+import games.strategy.triplea.attachments.AirZoneAttachment;
 import games.strategy.triplea.attachments.CanalAttachment;
 import games.strategy.triplea.attachments.PlayerAttachment;
 import games.strategy.triplea.attachments.PoliticalActionAttachment;
@@ -122,6 +123,7 @@ public final class XmlGameElementMapper {
   private static ImmutableMap<String, AttachmentFactory> newAttachmentFactories(
       final Map<String, AttachmentFactory> auxiliaryAttachmentFactoriesByTypeName) {
     return ImmutableMap.<String, AttachmentFactory>builder()
+        .put("AirZoneAttachment", AirZoneAttachment::new)
         .put("CanalAttachment", CanalAttachment::new)
         .put("PlayerAttachment", PlayerAttachment::new)
         .put("PoliticalActionAttachment", PoliticalActionAttachment::new)

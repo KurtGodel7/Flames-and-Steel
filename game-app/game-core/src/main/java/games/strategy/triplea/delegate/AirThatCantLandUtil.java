@@ -9,6 +9,7 @@ import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.changefactory.ChangeFactory;
 import games.strategy.engine.delegate.IDelegateBridge;
+import games.strategy.triplea.attachments.AirZoneAttachment;
 import games.strategy.triplea.attachments.UnitAttachment;
 import games.strategy.triplea.delegate.move.validation.AirMovementValidator;
 import games.strategy.triplea.formatter.MyFormatter;
@@ -28,6 +29,10 @@ public class AirThatCantLandUtil {
     final GameData data = bridge.getData();
     final Collection<Territory> cantLand = new ArrayList<>();
     for (final Territory current : data.getMap().getTerritories()) {
+      // Flames and Steel: aircraft in air zones never need to land
+      if (AirZoneAttachment.isAirZone(current)) {
+        continue;
+      }
       final Predicate<Unit> ownedAir = Matches.unitIsAir().and(Matches.unitIsOwnedBy(player));
       final Collection<Unit> air = current.getMatches(ownedAir);
       if (!air.isEmpty() && !AirMovementValidator.canLand(air, current, player, data)) {

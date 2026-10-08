@@ -25,6 +25,7 @@ import games.strategy.engine.player.Player;
 import games.strategy.engine.random.IRandomStats.DiceType;
 import games.strategy.triplea.Properties;
 import games.strategy.triplea.UnitUtils;
+import games.strategy.triplea.attachments.AirZoneAttachment;
 import games.strategy.triplea.attachments.PlayerAttachment;
 import games.strategy.triplea.attachments.TerritoryAttachment;
 import games.strategy.triplea.attachments.UnitAttachment;
@@ -437,8 +438,11 @@ public class BattleDelegate extends BaseTripleADelegate implements IBattleDelega
             .and(Matches.territoryHasUnitsOwnedBy(player));
     final Predicate<Territory> enemyUnitsOrEnemyTerritory =
         anyTerritoryWithOwnAndEnemy.or(enemyTerritoryAndOwnUnits);
+    // Flames and Steel: enemies share air zones; they fight only in the air phase
     final List<Territory> battleTerritories =
-        CollectionUtils.getMatches(data.getMap().getTerritories(), enemyUnitsOrEnemyTerritory);
+        CollectionUtils.getMatches(
+            data.getMap().getTerritories(),
+            enemyUnitsOrEnemyTerritory.and(t -> !AirZoneAttachment.isAirZone(t)));
     for (final Territory territory : battleTerritories) {
       final List<Unit> attackingUnits =
           territory.getUnitCollection().getMatches(Matches.unitIsOwnedBy(player));
