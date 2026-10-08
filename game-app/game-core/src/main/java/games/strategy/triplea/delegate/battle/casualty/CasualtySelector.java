@@ -20,6 +20,7 @@ import games.strategy.triplea.delegate.power.calculator.CombatValue;
 import games.strategy.triplea.formatter.MyFormatter;
 import games.strategy.triplea.util.UnitCategory;
 import games.strategy.triplea.util.UnitSeparator;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -68,21 +69,17 @@ public class CasualtySelector {
       return new CasualtyDetails();
     }
     final GameData data = bridge.getData();
-
-    final Player tripleaPlayer =
-        player.isNull() ? new WeakAi(player.getName()) : bridge.getRemotePlayer(player);
-    final Map<Unit, Collection<Unit>> dependents =
-        headLess ? Map.of() : CasualtyUtil.getDependents(targetsToPickFrom);
-
     final int hitsRemaining =
         Properties.getTransportCasualtiesRestricted(data.getProperties())
             ? extraHits
             : dice.getHits();
 
     if (EditDelegate.getEditMode(data.getProperties())) {
+      final Player tripleaPlayer =
+          player.isNull() ? new WeakAi(player.getName()) : bridge.getRemotePlayer(player);
       return tripleaPlayer.selectCasualties(
           targetsToPickFrom,
-          dependents,
+          headLess ? Map.of() : CasualtyUtil.getDependents(targetsToPickFrom),
           hitsRemaining,
           text,
           dice,
@@ -100,6 +97,79 @@ public class CasualtySelector {
     if (dice.getHits() == 0) {
       return new CasualtyDetails();
     }
+
+    if (!allowMultipleHitsPerUnit || !Properties.getStickyHits(data.getProperties())) {
+      return selectCasualtiesFrom(
+          player,
+          targetsToPickFrom,
+          combatValue,
+          battleSite,
+          bridge,
+          text,
+          dice,
+          battleId,
+          headLess,
+          hitsRemaining,
+          allowMultipleHitsPerUnit);
+    }
+
+    // Sticky hits: hits that must go to already-damaged units are applied without asking.
+    final StickyHits.ForcedHits forced = StickyHits.getForcedHits(targetsToPickFrom, hitsRemaining);
+    final List<Unit> choosable = new ArrayList<>(targetsToPickFrom);
+    choosable.removeAll(forced.killed());
+    choosable.removeAll(forced.damaged());
+    final int hitsToChoose = hitsRemaining - forced.hitsUsed();
+    if (hitsToChoose <= 0 || choosable.isEmpty()) {
+      return new CasualtyDetails(forced.killed(), forced.damaged(), true);
+    }
+    final String choiceText =
+        forced.hitsUsed() == 0
+            ? text
+            : text
+                + " ("
+                + forced.hitsUsed()
+                + MyFormatter.pluralize(" hit", forced.hitsUsed())
+                + " applied to damaged units: "
+                + MyFormatter.unitsToTextNoOwner(forced.killed())
+                + ")";
+    final CasualtyDetails chosen =
+        selectCasualtiesFrom(
+            player,
+            choosable,
+            combatValue,
+            battleSite,
+            bridge,
+            choiceText,
+            dice,
+            battleId,
+            headLess,
+            hitsToChoose,
+            allowMultipleHitsPerUnit);
+    final List<Unit> killed = new ArrayList<>(forced.killed());
+    killed.addAll(chosen.getKilled());
+    final List<Unit> damaged = new ArrayList<>(forced.damaged());
+    damaged.addAll(chosen.getDamaged());
+    return new CasualtyDetails(killed, damaged, chosen.getAutoCalculated());
+  }
+
+  private static CasualtyDetails selectCasualtiesFrom(
+      final GamePlayer player,
+      final Collection<Unit> targetsToPickFrom,
+      final CombatValue combatValue,
+      final Territory battleSite,
+      final IDelegateBridge bridge,
+      final String text,
+      final DiceRoll dice,
+      final UUID battleId,
+      final boolean headLess,
+      final int hitsRemaining,
+      final boolean allowMultipleHitsPerUnit) {
+    final GameData data = bridge.getData();
+
+    final Player tripleaPlayer =
+        player.isNull() ? new WeakAi(player.getName()) : bridge.getRemotePlayer(player);
+    final Map<Unit, Collection<Unit>> dependents =
+        headLess ? Map.of() : CasualtyUtil.getDependents(targetsToPickFrom);
 
     // Create production cost map, Maybe should do this elsewhere, but in case prices change, we do
     // it here.
@@ -229,7 +299,7 @@ public class CasualtySelector {
                 + ", for "
                 + casualtyDetails);
       }
-      return selectCasualties(
+      return selectCasualtiesFrom(
           player,
           sortedTargetsToPickFrom,
           combatValue,
@@ -239,7 +309,7 @@ public class CasualtySelector {
           dice,
           battleId,
           headLess,
-          extraHits,
+          hitsRemaining,
           allowMultipleHitsPerUnit);
     }
     // check we have enough of each type
@@ -253,7 +323,7 @@ public class CasualtySelector {
                 + ", for "
                 + casualtyDetails);
       }
-      return selectCasualties(
+      return selectCasualtiesFrom(
           player,
           sortedTargetsToPickFrom,
           combatValue,
@@ -263,7 +333,7 @@ public class CasualtySelector {
           dice,
           battleId,
           headLess,
-          extraHits,
+          hitsRemaining,
           allowMultipleHitsPerUnit);
     }
     if (stickyHits) {
@@ -274,7 +344,7 @@ public class CasualtySelector {
         if (headLess) {
           log.error("Possible Infinite Loop: " + stickyError.get() + ", for " + casualtyDetails);
         }
-        return selectCasualties(
+        return selectCasualtiesFrom(
             player,
             sortedTargetsToPickFrom,
             combatValue,
@@ -284,7 +354,7 @@ public class CasualtySelector {
             dice,
             battleId,
             headLess,
-            extraHits,
+            hitsRemaining,
             allowMultipleHitsPerUnit);
       }
     }

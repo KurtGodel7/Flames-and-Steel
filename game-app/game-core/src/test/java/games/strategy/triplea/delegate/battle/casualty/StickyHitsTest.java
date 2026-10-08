@@ -15,12 +15,12 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.startsWith;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
-import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.changefactory.ChangeFactory;
 import games.strategy.engine.delegate.IDelegateBridge;
@@ -32,6 +32,7 @@ import games.strategy.triplea.delegate.data.CasualtyList;
 import games.strategy.triplea.delegate.power.calculator.CombatValueBuilder;
 import games.strategy.triplea.xml.TestMapGameData;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -140,16 +141,63 @@ class StickyHitsTest {
   }
 
   @Test
-  void casualtySelectionOffersStickyDefaultAndRefusesSpreadHits() {
+  void forcedHitsGoToTheMostDamagedUnitFirst() {
+    final Unit slightly = newBattleship(1);
+    final Unit badly = newBattleship(2);
+    final Unit fresh = newBattleship(0);
+
+    final StickyHits.ForcedHits forced =
+        StickyHits.getForcedHits(List.of(fresh, slightly, badly), 2);
+
+    // badly damaged (1 left) dies, then the slightly damaged one takes the last hit
+    assertThat(forced.killed(), contains(badly));
+    assertThat(forced.damaged(), contains(slightly));
+    assertThat(forced.hitsUsed(), is(2));
+  }
+
+  @Test
+  void hitsOnDamagedUnitsAreAppliedWithoutAsking() {
     gameData.getProperties().set(Constants.STICKY_HITS, true);
     final IDelegateBridge bridge = newDelegateBridge(british);
     final Unit damaged = newBattleship(1);
     final Unit fresh = newBattleship(0);
+    final Unit infantry = infantry(gameData).create(1, british).get(0);
+
+    final CasualtyDetails result = selectCasualties(bridge, List.of(damaged, fresh, infantry), 2);
+
+    assertThat(result.getKilled(), contains(damaged));
+    assertThat(result.getDamaged(), is(empty()));
+    verify(bridge.getRemotePlayer(), never())
+        .selectCasualties(
+            any(),
+            any(),
+            anyInt(),
+            any(),
+            any(),
+            any(),
+            any(),
+            any(),
+            anyBoolean(),
+            any(),
+            any(),
+            any(),
+            any(),
+            anyBoolean());
+  }
+
+  @Test
+  void playerChoosesOnlyTheLeftoverHitsAndMayNotSpreadThem() {
+    gameData.getProperties().set(Constants.STICKY_HITS, true);
+    final IDelegateBridge bridge = newDelegateBridge(british);
+    final Unit damaged = newBattleship(1);
+    final Unit fresh1 = newBattleship(0);
+    final Unit fresh2 = newBattleship(0);
     final List<Unit> infantry = infantry(gameData).create(2, british);
-    final List<Unit> targets = new ArrayList<>(List.of(damaged, fresh));
+    final List<Unit> targets = new ArrayList<>(List.of(damaged, fresh1, fresh2));
     targets.addAll(infantry);
     final AtomicInteger asked = new AtomicInteger();
-    final List<CasualtyList> defaultsOffered = new ArrayList<>();
+    final List<Collection<Unit>> offeredUnits = new ArrayList<>();
+    final List<Integer> offeredHits = new ArrayList<>();
     when(bridge
             .getRemotePlayer()
             .selectCasualties(
@@ -169,44 +217,49 @@ class StickyHitsTest {
                 anyBoolean()))
         .thenAnswer(
             invocation -> {
-              defaultsOffered.add(invocation.getArgument(10));
-              // first answer spreads the hits; the second accepts the offered default
+              offeredUnits.add(invocation.getArgument(0));
+              offeredHits.add(invocation.getArgument(2));
+              // first answer spreads the hits over two battleships; the second takes the default
               return asked.getAndIncrement() == 0
-                  ? new CasualtyDetails(List.of(), List.of(damaged, fresh, fresh), false)
+                  ? new CasualtyDetails(List.of(), List.of(fresh1, fresh2), false)
                   : new CasualtyDetails(invocation.<CasualtyList>getArgument(10), false);
             });
-    final Territory seaZone = territory("1 Sea Zone", gameData);
 
-    final CasualtyDetails result =
-        CasualtySelector.selectCasualties(
-            british,
-            targets,
-            CombatValueBuilder.mainCombatValue()
-                .enemyUnits(List.of())
-                .friendlyUnits(targets)
-                .side(BattleState.Side.DEFENSE)
-                .gameSequence(gameData.getSequence())
-                .supportAttachments(gameData.getUnitTypeList().getSupportRules())
-                .lhtrHeavyBombers(false)
-                .gameDiceSides(gameData.getDiceSides())
-                .territoryEffects(List.of())
-                .build(),
-            seaZone,
-            bridge,
-            "",
-            new DiceRoll(new int[] {0, 0, 0}, 3, 1, false, null),
-            UUID.randomUUID(),
-            false,
-            0,
-            true);
+    final CasualtyDetails result = selectCasualties(bridge, targets, 4);
 
+    // 2 of the 4 hits finish the damaged battleship automatically; 2 are left to choose
+    assertThat(offeredHits.get(0), is(2));
+    assertThat(offeredUnits.get(0).contains(damaged), is(false));
     assertThat(asked.get(), is(2));
     verify(bridge.getRemotePlayer()).reportError(startsWith("Sticky hits"));
-    // the damaged battleship is destroyed (2 hits) first, then the third hit kills an infantry
-    assertThat(defaultsOffered.get(0).getKilled().get(0), is(damaged));
-    assertThat(defaultsOffered.get(0).getKilled().size(), is(2));
-    assertThat(defaultsOffered.get(0).getKilled().get(1).getType(), is(infantry.get(0).getType()));
     assertThat(result.getKilled(), hasItem(damaged));
+    assertThat(result.getKilled().size() + result.getDamaged().size(), is(3));
+  }
+
+  private CasualtyDetails selectCasualties(
+      final IDelegateBridge bridge, final List<Unit> targets, final int hits) {
+    final int[] dice = new int[hits];
+    return CasualtySelector.selectCasualties(
+        british,
+        targets,
+        CombatValueBuilder.mainCombatValue()
+            .enemyUnits(List.of())
+            .friendlyUnits(targets)
+            .side(BattleState.Side.DEFENSE)
+            .gameSequence(gameData.getSequence())
+            .supportAttachments(gameData.getUnitTypeList().getSupportRules())
+            .lhtrHeavyBombers(false)
+            .gameDiceSides(gameData.getDiceSides())
+            .territoryEffects(List.of())
+            .build(),
+        territory("1 Sea Zone", gameData),
+        bridge,
+        "",
+        new DiceRoll(dice, hits, 1, false, null),
+        UUID.randomUUID(),
+        false,
+        0,
+        true);
   }
 
   private Unit newBattleship(final int hitsTaken) {

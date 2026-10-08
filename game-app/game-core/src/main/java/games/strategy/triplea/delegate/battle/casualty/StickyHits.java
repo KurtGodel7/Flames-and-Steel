@@ -6,6 +6,7 @@ import games.strategy.triplea.delegate.data.CasualtyList;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -30,6 +31,47 @@ public class StickyHits {
     LAND,
     SEA,
     AIR
+  }
+
+  /**
+   * Hits that sticky hits forces onto already-damaged units, applied without asking the owner.
+   *
+   * @param killed damaged units destroyed by these hits
+   * @param damaged one entry per hit on a damaged unit that survives (only when the hits run out)
+   * @param hitsUsed number of hits used
+   */
+  public record ForcedHits(List<Unit> killed, List<Unit> damaged, int hitsUsed) {}
+
+  /** Already-damaged units take hits first, the most damaged first, each until destroyed. */
+  public static ForcedHits getForcedHits(final Collection<Unit> targets, final int hits) {
+    final List<Unit> alreadyDamaged =
+        targets.stream()
+            .filter(u -> u.getHits() > 0)
+            .sorted(Comparator.comparingInt(StickyHits::hitPointsLeft))
+            .toList();
+    final List<Unit> killed = new ArrayList<>();
+    final List<Unit> damaged = new ArrayList<>();
+    int hitsLeft = hits;
+    for (final Unit unit : alreadyDamaged) {
+      if (hitsLeft <= 0) {
+        break;
+      }
+      final int hitPointsLeft = hitPointsLeft(unit);
+      if (hitsLeft >= hitPointsLeft) {
+        killed.add(unit);
+        hitsLeft -= hitPointsLeft;
+      } else {
+        for (int i = 0; i < hitsLeft; i++) {
+          damaged.add(unit);
+        }
+        hitsLeft = 0;
+      }
+    }
+    return new ForcedHits(killed, damaged, hits - hitsLeft);
+  }
+
+  private static int hitPointsLeft(final Unit unit) {
+    return unit.getUnitAttachment().getHitPoints() - unit.getHits();
   }
 
   /** Why this choice of casualties breaks the sticky hit rule, if it does. */
