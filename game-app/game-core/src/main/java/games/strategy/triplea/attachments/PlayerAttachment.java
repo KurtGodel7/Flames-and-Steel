@@ -51,6 +51,11 @@ public class PlayerAttachment extends DefaultAttachment {
   // Flames and Steel: who receives our territory when an ally liberates it from an enemy.
   // null keeps the engine default (back to us only while we hold a capital).
   private @Nullable String liberatedTerritoryGoesTo = null;
+  // Flames and Steel: at the end of our turn, allied units in our land territories are removed
+  // and we receive their purchase cost in PUs.
+  private boolean sellsAlliedUnitsAtEndTurn = false;
+  // PUs paid per unit of each non-PU resource in a sold unit's purchase cost (e.g. Manpower: 2)
+  private @Nullable IntegerMap<Resource> alliedUnitSaleResourceValue = null;
   // what resources can be used for suicide attacks, and at what attack power
   private @Nullable IntegerMap<Resource> suicideAttackResources = null;
   // what can be hit by suicide attacks
@@ -386,6 +391,52 @@ public class PlayerAttachment extends DefaultAttachment {
     return LIBERATED_TO_ORIGINAL_OWNER.equals(liberatedTerritoryGoesTo);
   }
 
+  private void setSellsAlliedUnitsAtEndTurn(final String value) {
+    sellsAlliedUnitsAtEndTurn = getBool(value);
+  }
+
+  private void setSellsAlliedUnitsAtEndTurn(final Boolean value) {
+    sellsAlliedUnitsAtEndTurn = value;
+  }
+
+  public boolean getSellsAlliedUnitsAtEndTurn() {
+    return sellsAlliedUnitsAtEndTurn;
+  }
+
+  private void resetSellsAlliedUnitsAtEndTurn() {
+    sellsAlliedUnitsAtEndTurn = false;
+  }
+
+  private void setAlliedUnitSaleResourceValue(final String value) throws GameParseException {
+    final String[] s = splitOnColon(value);
+    if (s.length != 2) {
+      throw new GameParseException(
+          "alliedUnitSaleResourceValue must have exactly 2 fields" + thisErrorMsg());
+    }
+    final int puValue = getInt(s[0]);
+    if (puValue < 0) {
+      throw new GameParseException(
+          "alliedUnitSaleResourceValue PU value must be positive" + thisErrorMsg());
+    }
+    final Resource r = getResourceOrThrowGameParseException(s[1]);
+    if (alliedUnitSaleResourceValue == null) {
+      alliedUnitSaleResourceValue = new IntegerMap<>();
+    }
+    alliedUnitSaleResourceValue.put(r, puValue);
+  }
+
+  private void setAlliedUnitSaleResourceValue(final IntegerMap<Resource> value) {
+    alliedUnitSaleResourceValue = value;
+  }
+
+  public IntegerMap<Resource> getAlliedUnitSaleResourceValue() {
+    return getIntegerMapProperty(alliedUnitSaleResourceValue);
+  }
+
+  private void resetAlliedUnitSaleResourceValue() {
+    alliedUnitSaleResourceValue = null;
+  }
+
   /** True if our territory is kept by whichever ally liberates it. */
   public boolean isLiberatedTerritoryToLiberator() {
     return LIBERATED_TO_LIBERATOR.equals(liberatedTerritoryGoesTo);
@@ -478,6 +529,20 @@ public class PlayerAttachment extends DefaultAttachment {
                   this::setLiberatedTerritoryGoesTo,
                   this::getLiberatedTerritoryGoesTo,
                   this::resetLiberatedTerritoryGoesTo));
+      case "sellsAlliedUnitsAtEndTurn" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setSellsAlliedUnitsAtEndTurn,
+                  this::setSellsAlliedUnitsAtEndTurn,
+                  this::getSellsAlliedUnitsAtEndTurn,
+                  this::resetSellsAlliedUnitsAtEndTurn));
+      case "alliedUnitSaleResourceValue" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setAlliedUnitSaleResourceValue,
+                  this::setAlliedUnitSaleResourceValue,
+                  this::getAlliedUnitSaleResourceValue,
+                  this::resetAlliedUnitSaleResourceValue));
       case "suicideAttackResources" ->
           Optional.of(
               MutableProperty.of(
