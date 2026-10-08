@@ -51,6 +51,8 @@ import games.strategy.triplea.delegate.GameStepPropertiesHelper;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.TechAdvance;
 import games.strategy.triplea.delegate.TerritoryEffectHelper;
+import games.strategy.triplea.delegate.air.AirAllocation.AirMove;
+import games.strategy.triplea.delegate.air.AirAllocation.Stage;
 import games.strategy.triplea.delegate.battle.AirBattle;
 import games.strategy.triplea.delegate.battle.BattleState;
 import games.strategy.triplea.delegate.battle.ScrambleLogic;
@@ -1602,6 +1604,36 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
     actionButtonsPanel.changeToUserActions(player);
     requestWindowFocus();
     return actionButtonsPanel.waitForUserActionAction(firstRun, userActionDelegate);
+  }
+
+  /**
+   * Flames and Steel: asks for this nation's aircraft moves between air zones. When several human
+   * nations share this computer, first asks the others to look away.
+   */
+  public List<AirMove> getAirAllocation(
+      final GamePlayer gamePlayer, final Stage stage, final List<AirMove> start) {
+    messageAndDialogThreadPool.waitForAll();
+    requestWindowFocus();
+    final long localHumans =
+        getLocalPlayers().getLocalPlayers().stream().filter(p -> !p.isAi()).count();
+    return Interruptibles.awaitResult(
+            () ->
+                SwingAction.invokeAndWaitResult(
+                    () -> {
+                      if (localHumans > 1) {
+                        JOptionPane.showMessageDialog(
+                            TripleAFrame.this,
+                            "Hidden air allocation for "
+                                + gamePlayer.getName()
+                                + ". Other players, please look away.",
+                            gamePlayer.getName() + " air allocation",
+                            JOptionPane.INFORMATION_MESSAGE);
+                      }
+                      return AirAllocationDialog.show(
+                          TripleAFrame.this, gamePlayer, stage, data, start);
+                    }))
+        .result
+        .orElse(List.of());
   }
 
   /** Flames and Steel: asks for each research centre's focus. */

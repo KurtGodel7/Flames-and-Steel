@@ -232,3 +232,6 @@
 0,games.strategy.triplea.delegate.remote.IResearchDelegate,delegateCurrentlyRequiresUserInput
 1,games.strategy.triplea.delegate.remote.IResearchDelegate,end
 11,games.strategy.triplea.delegate.remote.IResearchDelegate,start
+12,games.strategy.triplea.delegate.remote.IAirAllocationDelegate,allocate,java.util.List
+0,games.strategy.triplea.delegate.remote.IAirAllocationDelegate,delegateCurrentlyRequiresUserInput
+11,games.strategy.triplea.delegate.remote.IAirAllocationDelegate,start

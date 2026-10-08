@@ -17,6 +17,8 @@ import games.strategy.triplea.attachments.UserActionAttachment;
 import games.strategy.triplea.delegate.DiceRoll;
 import games.strategy.triplea.delegate.GameStepPropertiesHelper;
 import games.strategy.triplea.delegate.Matches;
+import games.strategy.triplea.delegate.air.AirAllocation.AirMove;
+import games.strategy.triplea.delegate.air.AirAllocation.Stage;
 import games.strategy.triplea.delegate.data.BattleListing;
 import games.strategy.triplea.delegate.data.CasualtyDetails;
 import games.strategy.triplea.delegate.data.CasualtyList;
@@ -26,6 +28,7 @@ import games.strategy.triplea.delegate.data.TechResults;
 import games.strategy.triplea.delegate.data.TechRoll;
 import games.strategy.triplea.delegate.remote.IAbstractForumPosterDelegate;
 import games.strategy.triplea.delegate.remote.IAbstractPlaceDelegate;
+import games.strategy.triplea.delegate.remote.IAirAllocationDelegate;
 import games.strategy.triplea.delegate.remote.IBattleDelegate;
 import games.strategy.triplea.delegate.remote.IEditDelegate;
 import games.strategy.triplea.delegate.remote.IMoveDelegate;
@@ -166,6 +169,8 @@ public class TripleAPlayer extends AbstractBasePlayer {
       tech();
     } else if (GameStep.isResearchStepName(name)) {
       research();
+    } else if (GameStep.isAirAllocationStepName(name)) {
+      airAllocation(name);
     } else if (GameStep.isPurchaseOrBidStepName(name)) {
       purchase(GameStepPropertiesHelper.isBid(getGameData()), false);
       if (!GameStepPropertiesHelper.isBid(getGameData())) {
@@ -298,6 +303,24 @@ public class TripleAPlayer extends AbstractBasePlayer {
       return;
     }
     ui.getUiContext().getClipPlayer().play(soundPath, getGamePlayer());
+  }
+
+  private void airAllocation(final String stepName) {
+    if (getPlayerBridge().isGameOver()) {
+      return;
+    }
+    final IAirAllocationDelegate airDelegate =
+        (IAirAllocationDelegate) getPlayerBridge().getRemoteDelegate();
+    final Stage stage = stepName.endsWith("AirFighters") ? Stage.FIGHTERS : Stage.BOMBERS;
+    List<AirMove> moves = List.of();
+    while (!getPlayerBridge().isGameOver()) {
+      moves = ui.getAirAllocation(getGamePlayer(), stage, moves);
+      final String error = airDelegate.allocate(moves);
+      if (error == null) {
+        return;
+      }
+      ui.notifyError(error);
+    }
   }
 
   private void research() {

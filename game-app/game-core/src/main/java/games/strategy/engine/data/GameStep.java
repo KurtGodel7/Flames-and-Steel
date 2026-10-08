@@ -170,6 +170,12 @@ public class GameStep extends GameDataComponent {
     return stepName != null && stepName.endsWith("Research");
   }
 
+  /** Flames and Steel air allocation step, e.g. "germanAirBombers" or "germanAirFighters". */
+  public static boolean isAirAllocationStepName(final @NonNls String stepName) {
+    return stepName != null
+        && (stepName.endsWith("AirBombers") || stepName.endsWith("AirFighters"));
+  }
+
   public static boolean isMoveStepName(final @NonNls String stepName) {
     return stepName != null && stepName.endsWith("Move");
   }
