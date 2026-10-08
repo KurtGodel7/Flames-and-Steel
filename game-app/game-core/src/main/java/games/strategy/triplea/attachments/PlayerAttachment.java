@@ -27,6 +27,8 @@ import org.triplea.util.Triple;
  */
 public class PlayerAttachment extends DefaultAttachment {
   @Serial private static final long serialVersionUID = 1880755875866426270L;
+  public static final String LIBERATED_TO_ORIGINAL_OWNER = "originalOwner";
+  public static final String LIBERATED_TO_LIBERATOR = "liberator";
 
   @Getter private int vps = 0;
   // need to store some data during a turn
@@ -46,6 +48,9 @@ public class PlayerAttachment extends DefaultAttachment {
   private boolean destroysPus = false;
   // are we immune to being blockaded?
   private boolean immuneToBlockade = false;
+  // Flames and Steel: who receives our territory when an ally liberates it from an enemy.
+  // null keeps the engine default (back to us only while we hold a capital).
+  private @Nullable String liberatedTerritoryGoesTo = null;
   // what resources can be used for suicide attacks, and at what attack power
   private @Nullable IntegerMap<Resource> suicideAttackResources = null;
   // what can be hit by suicide attacks
@@ -356,6 +361,36 @@ public class PlayerAttachment extends DefaultAttachment {
     immuneToBlockade = false;
   }
 
+  private void setLiberatedTerritoryGoesTo(final String value) throws GameParseException {
+    if (!value.equals(LIBERATED_TO_ORIGINAL_OWNER) && !value.equals(LIBERATED_TO_LIBERATOR)) {
+      throw new GameParseException(
+          "liberatedTerritoryGoesTo must be "
+              + LIBERATED_TO_ORIGINAL_OWNER
+              + " or "
+              + LIBERATED_TO_LIBERATOR
+              + thisErrorMsg());
+    }
+    liberatedTerritoryGoesTo = value.intern();
+  }
+
+  private @Nullable String getLiberatedTerritoryGoesTo() {
+    return liberatedTerritoryGoesTo;
+  }
+
+  private void resetLiberatedTerritoryGoesTo() {
+    liberatedTerritoryGoesTo = null;
+  }
+
+  /** True if our territory always returns to us when an ally liberates it. */
+  public boolean isLiberatedTerritoryToOriginalOwner() {
+    return LIBERATED_TO_ORIGINAL_OWNER.equals(liberatedTerritoryGoesTo);
+  }
+
+  /** True if our territory is kept by whichever ally liberates it. */
+  public boolean isLiberatedTerritoryToLiberator() {
+    return LIBERATED_TO_LIBERATOR.equals(liberatedTerritoryGoesTo);
+  }
+
   @Override
   public void validate(final GameState data) {}
 
@@ -436,6 +471,13 @@ public class PlayerAttachment extends DefaultAttachment {
                   this::setImmuneToBlockade,
                   this::getImmuneToBlockade,
                   this::resetImmuneToBlockade));
+      case "liberatedTerritoryGoesTo" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setLiberatedTerritoryGoesTo,
+                  this::setLiberatedTerritoryGoesTo,
+                  this::getLiberatedTerritoryGoesTo,
+                  this::resetLiberatedTerritoryGoesTo));
       case "suicideAttackResources" ->
           Optional.of(
               MutableProperty.of(

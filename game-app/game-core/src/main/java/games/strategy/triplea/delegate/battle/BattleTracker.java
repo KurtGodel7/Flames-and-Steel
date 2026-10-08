@@ -665,8 +665,10 @@ public class BattleTracker implements Serializable {
     captureOrDestroyUnits(territory, gamePlayer, newOwner, bridge, changeTracker);
     // is this territory our capitol or a capitol of our ally
     // Also check to make sure playerAttachment even HAS a capital to fix abend
+    // Players whose liberated territory stays with the liberator get nothing handed back.
     if (isTerritoryOwnerAnEnemy
         && isTerritoryOrigOwnerAllied
+        && !isLiberatedTerritoryToLiberator(optionalTerrOrigOwner.get())
         && territoryAttachment.getCapital().isPresent()
         && TerritoryAttachment.getAllCapitals(optionalTerrOrigOwner.get(), data.getMap())
             .contains(territory)) {
@@ -681,8 +683,22 @@ public class BattleTracker implements Serializable {
     markWasInCombat(arrivedUnits, bridge, changeTracker);
   }
 
+  private static boolean isLiberatedTerritoryToLiberator(final GamePlayer terrOrigOwner) {
+    final PlayerAttachment playerAttachment = PlayerAttachment.get(terrOrigOwner);
+    return playerAttachment != null && playerAttachment.isLiberatedTerritoryToLiberator();
+  }
+
   private static GamePlayer getNewOwnerForTakeOver(
       Territory territory, GamePlayer gamePlayer, GamePlayer terrOrigOwner, GameData data) {
+    final PlayerAttachment origOwnerAttachment = PlayerAttachment.get(terrOrigOwner);
+    if (origOwnerAttachment != null) {
+      if (origOwnerAttachment.isLiberatedTerritoryToOriginalOwner()) {
+        return terrOrigOwner;
+      }
+      if (origOwnerAttachment.isLiberatedTerritoryToLiberator()) {
+        return gamePlayer;
+      }
+    }
     GamePlayer newOwner = gamePlayer;
     final List<Territory> capitalsListOwned =
         TerritoryAttachment.getAllCurrentlyOwnedCapitals(terrOrigOwner, data.getMap());
