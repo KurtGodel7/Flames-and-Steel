@@ -71,7 +71,7 @@ public final class ResearchFocusDialog {
                     + " "
                     + ResearchCenters.getStars(player, tech)
                     + "/"
-                    + ResearchCenters.getStarsRequired(tech)
+                    + ResearchCenters.getStarsRequired(player, tech)
                     + ")")
         .orElse(category.getName());
   }

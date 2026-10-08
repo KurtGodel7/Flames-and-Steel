@@ -103,7 +103,7 @@ class ResearchPanel extends JPanel {
     if (ResearchCenters.isOwned(player, tech)) {
       return "&#10003; " + tech.getName();
     }
-    final int required = ResearchCenters.getStarsRequired(tech);
+    final int required = ResearchCenters.getStarsRequired(player, tech);
     final int stars = Math.min(required, ResearchCenters.getStars(player, tech));
     return tech.getName()
         + " "

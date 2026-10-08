@@ -166,6 +166,22 @@ class ResearchCenterDelegateTest {
   }
 
   @Test
+  void nationStarCountOverridesTechStarCount() {
+    setCenters(1);
+    setStarsRequired(tech("A", 0), 5);
+    final var overrides = new IntegerMap<String>();
+    overrides.put(tech("A", 0).getName(), 1);
+    gameData.performChange(
+        ChangeFactory.attachmentPropertyChange(
+            germans.getTechAttachment(), overrides, "researchStarsRequired"));
+    whenGetRandom(bridge).thenAnswer(withValues(0));
+
+    research(List.of("A|B"), -1);
+
+    assertThat(ResearchCenters.isUnlocked(germans, tech("A", 0)), is(true));
+  }
+
+  @Test
   void starsGoToTechsInOrder() {
     setCenters(1);
     setStarsRequired(tech("A", 0), 3);
@@ -315,7 +331,7 @@ class ResearchCenterDelegateTest {
   private void finishCategories(final String... names) {
     for (final String name : names) {
       for (final TechAdvance tech : category(name).getTechs()) {
-        setStars(tech, ResearchCenters.getStarsRequired(tech));
+        setStars(tech, ResearchCenters.getStarsRequired(germans, tech));
       }
     }
   }

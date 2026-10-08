@@ -227,7 +227,7 @@ public class ResearchCenterDelegate extends BaseTripleADelegate implements IRese
     turn.stars.add(tech.getName(), 1);
     turn.advancedCategories.add(category.getName());
     final int stars = turn.stars.getInt(tech.getName());
-    final int required = ResearchCenters.getStarsRequired(tech);
+    final int required = ResearchCenters.getStarsRequired(player, tech);
     final String progress =
         category.getName() + ": " + tech.getName() + " " + stars + "/" + required + " stars";
     if (stars >= required) {
@@ -256,7 +256,8 @@ public class ResearchCenterDelegate extends BaseTripleADelegate implements IRese
           .filter(
               tech ->
                   !ResearchCenters.isOwned(player, tech)
-                      && stars.getInt(tech.getName()) < ResearchCenters.getStarsRequired(tech))
+                      && stars.getInt(tech.getName())
+                          < ResearchCenters.getStarsRequired(player, tech))
           .findFirst();
     }
   }

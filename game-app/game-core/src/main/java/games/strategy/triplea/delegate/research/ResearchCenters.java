@@ -86,12 +86,19 @@ public class ResearchCenters {
 
   /** All stars gained but not yet activated. */
   public static boolean isUnlocked(final GamePlayer player, final TechAdvance tech) {
-    return !isOwned(player, tech) && getStars(player, tech) >= getStarsRequired(tech);
+    return !isOwned(player, tech) && getStars(player, tech) >= getStarsRequired(player, tech);
   }
 
   public static int getStars(final GamePlayer player, final TechAdvance tech) {
     final TechAttachment techAttachment = player.getTechAttachment();
     return techAttachment.getResearchStars().getInt(tech.getName());
+  }
+
+  /** Stars this player needs for the tech: the nation's own count if set, else the tech's. */
+  public static int getStarsRequired(final GamePlayer player, final TechAdvance tech) {
+    final int override =
+        player.getTechAttachment().getResearchStarsRequired().getInt(tech.getName());
+    return override > 0 ? override : getStarsRequired(tech);
   }
 
   public static int getStarsRequired(final TechAdvance tech) {

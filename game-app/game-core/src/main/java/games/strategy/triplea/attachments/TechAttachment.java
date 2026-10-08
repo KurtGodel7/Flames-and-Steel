@@ -51,6 +51,8 @@ public class TechAttachment extends DefaultAttachment {
   @Getter private int researchCenters = 0;
   // Stars (breakthroughs) gained so far, by tech name. Starting stars are set in the XML.
   private @Nullable IntegerMap<String> researchStars = null;
+  // Per-nation star counts that override the tech's own researchStarsRequired, by tech name.
+  private @Nullable IntegerMap<String> researchStarsRequired = null;
   // Focus of each research centre, one entry per centre: "primary|secondary" (either may be "").
   private @Nullable List<String> researchFocus = null;
 
@@ -370,6 +372,36 @@ public class TechAttachment extends DefaultAttachment {
     researchStars = null;
   }
 
+  private void setResearchStarsRequired(final String value) throws GameParseException {
+    final String[] s = splitOnColon(value);
+    if (s.length != 2) {
+      throw new GameParseException(
+          "researchStarsRequired must be a star count and a tech name, e.g. count=4 value=Jet"
+              + thisErrorMsg());
+    }
+    final int stars = getInt(s[0]);
+    if (stars < 1) {
+      throw new GameParseException("researchStarsRequired must be at least 1" + thisErrorMsg());
+    }
+    if (researchStarsRequired == null) {
+      researchStarsRequired = new IntegerMap<>();
+    }
+    researchStarsRequired.put(s[1].intern(), stars);
+  }
+
+  private void setResearchStarsRequired(final IntegerMap<String> value) {
+    researchStarsRequired = value;
+  }
+
+  /** This nation's own star counts, overriding the tech's, by tech name. */
+  public IntegerMap<String> getResearchStarsRequired() {
+    return getIntegerMapProperty(researchStarsRequired);
+  }
+
+  private void resetResearchStarsRequired() {
+    researchStarsRequired = null;
+  }
+
   private void setResearchFocus(final String value) {
     if (researchFocus == null) {
       researchFocus = new ArrayList<>();
@@ -392,6 +424,12 @@ public class TechAttachment extends DefaultAttachment {
 
   @Override
   public void validate(final GameState data) throws GameParseException {
+    for (final String techName : getResearchStarsRequired().keySet()) {
+      if (data.getTechnologyFrontier().getAdvanceByName(techName) == null) {
+        throw new GameParseException(
+            "researchStarsRequired names an unknown technology: " + techName + thisErrorMsg());
+      }
+    }
     for (final String techName : getResearchStars().keySet()) {
       if (data.getTechnologyFrontier().getAdvanceByName(techName) == null) {
         throw new GameParseException(
@@ -504,6 +542,13 @@ public class TechAttachment extends DefaultAttachment {
                   this::setResearchStars,
                   this::getResearchStars,
                   this::resetResearchStars));
+      case "researchStarsRequired" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setResearchStarsRequired,
+                  this::setResearchStarsRequired,
+                  this::getResearchStarsRequired,
+                  this::resetResearchStarsRequired));
       case "researchFocus" ->
           Optional.of(
               MutableProperty.of(
