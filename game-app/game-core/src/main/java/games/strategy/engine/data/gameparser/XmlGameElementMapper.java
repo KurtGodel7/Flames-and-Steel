@@ -34,6 +34,7 @@ import games.strategy.triplea.delegate.PlaceDelegate;
 import games.strategy.triplea.delegate.PoliticsDelegate;
 import games.strategy.triplea.delegate.PurchaseDelegate;
 import games.strategy.triplea.delegate.RandomStartDelegate;
+import games.strategy.triplea.delegate.ResearchCenterDelegate;
 import games.strategy.triplea.delegate.SpecialMoveDelegate;
 import games.strategy.triplea.delegate.TechActivationDelegate;
 import games.strategy.triplea.delegate.TechnologyDelegate;
@@ -96,6 +97,7 @@ public final class XmlGameElementMapper {
         .put("PoliticsDelegate", PoliticsDelegate::new)
         .put("PurchaseDelegate", PurchaseDelegate::new)
         .put("RandomStartDelegate", RandomStartDelegate::new)
+        .put("ResearchCenterDelegate", ResearchCenterDelegate::new)
         .put("SpecialMoveDelegate", SpecialMoveDelegate::new)
         .put("TechActivationDelegate", TechActivationDelegate::new)
         .put("TechnologyDelegate", TechnologyDelegate::new)

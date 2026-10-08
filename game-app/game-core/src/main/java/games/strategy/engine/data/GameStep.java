@@ -165,6 +165,11 @@ public class GameStep extends GameDataComponent {
     return stepName != null && stepName.endsWith("Tech");
   }
 
+  /** Flames and Steel research centres step, e.g. "germanResearch". */
+  public static boolean isResearchStepName(final @NonNls String stepName) {
+    return stepName != null && stepName.endsWith("Research");
+  }
+
   public static boolean isMoveStepName(final @NonNls String stepName) {
     return stepName != null && stepName.endsWith("Move");
   }

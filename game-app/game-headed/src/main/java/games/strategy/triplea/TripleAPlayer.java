@@ -21,6 +21,7 @@ import games.strategy.triplea.delegate.data.BattleListing;
 import games.strategy.triplea.delegate.data.CasualtyDetails;
 import games.strategy.triplea.delegate.data.CasualtyList;
 import games.strategy.triplea.delegate.data.FightBattleDetails;
+import games.strategy.triplea.delegate.data.ResearchResults;
 import games.strategy.triplea.delegate.data.TechResults;
 import games.strategy.triplea.delegate.data.TechRoll;
 import games.strategy.triplea.delegate.remote.IAbstractForumPosterDelegate;
@@ -30,12 +31,14 @@ import games.strategy.triplea.delegate.remote.IEditDelegate;
 import games.strategy.triplea.delegate.remote.IMoveDelegate;
 import games.strategy.triplea.delegate.remote.IPoliticsDelegate;
 import games.strategy.triplea.delegate.remote.IPurchaseDelegate;
+import games.strategy.triplea.delegate.remote.IResearchDelegate;
 import games.strategy.triplea.delegate.remote.ITechDelegate;
 import games.strategy.triplea.delegate.remote.IUserActionDelegate;
 import games.strategy.triplea.formatter.MyFormatter;
 import games.strategy.triplea.player.AbstractBasePlayer;
 import games.strategy.triplea.settings.ClientSetting;
 import games.strategy.triplea.ui.PlaceData;
+import games.strategy.triplea.ui.ResearchFocusDialog;
 import games.strategy.triplea.ui.TripleAFrame;
 import java.awt.event.ActionListener;
 import java.util.ArrayList;
@@ -161,6 +164,8 @@ public class TripleAPlayer extends AbstractBasePlayer {
     boolean badStep = false;
     if (GameStep.isTechStepName(name)) {
       tech();
+    } else if (GameStep.isResearchStepName(name)) {
+      research();
     } else if (GameStep.isPurchaseOrBidStepName(name)) {
       purchase(GameStepPropertiesHelper.isBid(getGameData()), false);
       if (!GameStepPropertiesHelper.isBid(getGameData())) {
@@ -293,6 +298,39 @@ public class TripleAPlayer extends AbstractBasePlayer {
       return;
     }
     ui.getUiContext().getClipPlayer().play(soundPath, getGamePlayer());
+  }
+
+  private void research() {
+    if (getPlayerBridge().isGameOver()) {
+      return;
+    }
+    final IResearchDelegate researchDelegate =
+        (IResearchDelegate) getPlayerBridge().getRemoteDelegate();
+    if (!soundPlayedAlreadyTechnology) {
+      playSound(SoundPath.CLIP_PHASE_TECHNOLOGY);
+      soundPlayedAlreadyTechnology = true;
+    }
+    while (!getPlayerBridge().isGameOver()) {
+      final Optional<ResearchFocusDialog.Choice> choice = ui.getResearchChoice(getGamePlayer());
+      if (choice.isEmpty()) {
+        // dialog interrupted (game closing); the step researches with stored focus when it ends
+        return;
+      }
+      final ResearchResults results =
+          researchDelegate.research(choice.get().focus(), choice.get().idleCenter());
+      if (results.getError().isPresent()) {
+        ui.notifyError(results.getError().get());
+        continue;
+      }
+      ui.notifyMessage(
+          "<html>"
+              + (results.getBreakthroughs().isEmpty()
+                  ? "No breakthroughs this turn."
+                  : String.join("<br>", results.getBreakthroughs()))
+              + "</html>",
+          getGamePlayer().getName() + " research results");
+      return;
+    }
   }
 
   private void tech() {

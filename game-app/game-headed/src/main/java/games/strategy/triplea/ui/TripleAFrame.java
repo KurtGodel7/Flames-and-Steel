@@ -182,6 +182,7 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
   private final JTabbedPane tabsPanel = new JTabbedPane();
   private final StatPanel statsPanel;
   private final TechnologyPanel technologyPanel;
+  private final ResearchPanel researchPanel;
   private final EconomyPanel economyPanel;
   private final Runnable clientLeftGame;
   private @Nullable ObjectivePanel objectivePanel;
@@ -405,6 +406,7 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
     actionButtonsPanel.setBorder(null);
     statsPanel = new StatPanel(data, uiContext);
     technologyPanel = new TechnologyPanel(data, uiContext);
+    researchPanel = new ResearchPanel(data);
     economyPanel = new EconomyPanel(data, uiContext);
     objectivePanel = new ObjectivePanel(data, uiContext);
     if (objectivePanel.isEmpty()) {
@@ -564,6 +566,9 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
     addTab("Players", statsPanel, KeyCode.P);
     if (!TechAdvance.getTechAdvances(data.getTechnologyFrontier(), null).isEmpty()) {
       addTab("Technology", technologyPanel, KeyCode.Y);
+    }
+    if (ResearchPanel.isUsed(data)) {
+      tabsPanel.addTab("Research", null, researchPanel, "Research centres and stars");
     }
     addTab("Resources", economyPanel, KeyCode.R);
     if (objectivePanel != null) {
@@ -1599,6 +1604,18 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
     return actionButtonsPanel.waitForUserActionAction(firstRun, userActionDelegate);
   }
 
+  /** Flames and Steel: asks for each research centre's focus. */
+  public Optional<ResearchFocusDialog.Choice> getResearchChoice(final GamePlayer gamePlayer) {
+    messageAndDialogThreadPool.waitForAll();
+    requestWindowFocus();
+    return Interruptibles.awaitResult(
+            () ->
+                SwingAction.invokeAndWaitResult(
+                    () -> ResearchFocusDialog.show(TripleAFrame.this, gamePlayer, data)))
+        .result
+        .flatMap(choice -> choice);
+  }
+
   public TechRoll getTechRolls(final GamePlayer gamePlayer) {
     messageAndDialogThreadPool.waitForAll();
     actionButtonsPanel.changeToTech(gamePlayer);
@@ -1854,6 +1871,7 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
     bottomBar.setGameDataForCurrentTerritory(newGameData);
     if (!TechAdvance.getTechAdvances(newGameData.getTechnologyFrontier(), null).isEmpty()) {
       technologyPanel.setGameData(newGameData);
+      researchPanel.setGameData(newGameData);
     }
     statsPanel.setGameData(newGameData);
     economyPanel.setGameData(newGameData);

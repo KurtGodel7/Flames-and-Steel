@@ -154,6 +154,16 @@ public class TechnologyDelegate extends BaseTripleADelegate implements ITechDele
     return techs == null ? null : techs.get(player);
   }
 
+  /**
+   * Queues advances for the player's next Tech Activation step (Flames and Steel research centres).
+   */
+  public void addAdvances(final GamePlayer player, final Collection<TechAdvance> advances) {
+    if (techs == null) {
+      techs = new HashMap<>();
+    }
+    techs.computeIfAbsent(player, p -> new ArrayList<>()).addAll(advances);
+  }
+
   public void clearAdvances(GamePlayer player) {
     if (techs != null) {
       techs.remove(player);

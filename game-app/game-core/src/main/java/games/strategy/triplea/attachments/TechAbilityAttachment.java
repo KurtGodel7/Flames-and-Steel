@@ -71,6 +71,13 @@ public class TechAbilityAttachment extends DefaultAttachment {
   private @Nullable IntegerMap<UnitType> attackRollsBonus = null;
   private @Nullable IntegerMap<UnitType> defenseRollsBonus = null;
   private @Nullable IntegerMap<UnitType> bombingBonus = null;
+  // Flames and Steel research centres: breakthroughs (stars) needed to unlock this tech.
+  // 0 means not set, which counts as 1.
+  private int researchStarsRequired = 0;
+  // Flames and Steel: while this tech is owned, each turn this percent chance of one extra star
+  // in the named research category (Goettingen: Jets, 50).
+  private @Nullable String bonusResearchCategory = null;
+  private int bonusResearchChance = 0;
 
   public TechAbilityAttachment(
       final String name, final Attachable attachable, final GameData gameData) {
@@ -1047,7 +1054,77 @@ public class TechAbilityAttachment extends DefaultAttachment {
                   this::setBombingBonus,
                   this::getBombingBonus,
                   this::resetBombingBonus));
+      case "researchStarsRequired" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setResearchStarsRequired,
+                  this::setResearchStarsRequired,
+                  this::getResearchStarsRequired,
+                  this::resetResearchStarsRequired));
+      case "bonusResearchRoll" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setBonusResearchRoll,
+                  this::setBonusResearchRoll,
+                  this::getBonusResearchRoll,
+                  this::resetBonusResearchRoll));
       default -> Optional.empty();
     };
+  }
+
+  private void setResearchStarsRequired(final String value) throws GameParseException {
+    final int stars = getInt(value);
+    if (stars < 1) {
+      throw new GameParseException("researchStarsRequired must be at least 1" + thisErrorMsg());
+    }
+    researchStarsRequired = stars;
+  }
+
+  private void setResearchStarsRequired(final Integer value) {
+    researchStarsRequired = value;
+  }
+
+  /** Stars (breakthroughs) needed to unlock this tech; 1 if not set. */
+  public int getResearchStarsRequired() {
+    return Math.max(1, researchStarsRequired);
+  }
+
+  private void resetResearchStarsRequired() {
+    researchStarsRequired = 0;
+  }
+
+  private void setBonusResearchRoll(final String value) throws GameParseException {
+    final String[] s = splitOnColon(value);
+    if (s.length != 2) {
+      throw new GameParseException(
+          "bonusResearchRoll must be a chance and a category, e.g. count=50 value=Jets"
+              + thisErrorMsg());
+    }
+    final int chance = getInt(s[0]);
+    if (chance < 1 || chance > 100) {
+      throw new GameParseException(
+          "bonusResearchRoll chance must be between 1 and 100" + thisErrorMsg());
+    }
+    bonusResearchChance = chance;
+    bonusResearchCategory = s[1].intern();
+  }
+
+  private String getBonusResearchRoll() {
+    return bonusResearchCategory == null ? "" : bonusResearchChance + ":" + bonusResearchCategory;
+  }
+
+  private void resetBonusResearchRoll() {
+    bonusResearchCategory = null;
+    bonusResearchChance = 0;
+  }
+
+  /** The research category of this tech's bonus research roll, if it has one. */
+  public Optional<String> getBonusResearchCategory() {
+    return Optional.ofNullable(bonusResearchCategory);
+  }
+
+  /** Percent chance (1-100) of this tech's bonus research roll giving a star. */
+  public int getBonusResearchChance() {
+    return bonusResearchChance;
   }
 }

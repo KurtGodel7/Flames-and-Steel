@@ -6,15 +6,20 @@ import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.GameState;
 import games.strategy.engine.data.MutableProperty;
+import games.strategy.engine.data.gameparser.GameParseException;
 import games.strategy.triplea.Constants;
 import games.strategy.triplea.delegate.GenericTechAdvance;
 import games.strategy.triplea.delegate.TechAdvance;
 import java.io.Serial;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import javax.annotation.Nullable;
 import lombok.Getter;
 import org.jetbrains.annotations.NonNls;
+import org.triplea.java.collections.IntegerMap;
 
 /**
  * An attachment for instances of {@link GamePlayer} that defines properties related to technology
@@ -41,6 +46,13 @@ public class TechAttachment extends DefaultAttachment {
   private boolean aaRadar = false;
   private boolean shipyards = false;
   @Getter private final Map<String, Boolean> genericTech = new HashMap<>();
+  // Flames and Steel research centres.
+  // Number of research centres this player has.
+  @Getter private int researchCenters = 0;
+  // Stars (breakthroughs) gained so far, by tech name. Starting stars are set in the XML.
+  private @Nullable IntegerMap<String> researchStars = null;
+  // Focus of each research centre, one entry per centre: "primary|secondary" (either may be "").
+  private @Nullable List<String> researchFocus = null;
 
   public TechAttachment(final String name, final Attachable attachable, final GameData gameData) {
     super(name, attachable, gameData);
@@ -312,8 +324,81 @@ public class TechAttachment extends DefaultAttachment {
     getData().getTechTracker().clearCache();
   }
 
+  private void setResearchCenters(final String value) throws GameParseException {
+    final int centers = getInt(value);
+    if (centers < 0) {
+      throw new GameParseException("researchCenters may not be negative" + thisErrorMsg());
+    }
+    researchCenters = centers;
+  }
+
+  private void setResearchCenters(final Integer value) {
+    researchCenters = value;
+  }
+
+  private void resetResearchCenters() {
+    researchCenters = 0;
+  }
+
+  private void setResearchStars(final String value) throws GameParseException {
+    final String[] s = splitOnColon(value);
+    if (s.length != 2) {
+      throw new GameParseException(
+          "researchStars must be a star count and a tech name, e.g. count=2 value=Jet"
+              + thisErrorMsg());
+    }
+    final int stars = getInt(s[0]);
+    if (stars < 0) {
+      throw new GameParseException("researchStars may not be negative" + thisErrorMsg());
+    }
+    if (researchStars == null) {
+      researchStars = new IntegerMap<>();
+    }
+    researchStars.put(s[1].intern(), stars);
+  }
+
+  private void setResearchStars(final IntegerMap<String> value) {
+    researchStars = value;
+  }
+
+  /** Stars gained so far, by tech name. */
+  public IntegerMap<String> getResearchStars() {
+    return getIntegerMapProperty(researchStars);
+  }
+
+  private void resetResearchStars() {
+    researchStars = null;
+  }
+
+  private void setResearchFocus(final String value) {
+    if (researchFocus == null) {
+      researchFocus = new ArrayList<>();
+    }
+    researchFocus.addAll(List.of(splitOnColon(value)));
+  }
+
+  private void setResearchFocus(final List<String> value) {
+    researchFocus = value;
+  }
+
+  /** Focus of each research centre, as "primary|secondary". */
+  public List<String> getResearchFocus() {
+    return getListProperty(researchFocus);
+  }
+
+  private void resetResearchFocus() {
+    researchFocus = null;
+  }
+
   @Override
-  public void validate(final GameState data) {}
+  public void validate(final GameState data) throws GameParseException {
+    for (final String techName : getResearchStars().keySet()) {
+      if (data.getTechnologyFrontier().getAdvanceByName(techName) == null) {
+        throw new GameParseException(
+            "researchStars names an unknown technology: " + techName + thisErrorMsg());
+      }
+    }
+  }
 
   @Override
   public Optional<MutableProperty<?>> getPropertyOrEmpty(final @NonNls String propertyName) {
@@ -405,6 +490,27 @@ public class TechAttachment extends DefaultAttachment {
                   this::setShipyards,
                   this::getShipyards,
                   this::resetShipyards));
+      case "researchCenters" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setResearchCenters,
+                  this::setResearchCenters,
+                  this::getResearchCenters,
+                  this::resetResearchCenters));
+      case "researchStars" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setResearchStars,
+                  this::setResearchStars,
+                  this::getResearchStars,
+                  this::resetResearchStars));
+      case "researchFocus" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setResearchFocus,
+                  this::setResearchFocus,
+                  this::getResearchFocus,
+                  this::resetResearchFocus));
       default -> Optional.empty();
     };
   }

@@ -228,3 +228,7 @@
 1,games.strategy.triplea.delegate.remote.IUserActionDelegate,delegateCurrentlyRequiresUserInput
 1,org.triplea.sound.ISound,playSoundToPlayers,java.lang.String,java.util.Collection,java.util.Collection,boolean
 0,org.triplea.sound.ISound,playSoundForAll,java.lang.String,games.strategy.engine.data.GamePlayer
+12,games.strategy.triplea.delegate.remote.IResearchDelegate,research,java.util.List,int
+0,games.strategy.triplea.delegate.remote.IResearchDelegate,delegateCurrentlyRequiresUserInput
+1,games.strategy.triplea.delegate.remote.IResearchDelegate,end
+11,games.strategy.triplea.delegate.remote.IResearchDelegate,start
