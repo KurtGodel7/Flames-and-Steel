@@ -25,6 +25,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import lombok.experimental.UtilityClass;
@@ -113,8 +114,13 @@ public class CasualtySelector {
             costs,
             data,
             allowMultipleHitsPerUnit);
-    final CasualtyList defaultCasualties = defaultCasualtiesAndSortedTargets.getFirst();
     final List<Unit> sortedTargetsToPickFrom = defaultCasualtiesAndSortedTargets.getSecond();
+    final boolean stickyHits =
+        allowMultipleHitsPerUnit && Properties.getStickyHits(data.getProperties());
+    final CasualtyList defaultCasualties =
+        stickyHits
+            ? StickyHits.getDefaultCasualties(sortedTargetsToPickFrom, hitsRemaining)
+            : defaultCasualtiesAndSortedTargets.getFirst();
     if (sortedTargetsToPickFrom.size() != targetsToPickFrom.size()) {
       throw new IllegalStateException(
           "sortedTargetsToPickFrom must have the same size as targetsToPickFrom list");
@@ -179,15 +185,21 @@ public class CasualtySelector {
       }
     }
 
-    // Prefer units with less movement left to be killed first.
-    casualtyDetails.ensureUnitsAreKilledFirst(
-        sortedTargetsToPickFrom, Matches.unitIsAir(), Comparator.comparing(Unit::getMovementLeft));
+    // With sticky hits, which unit is hit matters (damaged units first), so keep the choice as is.
+    if (!stickyHits) {
+      // Prefer units with less movement left to be killed first.
+      casualtyDetails.ensureUnitsAreKilledFirst(
+          sortedTargetsToPickFrom,
+          Matches.unitIsAir(),
+          Comparator.comparing(Unit::getMovementLeft));
 
-    // Prefer units with most movement left for damage (to have a better chance to get to safety).
-    casualtyDetails.ensureUnitsAreDamagedFirst(
-        sortedTargetsToPickFrom,
-        Matches.unitIsAir(),
-        Comparator.comparing(Unit::getMovementLeft).reversed());
+      // Prefer units with most movement left for damage (to have a better chance to get to
+      // safety).
+      casualtyDetails.ensureUnitsAreDamagedFirst(
+          sortedTargetsToPickFrom,
+          Matches.unitIsAir(),
+          Comparator.comparing(Unit::getMovementLeft).reversed());
+    }
 
     final List<Unit> damaged = casualtyDetails.getDamaged();
     final List<Unit> killed = casualtyDetails.getKilled();
@@ -253,6 +265,28 @@ public class CasualtySelector {
           headLess,
           extraHits,
           allowMultipleHitsPerUnit);
+    }
+    if (stickyHits) {
+      final Optional<String> stickyError =
+          StickyHits.validate(sortedTargetsToPickFrom, killed, damaged);
+      if (stickyError.isPresent()) {
+        tripleaPlayer.reportError(stickyError.get());
+        if (headLess) {
+          log.error("Possible Infinite Loop: " + stickyError.get() + ", for " + casualtyDetails);
+        }
+        return selectCasualties(
+            player,
+            sortedTargetsToPickFrom,
+            combatValue,
+            battleSite,
+            bridge,
+            text,
+            dice,
+            battleId,
+            headLess,
+            extraHits,
+            allowMultipleHitsPerUnit);
+      }
     }
     return casualtyDetails;
   }
