@@ -211,29 +211,4 @@ final class AirSelection {
       x += images.getUnitImageWidth() + 16;
     }
   }
-
-  /**
-   * Marks the picked stacks the way a stock move marks selected units: the unit image's own
-   * highlight drawn over the stack (in a redrawn box or on the air map).
-   */
-  static void paintPicked(
-      final Graphics2D g,
-      final UiContext uiContext,
-      final AirMapMode mode,
-      final Territory zone,
-      final GamePlayer owner,
-      final IntegerMap<UnitType> selected) {
-    for (final UnitType type : selected.keySet()) {
-      final Optional<Rectangle> r = mode.stackRect(zone, owner, type);
-      if (r.isPresent()) {
-        g.drawImage(
-            uiContext
-                .getUnitImageFactory()
-                .getHighlightImage(ImageKey.builder().player(owner).type(type).build()),
-            r.get().x,
-            r.get().y,
-            null);
-      }
-    }
-  }
 }

@@ -389,6 +389,7 @@ public final class AirAllocationPanel extends ActionPanel {
             ? " "
             : AirSelection.wrap(
                 legalCount() + " zones allowed (green); point at one to preview the move."));
+    showDepartures();
     if (rebuildPanel) {
       rebuild(player);
     }
@@ -472,6 +473,15 @@ public final class AirAllocationPanel extends ActionPanel {
                       .computeIfAbsent(owner, k -> new IntegerMap<>())
                       .add(m.unitType(), m.count());
                 }));
+    // picked aircraft leave their stack and follow the mouse, as in a stock move
+    if (selectedZone != null) {
+      for (final UnitType type : selected.keySet()) {
+        leaving
+            .computeIfAbsent(selectedZone, k -> new HashMap<>())
+            .computeIfAbsent(getCurrentPlayer(), k -> new IntegerMap<>())
+            .add(type, selected.getInt(type));
+      }
+    }
     mode.setPending(leaving, arriving);
   }
 
@@ -613,11 +623,6 @@ public final class AirAllocationPanel extends ActionPanel {
               }
             });
         draw.outlineBox(g, selectedZone, AirDraw.ORIGIN_LINE, 5f);
-        final AirMapMode mode = frame.getAirMapMode();
-        if (mode != null) {
-          AirSelection.paintPicked(
-              g, frame.getUiContext(), mode, selectedZone, getCurrentPlayer(), selected);
-        }
       }
       // revealed bomber moves (fighter step): thin dashed grey arrows, arrivals labelled
       revealed.forEach(
@@ -654,6 +659,7 @@ public final class AirAllocationPanel extends ActionPanel {
   private void paintPreview(final Graphics2D g, final GameData data) {
     final Point from = draw.center(selectedZone);
     if (mousePoint.distance(from) < 20) {
+      AirSelection.paintShadow(g, frame.getUiContext(), getCurrentPlayer(), selected, mousePoint);
       return;
     }
     final Territory to = hoverZone;

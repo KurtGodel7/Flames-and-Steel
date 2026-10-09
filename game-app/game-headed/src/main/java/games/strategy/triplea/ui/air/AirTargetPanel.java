@@ -408,6 +408,7 @@ public final class AirTargetPanel extends ActionPanel {
       frame.clearStatusMessage();
       mousePoint = null;
     }
+    showAssigned();
     if (rebuildPanel) {
       rebuild(player);
     } else {
@@ -559,6 +560,15 @@ public final class AirTargetPanel extends ActionPanel {
           .computeIfAbsent(a.zone(), k -> new HashMap<>())
           .computeIfAbsent(getCurrentPlayer(), k -> new IntegerMap<>())
           .add(a.unitType(), a.count());
+    }
+    // picked bombers leave their stack and follow the mouse, as in a stock move
+    if (selectedZone != null) {
+      for (final UnitType type : selected.keySet()) {
+        leaving
+            .computeIfAbsent(selectedZone, k -> new HashMap<>())
+            .computeIfAbsent(getCurrentPlayer(), k -> new IntegerMap<>())
+            .add(type, selected.getInt(type));
+      }
     }
     mode.setPending(leaving, Map.of());
   }
@@ -745,10 +755,6 @@ public final class AirTargetPanel extends ActionPanel {
               }
             });
         draw.outlineBox(g, selectedZone, AirDraw.ORIGIN_LINE, 5f);
-        final AirMapMode mode = frame.getAirMapMode();
-        if (mode != null) {
-          AirSelection.paintPicked(g, frame.getUiContext(), mode, selectedZone, player, selected);
-        }
       }
       if (selectedZone != null && !selected.isEmpty() && mousePoint != null) {
         paintPreview(g, player);
@@ -772,6 +778,7 @@ public final class AirTargetPanel extends ActionPanel {
   private void paintPreview(final Graphics2D g, final GamePlayer player) {
     final Point from = draw.center(selectedZone);
     if (mousePoint.distance(from) < 20) {
+      AirSelection.paintShadow(g, frame.getUiContext(), player, selected, mousePoint);
       return;
     }
     final Territory place = hoverPlace;
