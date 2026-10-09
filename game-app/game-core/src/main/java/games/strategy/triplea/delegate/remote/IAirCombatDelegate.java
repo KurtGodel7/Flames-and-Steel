@@ -20,6 +20,10 @@ public interface IAirCombatDelegate extends IRemote, IDelegate {
   @Nullable
   String assignTargets(List<TargetAssignment> assignments);
 
+  /** This nation's targets stored so far this step (after a save and load, say). */
+  @RemoteActionCode(13)
+  List<TargetAssignment> getPendingAssignments();
+
   @RemoteActionCode(6)
   @Override
   void initialize(String name, String displayName);

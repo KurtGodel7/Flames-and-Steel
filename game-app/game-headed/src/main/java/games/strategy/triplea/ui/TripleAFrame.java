@@ -72,6 +72,10 @@ import games.strategy.triplea.formatter.MyFormatter;
 import games.strategy.triplea.image.MapImage;
 import games.strategy.triplea.image.TileImageFactory;
 import games.strategy.triplea.settings.ClientSetting;
+import games.strategy.triplea.ui.air.AirAllocationPanel;
+import games.strategy.triplea.ui.air.AirPanel;
+import games.strategy.triplea.ui.air.AirTargetPanel;
+import games.strategy.triplea.ui.air.AirZoneOverlay;
 import games.strategy.triplea.ui.export.ScreenshotExporter;
 import games.strategy.triplea.ui.history.HistoryDetailsPanel;
 import games.strategy.triplea.ui.history.HistoryLog;
@@ -125,6 +129,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import javax.annotation.Nonnull;
@@ -193,6 +198,9 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
   private final TechnologyPanel technologyPanel;
   private final ResearchPanel researchPanel;
   private @Nullable ResearchScreen researchScreen;
+  private @Nullable AirZoneOverlay airZoneOverlay;
+  private @Nullable AirPanel airPanel;
+  private @Nullable GamePlayer lastAirAllocator;
   private final EconomyPanel economyPanel;
   private final Runnable clientLeftGame;
   private @Nullable ObjectivePanel objectivePanel;
@@ -417,6 +425,12 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
     statsPanel = new StatPanel(data, uiContext);
     technologyPanel = new TechnologyPanel(data, uiContext);
     researchPanel = new ResearchPanel(data, this::openResearchScreen);
+    if (AirZoneOverlay.isUsed(data)) {
+      airZoneOverlay = new AirZoneOverlay(uiContext, mapPanel, data);
+      mapPanel.addOverlay(airZoneOverlay);
+      airPanel = new AirPanel(data, mapPanel, airZoneOverlay::setSelectedZone);
+      data.addGameDataEventListener(GameDataEvent.GAME_STEP_CHANGED, airPanel::followTurn);
+    }
     economyPanel = new EconomyPanel(data, uiContext);
     objectivePanel = new ObjectivePanel(data, uiContext);
     if (objectivePanel.isEmpty()) {
@@ -580,6 +594,9 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
     if (ResearchPanel.isUsed(data)) {
       tabsPanel.addTab("Research", null, researchPanel, "Research centres and stars");
     }
+    if (airPanel != null) {
+      tabsPanel.addTab("Air", null, airPanel, "Aircraft by type and air zone");
+    }
     addTab("Resources", economyPanel, KeyCode.R);
     if (objectivePanel != null) {
       String objectivePanelName = new ObjectiveProperties(uiContext.getResourceLoader()).getName();
@@ -668,8 +685,13 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
     }
   }
 
-  void clearStatusMessage() {
+  public void clearStatusMessage() {
     bottomBar.setStatusAndClearIcon("");
+  }
+
+  /** Shows a plain message in the status bar. */
+  public void setStatusMessage(final String msg) {
+    bottomBar.setStatusAndClearIcon(msg);
   }
 
   public void setStatusErrorMessage(final String msg) {
@@ -1618,46 +1640,76 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
   }
 
   /**
-   * Flames and Steel: asks for this nation's aircraft moves between air zones. When several human
-   * nations share this computer, first asks the others to look away.
+   * Flames and Steel: the nation allocates its aircraft on the map (Actions tab). On a shared
+   * computer, when the previous local nation to allocate was an enemy, first asks to pass the
+   * computer on, so nothing hidden is on screen when the next player sits down.
+   *
+   * @param store called with the staged moves after every change, so a save keeps them
    */
   public List<AirMove> getAirAllocation(
-      final GamePlayer gamePlayer, final Stage stage, final List<AirMove> start) {
+      final GamePlayer gamePlayer,
+      final Stage stage,
+      final List<AirMove> start,
+      final Map<GamePlayer, List<AirMove>> allied,
+      final Map<GamePlayer, List<AirMove>> revealed,
+      final Consumer<List<AirMove>> store) {
     messageAndDialogThreadPool.waitForAll();
-    requestWindowFocus();
     final long localHumans =
         getLocalPlayers().getLocalPlayers().stream().filter(p -> !p.isAi()).count();
-    return Interruptibles.awaitResult(
+    final GamePlayer previous = lastAirAllocator;
+    lastAirAllocator = gamePlayer;
+    if (localHumans > 1 && previous != null && !previous.equals(gamePlayer)) {
+      final boolean enemies;
+      try (GameData.Unlocker ignored = data.acquireReadLock()) {
+        enemies = data.getRelationshipTracker().isAtWar(previous, gamePlayer);
+      }
+      if (enemies) {
+        Interruptibles.await(
             () ->
-                SwingAction.invokeAndWaitResult(
-                    () -> {
-                      if (localHumans > 1) {
+                SwingAction.invokeAndWait(
+                    () ->
                         JOptionPane.showMessageDialog(
                             TripleAFrame.this,
-                            "Hidden air allocation for "
+                            "<html><h2>Pass to the "
                                 + gamePlayer.getName()
-                                + ". Other players, please look away.",
+                                + " player</h2>"
+                                + (stage == Stage.BOMBERS ? "Bomber" : "Fighter")
+                                + " allocation is hidden from enemies.<br>"
+                                + previous.getName()
+                                + ": please look away.</html>",
                             gamePlayer.getName() + " air allocation",
-                            JOptionPane.INFORMATION_MESSAGE);
-                      }
-                      return AirAllocationDialog.show(
-                          TripleAFrame.this, gamePlayer, stage, data, start);
-                    }))
-        .result
-        .orElse(List.of());
+                            JOptionPane.INFORMATION_MESSAGE)));
+      }
+    }
+    requestWindowFocus();
+    final AirAllocationPanel panel = actionButtonsPanel.getAirAllocationPanel();
+    if (panel == null) {
+      return List.of();
+    }
+    actionButtonsPanel.changeToAirAllocation(gamePlayer);
+    panel.start(gamePlayer, stage, start, allied, revealed, store);
+    return panel.waitForAllocation();
   }
 
-  /** Flames and Steel: asks where this nation's surviving bombers attack. */
+  /**
+   * Flames and Steel: the nation sends its surviving bombers against targets on the map (Actions
+   * tab).
+   *
+   * @param store called with the strikes after every change, so a save keeps them
+   */
   public List<TargetAssignment> getAirTargets(
-      final GamePlayer gamePlayer, final List<TargetAssignment> start) {
+      final GamePlayer gamePlayer,
+      final List<TargetAssignment> start,
+      final Consumer<List<TargetAssignment>> store) {
     messageAndDialogThreadPool.waitForAll();
     requestWindowFocus();
-    return Interruptibles.awaitResult(
-            () ->
-                SwingAction.invokeAndWaitResult(
-                    () -> AirTargetDialog.show(TripleAFrame.this, gamePlayer, data, start)))
-        .result
-        .orElse(List.of());
+    final AirTargetPanel panel = actionButtonsPanel.getAirTargetPanel();
+    if (panel == null) {
+      return List.of();
+    }
+    actionButtonsPanel.changeToAirTargets(gamePlayer);
+    panel.start(gamePlayer, start, store);
+    return panel.waitForTargets();
   }
 
   /** Flames and Steel: asks what each of the nation's APCs builds. */
@@ -1995,6 +2047,10 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
       }
     }
     statsPanel.setGameData(newGameData);
+    if (airZoneOverlay != null) {
+      airZoneOverlay.setGameData(newGameData);
+      airPanel.setGameData(newGameData);
+    }
     economyPanel.setGameData(newGameData);
     if (objectivePanel != null) {
       objectivePanel.setGameData(newGameData);

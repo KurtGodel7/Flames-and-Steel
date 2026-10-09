@@ -18,6 +18,8 @@ import games.strategy.triplea.delegate.data.FightBattleDetails;
 import games.strategy.triplea.delegate.data.TechRoll;
 import games.strategy.triplea.delegate.remote.IPoliticsDelegate;
 import games.strategy.triplea.delegate.remote.IUserActionDelegate;
+import games.strategy.triplea.ui.air.AirAllocationPanel;
+import games.strategy.triplea.ui.air.AirTargetPanel;
 import games.strategy.triplea.ui.panel.move.MovePanel;
 import games.strategy.triplea.ui.panels.map.MapPanel;
 import java.awt.CardLayout;
@@ -62,6 +64,8 @@ public class ActionButtonsPanel extends JPanel {
   private @Nullable PoliticsPanel politicsPanel;
   private @Nullable UserActionPanel userActionPanel;
   private @Nullable PickTerritoryAndUnitsPanel pickTerritoryAndUnitsPanel;
+  @Getter private @Nullable AirAllocationPanel airAllocationPanel;
+  @Getter private @Nullable AirTargetPanel airTargetPanel;
 
   private @Nullable ActionPanel actionPanel;
 
@@ -80,6 +84,8 @@ public class ActionButtonsPanel extends JPanel {
     politicsPanel = new PoliticsPanel(frame);
     userActionPanel = new UserActionPanel(frame);
     pickTerritoryAndUnitsPanel = new PickTerritoryAndUnitsPanel(frame);
+    airAllocationPanel = new AirAllocationPanel(frame);
+    airTargetPanel = new AirTargetPanel(frame);
     actionPanel = techPanel;
     setLayout(layout);
     add(new JLabel(""), "");
@@ -94,6 +100,8 @@ public class ActionButtonsPanel extends JPanel {
     add(politicsPanel, politicsPanel.toString());
     add(userActionPanel, userActionPanel.toString());
     add(pickTerritoryAndUnitsPanel, pickTerritoryAndUnitsPanel.toString());
+    add(airAllocationPanel, airAllocationPanel.toString());
+    add(airTargetPanel, airTargetPanel.toString());
     // this should not be necessary, but it makes tracking down garbage leaks easier in the profiler
     // since it removes a lot of links between objects and if there is a memory leak, this will
     // minimize the damage
@@ -125,6 +133,8 @@ public class ActionButtonsPanel extends JPanel {
               politicsPanel = null;
               userActionPanel = null;
               pickTerritoryAndUnitsPanel = null;
+              airAllocationPanel = null;
+              airTargetPanel = null;
             });
   }
 
@@ -191,6 +201,16 @@ public class ActionButtonsPanel extends JPanel {
       newCurrent.display(gamePlayer);
       SwingUtilities.invokeLater(() -> layout.show(ActionButtonsPanel.this, newCurrent.toString()));
     }
+  }
+
+  /** Flames and Steel: shows the air allocation panel. */
+  public void changeToAirAllocation(final GamePlayer gamePlayer) {
+    changeTo(gamePlayer, airAllocationPanel);
+  }
+
+  /** Flames and Steel: shows the bomber target panel. */
+  public void changeToAirTargets(final GamePlayer gamePlayer) {
+    changeTo(gamePlayer, airTargetPanel);
   }
 
   public void changeToPickTerritoryAndUnits(final GamePlayer gamePlayer) {

@@ -241,3 +241,8 @@
 12,games.strategy.triplea.delegate.remote.IApcDelegate,setProduction,java.util.Map
 0,games.strategy.triplea.delegate.remote.IApcDelegate,delegateCurrentlyRequiresUserInput
 11,games.strategy.triplea.delegate.remote.IApcDelegate,start
+13,games.strategy.triplea.delegate.remote.IAirAllocationDelegate,getPendingMoves
+14,games.strategy.triplea.delegate.remote.IAirAllocationDelegate,getAlliedPendingMoves
+15,games.strategy.triplea.delegate.remote.IAirAllocationDelegate,getLastReveal
+16,games.strategy.triplea.delegate.remote.IAirAllocationDelegate,getLastRevealStage
+13,games.strategy.triplea.delegate.remote.IAirCombatDelegate,getPendingAssignments

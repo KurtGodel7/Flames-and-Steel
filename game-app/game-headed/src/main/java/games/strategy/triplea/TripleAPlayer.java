@@ -332,9 +332,18 @@ public class TripleAPlayer extends AbstractBasePlayer {
     }
     final IAirCombatDelegate airDelegate =
         (IAirCombatDelegate) getPlayerBridge().getRemoteDelegate();
-    List<TargetAssignment> assignments = List.of();
+    List<TargetAssignment> assignments = airDelegate.getPendingAssignments();
     while (!getPlayerBridge().isGameOver()) {
-      assignments = ui.getAirTargets(getGamePlayer(), assignments);
+      assignments =
+          ui.getAirTargets(
+              getGamePlayer(),
+              assignments,
+              staged -> {
+                if (airDelegate.assignTargets(staged) != null) {
+                  // not storable yet; Done reports the problem
+                  log.debug("Air targets not stored: " + staged);
+                }
+              });
       final String error = airDelegate.assignTargets(assignments);
       if (error == null) {
         return;
@@ -350,9 +359,27 @@ public class TripleAPlayer extends AbstractBasePlayer {
     final IAirAllocationDelegate airDelegate =
         (IAirAllocationDelegate) getPlayerBridge().getRemoteDelegate();
     final Stage stage = stepName.endsWith("AirFighters") ? Stage.FIGHTERS : Stage.BOMBERS;
-    List<AirMove> moves = List.of();
+    // moves stored before a save, allies' moves so far, and the bombers' reveal in the fighter step
+    List<AirMove> moves = airDelegate.getPendingMoves();
+    final Map<GamePlayer, List<AirMove>> allied = airDelegate.getAlliedPendingMoves();
+    final Map<GamePlayer, List<AirMove>> revealed =
+        stage == Stage.FIGHTERS && airDelegate.getLastRevealStage() == Stage.BOMBERS
+            ? airDelegate.getLastReveal()
+            : Map.of();
     while (!getPlayerBridge().isGameOver()) {
-      moves = ui.getAirAllocation(getGamePlayer(), stage, moves);
+      moves =
+          ui.getAirAllocation(
+              getGamePlayer(),
+              stage,
+              moves,
+              allied,
+              revealed,
+              staged -> {
+                if (airDelegate.allocate(staged) != null) {
+                  // not storable yet; Done reports the problem
+                  log.debug("Air allocation not stored: " + staged);
+                }
+              });
       final String error = airDelegate.allocate(moves);
       if (error == null) {
         return;

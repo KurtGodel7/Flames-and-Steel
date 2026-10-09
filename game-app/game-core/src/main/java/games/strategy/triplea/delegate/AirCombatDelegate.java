@@ -84,6 +84,14 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
     return null;
   }
 
+  @Override
+  public List<TargetAssignment> getPendingAssignments() {
+    if (player == null || !stepName().endsWith("AirTargets")) {
+      return List.of();
+    }
+    return List.copyOf(pending.getOrDefault(player, List.of()));
+  }
+
   /** Why these targets are not allowed, or null. */
   static @Nullable String validate(
       final GamePlayer player, final List<TargetAssignment> assignments) {

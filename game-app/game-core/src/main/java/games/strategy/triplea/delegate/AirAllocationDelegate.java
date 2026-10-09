@@ -25,6 +25,8 @@ import javax.annotation.Nullable;
 public class AirAllocationDelegate extends BaseTripleADelegate implements IAirAllocationDelegate {
   private Map<GamePlayer, List<AirMove>> pending = new LinkedHashMap<>();
   private Stage pendingStage = Stage.BOMBERS;
+  private Map<GamePlayer, List<AirMove>> lastReveal = new LinkedHashMap<>();
+  private Stage lastRevealStage = Stage.FIGHTERS;
 
   @Override
   public void start() {
@@ -62,6 +64,39 @@ public class AirAllocationDelegate extends BaseTripleADelegate implements IAirAl
     return null;
   }
 
+  @Override
+  public List<AirMove> getPendingMoves() {
+    if (player == null || pendingStage != currentStage()) {
+      return List.of();
+    }
+    return List.copyOf(pending.getOrDefault(player, List.of()));
+  }
+
+  @Override
+  public Map<GamePlayer, List<AirMove>> getAlliedPendingMoves() {
+    final Map<GamePlayer, List<AirMove>> result = new LinkedHashMap<>();
+    if (player == null || pendingStage != currentStage()) {
+      return result;
+    }
+    pending.forEach(
+        (other, moves) -> {
+          if (!other.equals(player) && getData().getRelationshipTracker().isAllied(player, other)) {
+            result.put(other, List.copyOf(moves));
+          }
+        });
+    return result;
+  }
+
+  @Override
+  public Map<GamePlayer, List<AirMove>> getLastReveal() {
+    return new LinkedHashMap<>(lastReveal);
+  }
+
+  @Override
+  public Stage getLastRevealStage() {
+    return lastRevealStage;
+  }
+
   private void reveal() {
     final String stageName = pendingStage == Stage.BOMBERS ? "Bomber" : "Fighter";
     bridge.getHistoryWriter().startEvent(stageName + " allocation revealed");
@@ -82,6 +117,8 @@ public class AirAllocationDelegate extends BaseTripleADelegate implements IAirAl
     if (!anyMoved) {
       bridge.getHistoryWriter().addChildToEvent("No aircraft moved");
     }
+    lastReveal = new LinkedHashMap<>(pending);
+    lastRevealStage = pendingStage;
     pending.clear();
   }
 
@@ -101,6 +138,8 @@ public class AirAllocationDelegate extends BaseTripleADelegate implements IAirAl
     state.superState = super.saveState();
     state.pending = new LinkedHashMap<>(pending);
     state.pendingStage = pendingStage;
+    state.lastReveal = new LinkedHashMap<>(lastReveal);
+    state.lastRevealStage = lastRevealStage;
     return state;
   }
 
@@ -110,6 +149,8 @@ public class AirAllocationDelegate extends BaseTripleADelegate implements IAirAl
     super.loadState(s.superState);
     pending = new LinkedHashMap<>(s.pending);
     pendingStage = s.pendingStage;
+    lastReveal = s.lastReveal == null ? new LinkedHashMap<>() : new LinkedHashMap<>(s.lastReveal);
+    lastRevealStage = s.lastRevealStage == null ? Stage.FIGHTERS : s.lastRevealStage;
   }
 
   @Override
@@ -123,5 +164,8 @@ public class AirAllocationDelegate extends BaseTripleADelegate implements IAirAl
     private Serializable superState;
     private Map<GamePlayer, List<AirMove>> pending;
     private Stage pendingStage;
+    // since the visual allocation (2026-10); null in older saves
+    private Map<GamePlayer, List<AirMove>> lastReveal;
+    private Stage lastRevealStage;
   }
 }

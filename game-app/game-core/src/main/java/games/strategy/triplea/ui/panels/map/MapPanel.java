@@ -62,6 +62,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -91,6 +92,7 @@ public class MapPanel extends ImageScrollerLargeView {
   private final List<UnitSelectionListener> unitSelectionListeners = new ArrayList<>();
   private final List<MouseOverUnitListener> mouseOverUnitsListeners = new ArrayList<>();
   private final List<ZoomMapListener> zoomMapListeners = new ArrayList<>();
+  private final List<MapOverlay> overlays = new CopyOnWriteArrayList<>();
   private GameData gameData;
   // the territory that the mouse is currently over
   @Getter private @Nullable Territory currentTerritory;
@@ -769,6 +771,7 @@ public class MapPanel extends ImageScrollerLargeView {
         g2d.drawImage(image, transform, this);
       }
     }
+    paintOverlays(g2d, gameData, fittingWidth);
     // draw the tiles nearest us first
     // then draw farther away
     updateUndrawnTiles(undrawnTiles, 30);
@@ -784,6 +787,44 @@ public class MapPanel extends ImageScrollerLargeView {
             }
             SwingUtilities.invokeLater(MapPanel.this::repaint);
           });
+    }
+  }
+
+  /** Flames and Steel: adds drawing on top of the map. */
+  public void addOverlay(final MapOverlay overlay) {
+    overlays.add(overlay);
+    repaint();
+  }
+
+  public void removeOverlay(final MapOverlay overlay) {
+    overlays.remove(overlay);
+    repaint();
+  }
+
+  private void paintOverlays(
+      final Graphics2D g2d, final GameData gameData, final boolean fittingWidth) {
+    if (overlays.isEmpty()) {
+      return;
+    }
+    final int maxWidth = model.getMaxWidth();
+    final int[] shifts =
+        uiContext.getMapData().scrollWrapX() && !fittingWidth
+            ? new int[] {0, -maxWidth, maxWidth}
+            : new int[] {0};
+    for (final int shift : shifts) {
+      final Graphics2D g = (Graphics2D) g2d.create();
+      g.translate(shift - getXOffset(), -getYOffset());
+      g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+      g.setRenderingHint(
+          RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+      for (final MapOverlay overlay : overlays) {
+        try {
+          overlay.paint(g, gameData);
+        } catch (final RuntimeException e) {
+          log.error("Map overlay failed", e);
+        }
+      }
+      g.dispose();
     }
   }
 

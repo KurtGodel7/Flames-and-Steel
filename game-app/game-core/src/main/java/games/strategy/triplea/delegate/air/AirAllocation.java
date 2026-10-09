@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import javax.annotation.Nullable;
 import lombok.experimental.UtilityClass;
 import org.triplea.java.collections.IntegerMap;
 
@@ -86,6 +87,78 @@ public class AirAllocation {
 
   private static boolean isReserve(final Territory zone) {
     return AirZoneAttachment.get(zone).orElseThrow().getZoneType() == ZoneType.RESERVE;
+  }
+
+  /**
+   * Why {@code count} aircraft of a type may not move from one zone to another on top of the moves
+   * already staged, or empty if they may. Quicker than {@link #validate} for checking every zone;
+   * {@link #validate} still checks the whole allocation when it is submitted.
+   */
+  public static Optional<String> destinationProblem(
+      final GamePlayer player,
+      final Stage stage,
+      final List<AirMove> staged,
+      final Territory from,
+      final UnitType unitType,
+      final int count,
+      final Territory to) {
+    if (from.equals(to)) {
+      return Optional.of("The aircraft are already in " + zoneName(to) + ".");
+    }
+    if (!canMove(from, to)) {
+      return Optional.of(
+          zoneName(to)
+              + " is not next to "
+              + zoneName(from)
+              + ": go to the reserve first and move on next round.");
+    }
+    if (!mayEnter(player, to)) {
+      return Optional.of(player.getName() + " aircraft may not enter " + zoneName(to) + ".");
+    }
+    final ZoneType type = AirZoneAttachment.get(to).orElseThrow().getZoneType();
+    if ((type == ZoneType.LAND || type == ZoneType.BOMB)
+        && !AirRange.canOperateIn(player, to, unitType)) {
+      return Optional.of(
+          "Out of range: no "
+              + (type == ZoneType.BOMB ? "target" : "part")
+              + " of "
+              + zoneName(to)
+              + " is within "
+              + AirRange.range(unitType, player) / 2
+              + " of a friendly landing spot.");
+    }
+    if (type == ZoneType.OCEAN || type == ZoneType.COASTAL) {
+      final List<AirMove> moves = new ArrayList<>(staged);
+      moves.add(new AirMove(from, to, unitType, count));
+      final CarrierLoad load =
+          carrierLoad(player, to, aircraftAfterMoves(player, stage, moves, to));
+      if (load.unfit() != null) {
+        return Optional.of(
+            load.unfit().getName()
+                + (type == ZoneType.COASTAL
+                    ? " has no friendly land in range and cannot fly from carriers."
+                    : " cannot fly from carriers."));
+      }
+      if (load.cost() > load.capacity()) {
+        return Optional.of(
+            "No carrier capacity: " + load.cost() + "/" + load.capacity() + " in " + zoneName(to));
+      }
+      if (load.jetCost() > load.fleetCapacity()) {
+        return Optional.of(
+            "Jets need fleet carriers: "
+                + load.jetCost()
+                + "/"
+                + load.fleetCapacity()
+                + " in "
+                + zoneName(to));
+      }
+    }
+    return Optional.empty();
+  }
+
+  /** "North Atlantic" for the zone "Air - North Atlantic". */
+  public static String zoneName(final Territory zone) {
+    return zone.getName().replaceFirst("^Air - ", "");
   }
 
   /** Why these moves are not allowed, if they are not. */
@@ -196,73 +269,94 @@ public class AirAllocation {
       }
     }
     for (final Territory zone : destinations) {
-      final AirZoneAttachment zoneAttachment = AirZoneAttachment.get(zone).orElseThrow();
-      final List<UnitType> aircraft =
-          new ArrayList<>(aircraftAfterMoves(player, stage, moves, zone));
-      if (zoneAttachment.getZoneType() == ZoneType.COASTAL) {
-        // in a coastal zone only aircraft without friendly land in range need carriers
-        aircraft.removeIf(
-            type ->
-                AirRange.landWithinReach(
-                    player, zoneAttachment.getCoveredTerritories(), AirRange.range(type, player)));
-        if (aircraft.isEmpty()) {
-          continue;
-        }
+      final ZoneType type = AirZoneAttachment.get(zone).orElseThrow().getZoneType();
+      final CarrierLoad load =
+          carrierLoad(player, zone, aircraftAfterMoves(player, stage, moves, zone));
+      if (load.unfit() != null) {
+        return Optional.of(
+            load.unfit().getName()
+                + (type == ZoneType.COASTAL
+                    ? " has no friendly land in range and cannot fly from carriers, so cannot go to "
+                    : " cannot fly from carriers, so cannot go to ")
+                + zone.getName());
       }
-      int cost = 0;
-      int jetCost = 0;
-      for (final UnitType type : aircraft) {
-        final int carrierCost = type.getUnitAttachment().getCarrierCost();
-        if (carrierCost < 1) {
-          return Optional.of(
-              type.getName()
-                  + (zoneAttachment.getZoneType() == ZoneType.COASTAL
-                      ? " has no friendly land in range and cannot fly from carriers, so cannot go to "
-                      : " cannot fly from carriers, so cannot go to ")
-                  + zone.getName());
-        }
-        cost += carrierCost;
-        if (AirUnitAttachment.get(type).map(AirUnitAttachment::isFleetCarrierOnly).orElse(false)) {
-          jetCost += carrierCost;
-        }
-      }
-      int capacity = 0;
-      int fleetCapacity = 0;
-      for (final Territory seaZone :
-          AirZoneAttachment.get(zone).orElseThrow().getCoveredTerritories()) {
-        for (final Unit carrier :
-            seaZone
-                .getUnitCollection()
-                .getMatches(
-                    u -> u.isOwnedBy(player) && u.getUnitAttachment().getCarrierCapacity() > 0)) {
-          capacity += carrier.getUnitAttachment().getCarrierCapacity();
-          if (AirUnitAttachment.isFleetCarrier(carrier)) {
-            fleetCapacity += carrier.getUnitAttachment().getCarrierCapacity();
-          }
-        }
-      }
-      if (cost > capacity) {
+      if (load.cost() > load.capacity()) {
         return Optional.of(
             zone.getName()
                 + ": "
                 + player.getName()
                 + " carriers there can take "
-                + capacity
+                + load.capacity()
                 + " aircraft, not "
-                + cost
+                + load.cost()
                 + ".");
       }
-      if (jetCost > fleetCapacity) {
+      if (load.jetCost() > load.fleetCapacity()) {
         return Optional.of(
             zone.getName()
                 + ": jets need fleet carriers; "
                 + player.getName()
                 + " fleet carriers there can take "
-                + fleetCapacity
+                + load.fleetCapacity()
                 + ".");
       }
     }
     return Optional.empty();
+  }
+
+  /**
+   * How a nation's aircraft in an open-ocean or coastal zone sit on its carriers there.
+   *
+   * @param cost carrier spaces the aircraft that need carriers take
+   * @param capacity carrier spaces of the nation's carriers in the zone's sea zones
+   * @param jetCost spaces taken by aircraft that need fleet carriers (jets)
+   * @param fleetCapacity spaces on fleet carriers
+   * @param unfit an aircraft type that needs a carrier but cannot use one, if any
+   */
+  public record CarrierLoad(
+      int cost, int capacity, int jetCost, int fleetCapacity, @Nullable UnitType unfit) {}
+
+  /**
+   * Carrier load of these aircraft types in the zone. In a coastal zone only aircraft with no
+   * friendly land within reach need carriers.
+   */
+  public static CarrierLoad carrierLoad(
+      final GamePlayer player, final Territory zone, final Collection<UnitType> aircraft) {
+    final AirZoneAttachment zoneAttachment = AirZoneAttachment.get(zone).orElseThrow();
+    int cost = 0;
+    int jetCost = 0;
+    UnitType unfit = null;
+    for (final UnitType type : aircraft) {
+      if (zoneAttachment.getZoneType() == ZoneType.COASTAL
+          && AirRange.landWithinReach(
+              player, zoneAttachment.getCoveredTerritories(), AirRange.range(type, player))) {
+        continue;
+      }
+      final int carrierCost = type.getUnitAttachment().getCarrierCost();
+      if (carrierCost < 1) {
+        unfit = unfit == null ? type : unfit;
+        continue;
+      }
+      cost += carrierCost;
+      if (AirUnitAttachment.get(type).map(AirUnitAttachment::isFleetCarrierOnly).orElse(false)) {
+        jetCost += carrierCost;
+      }
+    }
+    int capacity = 0;
+    int fleetCapacity = 0;
+    for (final Territory seaZone : zoneAttachment.getCoveredTerritories()) {
+      for (final Unit carrier :
+          seaZone
+              .getUnitCollection()
+              .getMatches(
+                  u -> u.isOwnedBy(player) && u.getUnitAttachment().getCarrierCapacity() > 0)) {
+        capacity += carrier.getUnitAttachment().getCarrierCapacity();
+        if (AirUnitAttachment.isFleetCarrier(carrier)) {
+          fleetCapacity += carrier.getUnitAttachment().getCarrierCapacity();
+        }
+      }
+    }
+    return new CarrierLoad(cost, capacity, jetCost, fleetCapacity, unfit);
   }
 
   /** Types of the player's aircraft in the zone once the moves are made (bomber stage: bombers). */

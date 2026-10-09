@@ -1,12 +1,15 @@
 package games.strategy.triplea.delegate.remote;
 
+import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.delegate.IDelegate;
 import games.strategy.engine.delegate.IDelegateBridge;
 import games.strategy.engine.message.IRemote;
 import games.strategy.engine.message.RemoteActionCode;
 import games.strategy.triplea.delegate.air.AirAllocation.AirMove;
+import games.strategy.triplea.delegate.air.AirAllocation.Stage;
 import java.io.Serializable;
 import java.util.List;
+import java.util.Map;
 import javax.annotation.Nullable;
 
 /** Flames and Steel: hidden allocation of aircraft between air zones. */
@@ -20,6 +23,22 @@ public interface IAirAllocationDelegate extends IRemote, IDelegate {
   @RemoteActionCode(12)
   @Nullable
   String allocate(List<AirMove> moves);
+
+  /** This nation's moves stored so far in the current stage (after a save and load, say). */
+  @RemoteActionCode(13)
+  List<AirMove> getPendingMoves();
+
+  /** Moves stored so far in the current stage by this nation's allies (they see each other). */
+  @RemoteActionCode(14)
+  Map<GamePlayer, List<AirMove>> getAlliedPendingMoves();
+
+  /** Every nation's moves at the last reveal, which are public. */
+  @RemoteActionCode(15)
+  Map<GamePlayer, List<AirMove>> getLastReveal();
+
+  /** The stage of {@link #getLastReveal()}. */
+  @RemoteActionCode(16)
+  Stage getLastRevealStage();
 
   @RemoteActionCode(6)
   @Override
