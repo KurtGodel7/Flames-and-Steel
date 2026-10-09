@@ -147,6 +147,34 @@ class ApcsTest {
   }
 
   @Test
+  void techsPayIncomePerOwnApc() {
+    final IDelegateBridge bridge = newDelegateBridge(germans);
+    final int apcs = Apcs.getOwnApcs(germans, gameData.getMap()).size();
+    final int before = germans.getResources().getQuantity(Constants.PUS);
+    techOption("jetPower", "apcIncome", "4");
+    techOption("rocket", "apcIncome", "3");
+
+    Apcs.produce(bridge, germans);
+
+    assertThat(germans.getResources().getQuantity(Constants.PUS), is(before + 7 * apcs));
+  }
+
+  @Test
+  void techGivesFreeUnitsPerOwnApcOnlyOnceTheUnitIsUnlocked() {
+    final IDelegateBridge bridge = newDelegateBridge(germans);
+    final int bombersBefore = count(germany, bomber(gameData));
+    final int armourBefore = count(germany, armour(gameData));
+    techOption("jetPower", "apcFreeUnits", "1:" + bomber(gameData).getName());
+    techOption("rocket", "apcFreeUnits", "1:" + armour(gameData).getName());
+
+    Apcs.produce(bridge, germans);
+
+    // armour needs no tech; the bomber needs heavy bombers, which Germany lacks
+    assertThat(count(germany, armour(gameData)), is(armourBefore + 1));
+    assertThat(count(germany, bomber(gameData)), is(bombersBefore));
+  }
+
+  @Test
   void unitsNeedTheirTech() {
     assertThat(Apcs.getBuildableTypes(germans), contains(armour(gameData)));
     assertThat(
@@ -157,6 +185,12 @@ class ApcsTest {
     assertThat(
         Apcs.validate(germans, Map.of(germanApc, bomber(gameData)), gameData.getMap()).isPresent(),
         is(false));
+  }
+
+  /** Gives Germany the tech with this tech-ability option set. */
+  private void techOption(final String techProperty, final String option, final String value) {
+    giveTech(germans, techProperty, 0);
+    set(TechAbilityAttachment.get(tech(techProperty)), option, value);
   }
 
   /** A tech by its property name (the test map's techs have display names). */

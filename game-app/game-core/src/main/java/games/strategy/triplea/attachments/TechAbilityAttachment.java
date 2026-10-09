@@ -80,6 +80,10 @@ public class TechAbilityAttachment extends DefaultAttachment {
   private int bonusResearchChance = 0;
   // Flames and Steel: while this tech is owned, the nation may have this many more APCs
   private int apcLimitBonus = 0;
+  // Flames and Steel: PUs of income per APC of the nation's own, while this tech is owned
+  private int apcIncome = 0;
+  // Flames and Steel: free units each APC of the nation's own produces each turn
+  private @Nullable IntegerMap<UnitType> apcFreeUnits = null;
 
   public TechAbilityAttachment(
       final String name, final Attachable attachable, final GameData gameData) {
@@ -1063,6 +1067,17 @@ public class TechAbilityAttachment extends DefaultAttachment {
                   this::setResearchStarsRequired,
                   this::getResearchStarsRequired,
                   this::resetResearchStarsRequired));
+      case "apcIncome" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setApcIncome, this::setApcIncome, this::getApcIncome, () -> apcIncome = 0));
+      case "apcFreeUnits" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setApcFreeUnits,
+                  this::setApcFreeUnits,
+                  this::getApcFreeUnits,
+                  () -> apcFreeUnits = null));
       case "apcLimitBonus" ->
           Optional.of(
               MutableProperty.of(
@@ -1079,6 +1094,48 @@ public class TechAbilityAttachment extends DefaultAttachment {
                   this::resetBonusResearchRoll));
       default -> Optional.empty();
     };
+  }
+
+  private void setApcIncome(final String value) {
+    apcIncome = getInt(value);
+  }
+
+  private void setApcIncome(final Integer value) {
+    apcIncome = value;
+  }
+
+  /** PUs of income per APC of the nation's own. */
+  public int getApcIncome() {
+    return apcIncome;
+  }
+
+  private void setApcFreeUnits(final String value) throws GameParseException {
+    final String[] s = splitOnColon(value);
+    if (s.length != 2) {
+      throw new GameParseException(
+          "apcFreeUnits must be a count and a unit type, e.g. count=1 value=panther"
+              + thisErrorMsg());
+    }
+    final UnitType type =
+        getData()
+            .getUnitTypeList()
+            .getUnitType(s[1])
+            .orElseThrow(
+                () ->
+                    new GameParseException("apcFreeUnits: no unit type " + s[1] + thisErrorMsg()));
+    if (apcFreeUnits == null) {
+      apcFreeUnits = new IntegerMap<>();
+    }
+    apcFreeUnits.put(type, getInt(s[0]));
+  }
+
+  private void setApcFreeUnits(final IntegerMap<UnitType> value) {
+    apcFreeUnits = value;
+  }
+
+  /** Free units each APC of the nation's own produces each turn. */
+  public IntegerMap<UnitType> getApcFreeUnits() {
+    return getIntegerMapProperty(apcFreeUnits);
   }
 
   private void setApcLimitBonus(final String value) {

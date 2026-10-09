@@ -8,6 +8,7 @@ import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.UnitType;
 import games.strategy.engine.data.changefactory.ChangeFactory;
 import games.strategy.engine.delegate.IDelegateBridge;
+import games.strategy.triplea.Constants;
 import games.strategy.triplea.attachments.AirZoneAttachment;
 import games.strategy.triplea.attachments.ApcAttachment;
 import games.strategy.triplea.attachments.PlayerAttachment;
@@ -242,8 +243,71 @@ public class Apcs {
       lines.forEach(line -> bridge.getHistoryWriter().addChildToEvent(line));
     }
     bridge.addChange(change);
+    produceBonuses(bridge, player);
     // aircraft built by APCs go straight to the aircraft reserve
     AirReserve.sendAircraftToReserve(bridge, player);
+  }
+
+  /**
+   * Bonuses from owned techs for each of the nation's own APCs: income (Increased Production,
+   * Industrialization, Accelerated Production) and free units (Speer's Panther, only once the
+   * nation can build that unit).
+   */
+  private static void produceBonuses(final IDelegateBridge bridge, final GamePlayer player) {
+    final GameMap map = bridge.getData().getMap();
+    final List<Unit> apcs = getOwnApcs(player, map);
+    if (apcs.isEmpty()) {
+      return;
+    }
+    int incomePerApc = 0;
+    final IntegerMap<UnitType> freePerApc = new IntegerMap<>();
+    for (final TechAdvance tech :
+        TechTracker.getCurrentTechAdvances(player, player.getData().getTechnologyFrontier())) {
+      final TechAbilityAttachment ability = TechAbilityAttachment.get(tech);
+      if (ability != null) {
+        incomePerApc += ability.getApcIncome();
+        freePerApc.add(ability.getApcFreeUnits());
+      }
+    }
+    final CompositeChange change = new CompositeChange();
+    final List<String> lines = new ArrayList<>();
+    if (incomePerApc > 0) {
+      final int income = incomePerApc * apcs.size();
+      change.add(
+          ChangeFactory.changeResourcesChange(
+              player,
+              bridge.getData().getResourceList().getResourceOrThrow(Constants.PUS),
+              income));
+      lines.add(
+          player.getName()
+              + " receive "
+              + income
+              + MyFormatter.pluralize(" PU", income)
+              + " from "
+              + apcs.size()
+              + " APC(s)");
+    }
+    for (final UnitType type : freePerApc.keySet()) {
+      final Optional<String> tech =
+          ApcAttachment.get(type).flatMap(ApcAttachment::getApcRequiredTech);
+      if (tech.isPresent() && !hasTech(player, tech.get())) {
+        continue;
+      }
+      for (final Unit apc : apcs) {
+        final Optional<Territory> placeAt =
+            territoryOf(apc, map).flatMap(t -> placeFor(type, t, player, map));
+        if (placeAt.isPresent()) {
+          final List<Unit> free = type.create(freePerApc.getInt(type), player);
+          change.add(ChangeFactory.addUnits(placeAt.get(), free));
+          lines.add("Free " + MyFormatter.unitsToText(free) + " in " + placeAt.get().getName());
+        }
+      }
+    }
+    if (!lines.isEmpty()) {
+      bridge.getHistoryWriter().startEvent(player.getName() + " APC bonuses");
+      lines.forEach(line -> bridge.getHistoryWriter().addChildToEvent(line));
+      bridge.addChange(change);
+    }
   }
 
   /**
