@@ -238,3 +238,6 @@
 12,games.strategy.triplea.delegate.remote.IAirCombatDelegate,assignTargets,java.util.List
 0,games.strategy.triplea.delegate.remote.IAirCombatDelegate,delegateCurrentlyRequiresUserInput
 11,games.strategy.triplea.delegate.remote.IAirCombatDelegate,start
+12,games.strategy.triplea.delegate.remote.IApcDelegate,setProduction,java.util.Map
+0,games.strategy.triplea.delegate.remote.IApcDelegate,delegateCurrentlyRequiresUserInput
+11,games.strategy.triplea.delegate.remote.IApcDelegate,start

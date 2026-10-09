@@ -21,6 +21,7 @@ import games.strategy.engine.data.ResourceCollection;
 import games.strategy.engine.data.Route;
 import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
+import games.strategy.engine.data.UnitType;
 import games.strategy.engine.data.changefactory.ChangeFactory;
 import games.strategy.engine.data.events.GameDataChangeListener;
 import games.strategy.engine.framework.ClientGame;
@@ -1648,6 +1649,18 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
                     () -> AirTargetDialog.show(TripleAFrame.this, gamePlayer, data, start)))
         .result
         .orElse(List.of());
+  }
+
+  /** Flames and Steel: asks what each of the nation's APCs builds. */
+  public Map<Unit, UnitType> getApcProduction(final GamePlayer gamePlayer) {
+    messageAndDialogThreadPool.waitForAll();
+    requestWindowFocus();
+    return Interruptibles.awaitResult(
+            () ->
+                SwingAction.invokeAndWaitResult(
+                    () -> ApcProductionDialog.show(TripleAFrame.this, gamePlayer, data)))
+        .result
+        .orElse(Map.of());
   }
 
   /** Flames and Steel: asks for each research centre's focus. */

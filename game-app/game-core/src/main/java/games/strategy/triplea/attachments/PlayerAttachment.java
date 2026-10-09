@@ -10,8 +10,10 @@ import games.strategy.engine.data.Resource;
 import games.strategy.engine.data.UnitType;
 import games.strategy.engine.data.gameparser.GameParseException;
 import java.io.Serial;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import javax.annotation.Nullable;
@@ -56,6 +58,11 @@ public class PlayerAttachment extends DefaultAttachment {
   private boolean sellsAlliedUnitsAtEndTurn = false;
   // PUs paid per unit of each non-PU resource in a sold unit's purchase cost (e.g. Manpower: 2)
   private @Nullable IntegerMap<Resource> alliedUnitSaleResourceValue = null;
+  // Flames and Steel APCs: national cap on APCs (the Advanced techs also limit them)
+  @Getter private int apcLimit = 0;
+  // what each APC builds (APC unit id -> unit type name), and turns of progress towards it
+  private @Nullable Map<String, String> apcProduction = null;
+  private @Nullable IntegerMap<String> apcProgress = null;
   // what resources can be used for suicide attacks, and at what attack power
   private @Nullable IntegerMap<Resource> suicideAttackResources = null;
   // what can be hit by suicide attacks
@@ -437,6 +444,40 @@ public class PlayerAttachment extends DefaultAttachment {
     alliedUnitSaleResourceValue = null;
   }
 
+  private void setApcLimit(final String value) {
+    apcLimit = getInt(value);
+  }
+
+  private void setApcLimit(final Integer value) {
+    apcLimit = value;
+  }
+
+  private void setApcProduction(final String value) throws GameParseException {
+    throw new GameParseException("apcProduction is set during the game, not in the XML");
+  }
+
+  private void setApcProduction(final Map<String, String> value) {
+    apcProduction = value;
+  }
+
+  /** What each APC builds: APC unit id to unit type name. */
+  public Map<String, String> getApcProduction() {
+    return apcProduction == null ? Map.of() : Collections.unmodifiableMap(apcProduction);
+  }
+
+  private void setApcProgress(final String value) throws GameParseException {
+    throw new GameParseException("apcProgress is set during the game, not in the XML");
+  }
+
+  private void setApcProgress(final IntegerMap<String> value) {
+    apcProgress = value;
+  }
+
+  /** Turns of progress of each APC (by unit id) towards its next slow-built unit. */
+  public IntegerMap<String> getApcProgress() {
+    return getIntegerMapProperty(apcProgress);
+  }
+
   /** True if our territory is kept by whichever ally liberates it. */
   public boolean isLiberatedTerritoryToLiberator() {
     return LIBERATED_TO_LIBERATOR.equals(liberatedTerritoryGoesTo);
@@ -529,6 +570,24 @@ public class PlayerAttachment extends DefaultAttachment {
                   this::setLiberatedTerritoryGoesTo,
                   this::getLiberatedTerritoryGoesTo,
                   this::resetLiberatedTerritoryGoesTo));
+      case "apcLimit" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setApcLimit, this::setApcLimit, this::getApcLimit, () -> apcLimit = 0));
+      case "apcProduction" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setApcProduction,
+                  this::setApcProduction,
+                  this::getApcProduction,
+                  () -> apcProduction = null));
+      case "apcProgress" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setApcProgress,
+                  this::setApcProgress,
+                  this::getApcProgress,
+                  () -> apcProgress = null));
       case "sellsAlliedUnitsAtEndTurn" ->
           Optional.of(
               MutableProperty.of(

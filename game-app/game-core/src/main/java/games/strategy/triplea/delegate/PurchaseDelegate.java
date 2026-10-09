@@ -15,12 +15,14 @@ import games.strategy.engine.data.changefactory.ChangeFactory;
 import games.strategy.engine.posted.game.pbem.PbemMessagePoster;
 import games.strategy.triplea.Properties;
 import games.strategy.triplea.attachments.AbstractTriggerAttachment;
+import games.strategy.triplea.attachments.ApcAttachment;
 import games.strategy.triplea.attachments.FireTriggerParams;
 import games.strategy.triplea.attachments.ICondition;
 import games.strategy.triplea.attachments.TechAbilityAttachment;
 import games.strategy.triplea.attachments.TerritoryAttachment;
 import games.strategy.triplea.attachments.TriggerAttachment;
 import games.strategy.triplea.attachments.UnitTypeComparator;
+import games.strategy.triplea.delegate.apc.Apcs;
 import games.strategy.triplea.delegate.remote.IAbstractForumPosterDelegate;
 import games.strategy.triplea.delegate.remote.IPurchaseDelegate;
 import games.strategy.triplea.formatter.MyFormatter;
@@ -173,6 +175,18 @@ public class PurchaseDelegate extends BaseTripleADelegate
       if (!(next instanceof Resource)) {
         final UnitType type = (UnitType) next;
         final int quantity = results.getInt(type);
+        // Flames and Steel: APCs are capped by the national limit and the Advanced techs
+        if (ApcAttachment.isApc(type)) {
+          final int allowedApcs =
+              Math.max(
+                  0, Apcs.getLimit(player) - Apcs.countTowardsLimit(player, getData().getMap()));
+          if (quantity > allowedApcs) {
+            return String.format(
+                "May only build %s more %s now (limit %s, set by your Advanced techs and"
+                    + " national cap)",
+                allowedApcs, type.getName(), Apcs.getLimit(player));
+          }
+        }
         final int maxBuilt = type.getUnitAttachment().getMaxBuiltPerPlayer();
         if (maxBuilt == 0) {
           return "May not build any of this unit right now: " + type.getName();

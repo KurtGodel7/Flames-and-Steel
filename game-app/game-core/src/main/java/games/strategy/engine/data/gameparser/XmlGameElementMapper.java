@@ -10,6 +10,7 @@ import games.strategy.engine.data.IAttachment;
 import games.strategy.engine.delegate.IDelegate;
 import games.strategy.triplea.attachments.AirUnitAttachment;
 import games.strategy.triplea.attachments.AirZoneAttachment;
+import games.strategy.triplea.attachments.ApcAttachment;
 import games.strategy.triplea.attachments.CanalAttachment;
 import games.strategy.triplea.attachments.PlayerAttachment;
 import games.strategy.triplea.attachments.PoliticalActionAttachment;
@@ -26,6 +27,7 @@ import games.strategy.triplea.attachments.UserActionAttachment;
 import games.strategy.triplea.delegate.AirAllocationDelegate;
 import games.strategy.triplea.delegate.AirCarrierCheckDelegate;
 import games.strategy.triplea.delegate.AirCombatDelegate;
+import games.strategy.triplea.delegate.ApcDelegate;
 import games.strategy.triplea.delegate.BidPlaceDelegate;
 import games.strategy.triplea.delegate.BidPurchaseDelegate;
 import games.strategy.triplea.delegate.EndRoundDelegate;
@@ -91,6 +93,7 @@ public final class XmlGameElementMapper {
         .put("AirAllocationDelegate", AirAllocationDelegate::new)
         .put("AirCarrierCheckDelegate", AirCarrierCheckDelegate::new)
         .put("AirCombatDelegate", AirCombatDelegate::new)
+        .put("ApcDelegate", ApcDelegate::new)
         .put("BattleDelegate", BattleDelegate::new)
         .put("BidPlaceDelegate", BidPlaceDelegate::new)
         .put("BidPurchaseDelegate", BidPurchaseDelegate::new)
@@ -131,6 +134,7 @@ public final class XmlGameElementMapper {
       final Map<String, AttachmentFactory> auxiliaryAttachmentFactoriesByTypeName) {
     return ImmutableMap.<String, AttachmentFactory>builder()
         .put("AirUnitAttachment", AirUnitAttachment::new)
+        .put("ApcAttachment", ApcAttachment::new)
         .put("AirZoneAttachment", AirZoneAttachment::new)
         .put("CanalAttachment", CanalAttachment::new)
         .put("PlayerAttachment", PlayerAttachment::new)

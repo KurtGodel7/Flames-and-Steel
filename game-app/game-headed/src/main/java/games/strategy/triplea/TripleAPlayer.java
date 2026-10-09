@@ -31,6 +31,7 @@ import games.strategy.triplea.delegate.remote.IAbstractForumPosterDelegate;
 import games.strategy.triplea.delegate.remote.IAbstractPlaceDelegate;
 import games.strategy.triplea.delegate.remote.IAirAllocationDelegate;
 import games.strategy.triplea.delegate.remote.IAirCombatDelegate;
+import games.strategy.triplea.delegate.remote.IApcDelegate;
 import games.strategy.triplea.delegate.remote.IBattleDelegate;
 import games.strategy.triplea.delegate.remote.IEditDelegate;
 import games.strategy.triplea.delegate.remote.IMoveDelegate;
@@ -175,6 +176,8 @@ public class TripleAPlayer extends AbstractBasePlayer {
       airAllocation(name);
     } else if (GameStep.isAirTargetStepName(name)) {
       airTargets();
+    } else if (GameStep.isApcProductionStepName(name)) {
+      apcProduction();
     } else if (GameStep.isPurchaseOrBidStepName(name)) {
       purchase(GameStepPropertiesHelper.isBid(getGameData()), false);
       if (!GameStepPropertiesHelper.isBid(getGameData())) {
@@ -307,6 +310,20 @@ public class TripleAPlayer extends AbstractBasePlayer {
       return;
     }
     ui.getUiContext().getClipPlayer().play(soundPath, getGamePlayer());
+  }
+
+  private void apcProduction() {
+    if (getPlayerBridge().isGameOver()) {
+      return;
+    }
+    final IApcDelegate apcDelegate = (IApcDelegate) getPlayerBridge().getRemoteDelegate();
+    while (!getPlayerBridge().isGameOver()) {
+      final String error = apcDelegate.setProduction(ui.getApcProduction(getGamePlayer()));
+      if (error == null) {
+        return;
+      }
+      ui.notifyError(error);
+    }
   }
 
   private void airTargets() {

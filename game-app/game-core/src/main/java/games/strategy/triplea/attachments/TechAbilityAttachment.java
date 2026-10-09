@@ -78,6 +78,8 @@ public class TechAbilityAttachment extends DefaultAttachment {
   // in the named research category (Goettingen: Jets, 50).
   private @Nullable String bonusResearchCategory = null;
   private int bonusResearchChance = 0;
+  // Flames and Steel: while this tech is owned, the nation may have this many more APCs
+  private int apcLimitBonus = 0;
 
   public TechAbilityAttachment(
       final String name, final Attachable attachable, final GameData gameData) {
@@ -1061,6 +1063,13 @@ public class TechAbilityAttachment extends DefaultAttachment {
                   this::setResearchStarsRequired,
                   this::getResearchStarsRequired,
                   this::resetResearchStarsRequired));
+      case "apcLimitBonus" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setApcLimitBonus,
+                  this::setApcLimitBonus,
+                  this::getApcLimitBonus,
+                  () -> apcLimitBonus = 0));
       case "bonusResearchRoll" ->
           Optional.of(
               MutableProperty.of(
@@ -1070,6 +1079,19 @@ public class TechAbilityAttachment extends DefaultAttachment {
                   this::resetBonusResearchRoll));
       default -> Optional.empty();
     };
+  }
+
+  private void setApcLimitBonus(final String value) {
+    apcLimitBonus = getInt(value);
+  }
+
+  private void setApcLimitBonus(final Integer value) {
+    apcLimitBonus = value;
+  }
+
+  /** How many more APCs the nation may have while it owns this tech. */
+  public int getApcLimitBonus() {
+    return apcLimitBonus;
   }
 
   private void setResearchStarsRequired(final String value) throws GameParseException {

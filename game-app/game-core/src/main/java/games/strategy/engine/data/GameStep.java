@@ -181,6 +181,11 @@ public class GameStep extends GameDataComponent {
     return stepName != null && stepName.endsWith("AirTargets");
   }
 
+  /** Flames and Steel APC production choice step, e.g. "germanApcProduction". */
+  public static boolean isApcProductionStepName(final @NonNls String stepName) {
+    return stepName != null && stepName.endsWith("ApcProduction");
+  }
+
   public static boolean isMoveStepName(final @NonNls String stepName) {
     return stepName != null && stepName.endsWith("Move");
   }
