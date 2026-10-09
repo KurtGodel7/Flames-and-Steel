@@ -252,22 +252,30 @@ public class UnitImageFactory {
     if (!imageKey.isDamaged()) {
       return Optional.empty();
     }
-    final ImageKey healthy =
-        ImageKey.builder()
-            .player(imageKey.getPlayer())
-            .type(imageKey.getType())
-            .disabled(imageKey.isDisabled())
-            .build();
-    final Optional<Image> base =
-        Optional.ofNullable(images.get(healthy)).or(() -> getTransformedScaledImage(healthy));
-    if (base.isEmpty()) {
-      return Optional.empty();
-    }
-    final int width = Math.max(1, base.get().getWidth(null));
-    final int height = Math.max(1, base.get().getHeight(null));
+    final ImageKey healthy = healthyKey(imageKey);
+    final Optional<Image> damaged =
+        Optional.ofNullable(images.get(healthy))
+            .or(() -> getTransformedScaledImage(healthy))
+            .map(UnitImageFactory::markDamaged);
+    damaged.ifPresent(image -> images.put(imageKey, image));
+    return damaged;
+  }
+
+  private static ImageKey healthyKey(final ImageKey imageKey) {
+    return ImageKey.builder()
+        .player(imageKey.getPlayer())
+        .type(imageKey.getType())
+        .disabled(imageKey.isDisabled())
+        .build();
+  }
+
+  /** The image tinted red with a red slash: the damaged look when the map has no "_hit" art. */
+  private static Image markDamaged(final Image base) {
+    final int width = Math.max(1, base.getWidth(null));
+    final int height = Math.max(1, base.getHeight(null));
     final BufferedImage damaged = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
     final Graphics2D g = damaged.createGraphics();
-    g.drawImage(base.get(), 0, 0, null);
+    g.drawImage(base, 0, 0, null);
     // red tint on the unit's own pixels only
     g.setComposite(java.awt.AlphaComposite.getInstance(java.awt.AlphaComposite.SRC_ATOP, 0.35f));
     g.setColor(Color.RED);
@@ -279,8 +287,7 @@ public class UnitImageFactory {
     g.setColor(new Color(200, 0, 0));
     g.drawLine(width / 5, height * 4 / 5, width * 4 / 5, height / 5);
     g.dispose();
-    images.put(imageKey, damaged);
-    return Optional.of(damaged);
+    return damaged;
   }
 
   private Optional<Image> getTransformedScaledImage(final ImageKey imageKey) {
@@ -440,7 +447,14 @@ public class UnitImageFactory {
     if (icon == null) {
       icon =
           new ImageIcon(
-              getTransformedImage(imageKey).orElseGet(() -> createNoImageImage(imageKey)));
+              getTransformedImage(imageKey)
+                  .or(
+                      () ->
+                          imageKey.isDamaged()
+                              ? getTransformedImage(healthyKey(imageKey))
+                                  .map(UnitImageFactory::markDamaged)
+                              : Optional.empty())
+                  .orElseGet(() -> createNoImageImage(imageKey)));
       icons.put(fullName, icon);
     }
     return icon;

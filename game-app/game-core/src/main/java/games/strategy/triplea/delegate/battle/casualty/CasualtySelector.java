@@ -26,7 +26,6 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import lombok.experimental.UtilityClass;
@@ -338,26 +337,18 @@ public class CasualtySelector {
           allowMultipleHitsPerUnit);
     }
     if (stickyHits) {
-      final Optional<String> stickyError =
-          StickyHits.validate(sortedTargetsToPickFrom, killed, damaged);
-      if (stickyError.isPresent()) {
-        tripleaPlayer.reportError(stickyError.get());
-        if (headLess) {
-          log.error("Possible Infinite Loop: " + stickyError.get() + ", for " + casualtyDetails);
-        }
-        return selectCasualtiesFrom(
-            player,
-            sortedTargetsToPickFrom,
-            combatValue,
-            battleSite,
-            bridge,
-            text,
-            dice,
-            battleId,
-            headLess,
-            hitsRemaining,
-            allowMultipleHitsPerUnit);
-      }
+      // Sticky hits: apply the hits to the picked units the sticky way rather than refusing a
+      // spread-out pick (the stock chooser can even offer one as its default)
+      final StickyHits.Applied applied =
+          StickyHits.applyInPickedOrder(
+              sortedTargetsToPickFrom,
+              List.copyOf(killed),
+              List.copyOf(damaged),
+              numhits + damaged.size());
+      killed.clear();
+      killed.addAll(applied.killed());
+      damaged.clear();
+      damaged.addAll(applied.damaged());
     }
     return casualtyDetails;
   }

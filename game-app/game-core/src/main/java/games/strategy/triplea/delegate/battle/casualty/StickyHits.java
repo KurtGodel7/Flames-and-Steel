@@ -108,6 +108,60 @@ public class StickyHits {
     return Optional.empty();
   }
 
+  /** Casualties after {@link #applyInPickedOrder}: units destroyed, and hits on survivors. */
+  public record Applied(List<Unit> killed, List<Unit> damaged) {}
+
+  /**
+   * Applies the hits the sticky way to the units the owner picked: already-damaged units first,
+   * then the units the owner chose to destroy, then those the owner chose to damage (most hits
+   * first), then any others in order of loss; each unit takes hits until it is destroyed before the
+   * next is hit, so at most one unit is left damaged. The owner's choice of units is kept as far as
+   * the rule allows, and an unlawful spread (several units each damaged once) never needs to be
+   * refused.
+   *
+   * @param orderOfLoss all units that could be hit, in order of loss
+   * @param hits the number of hits to apply
+   */
+  public static Applied applyInPickedOrder(
+      final List<Unit> orderOfLoss,
+      final Collection<Unit> pickedKilled,
+      final List<Unit> pickedDamaged,
+      final int hits) {
+    final IntegerMap<Unit> damageCount = new IntegerMap<>();
+    pickedDamaged.forEach(u -> damageCount.add(u, 1));
+    final List<Unit> order = new ArrayList<>();
+    orderOfLoss.stream()
+        .filter(u -> u.getHits() > 0)
+        .sorted(Comparator.comparingInt(StickyHits::hitPointsLeft))
+        .forEach(order::add);
+    pickedKilled.stream().filter(u -> !order.contains(u)).forEach(order::add);
+    pickedDamaged.stream()
+        .distinct()
+        .sorted(Comparator.comparingInt(u -> -damageCount.getInt(u)))
+        .filter(u -> !order.contains(u))
+        .forEach(order::add);
+    orderOfLoss.stream().filter(u -> !order.contains(u)).forEach(order::add);
+    final List<Unit> killed = new ArrayList<>();
+    final List<Unit> damaged = new ArrayList<>();
+    int hitsLeft = hits;
+    for (final Unit unit : order) {
+      if (hitsLeft <= 0) {
+        break;
+      }
+      final int left = hitPointsLeft(unit);
+      if (hitsLeft >= left) {
+        killed.add(unit);
+        hitsLeft -= left;
+      } else {
+        for (int i = 0; i < hitsLeft; i++) {
+          damaged.add(unit);
+        }
+        hitsLeft = 0;
+      }
+    }
+    return new Applied(killed, damaged);
+  }
+
   /**
    * Default casualties under sticky hits: already-damaged units first, then the rest in the given
    * order of loss, each unit taking hits until destroyed before the next is hit.

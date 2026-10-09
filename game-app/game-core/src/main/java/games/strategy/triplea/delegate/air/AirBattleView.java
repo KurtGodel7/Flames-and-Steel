@@ -135,8 +135,9 @@ public final class AirBattleView {
 
   /** Ends the battle with a message, e.g. "Germans lose 6 PUs". */
   public void end(final String message) {
-    bridge.getDisplayChannelBroadcaster().battleEnd(id, message);
-    // wait until the players have seen the result, as a stock battle does before the next one
+    // let the players see the result before the next battle; the stock "battle over" message comes
+    // after the wait, so the window ends with its own close button (sent before, the wait could
+    // replace that button and leave the window with none)
     bridge
         .getRemotePlayer(attacker)
         .confirmOwnCasualties(id, message + ": press space to continue");
@@ -157,5 +158,6 @@ public final class AirBattleView {
       Interruptibles.join(t);
       bridge.enterDelegateExecution();
     }
+    bridge.getDisplayChannelBroadcaster().battleEnd(id, message);
   }
 }

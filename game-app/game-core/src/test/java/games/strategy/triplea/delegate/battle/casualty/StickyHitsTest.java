@@ -14,7 +14,6 @@ import static org.hamcrest.Matchers.is;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -141,6 +140,25 @@ class StickyHitsTest {
   }
 
   @Test
+  void spreadOutPickIsAppliedTheStickyWay() {
+    // three 3-hit-point battleships, four hits picked as damage spread over all three
+    final Unit bb1 = newBattleship(0);
+    final Unit bb2 = newBattleship(0);
+    final Unit bb3 = newBattleship(0);
+
+    final StickyHits.Applied applied =
+        StickyHits.applyInPickedOrder(
+            List.of(bb1, bb2, bb3), List.of(), List.of(bb2, bb3, bb2, bb1), 4);
+
+    // the most-picked unit (bb2) dies first, then the next picked (bb3) takes the last hit
+    assertThat(applied.killed(), contains(bb2));
+    assertThat(applied.damaged(), contains(bb3));
+    assertThat(
+        StickyHits.validate(List.of(bb1, bb2, bb3), applied.killed(), applied.damaged()).isEmpty(),
+        is(true));
+  }
+
+  @Test
   void forcedHitsGoToTheMostDamagedUnitFirst() {
     final Unit slightly = newBattleship(1);
     final Unit badly = newBattleship(2);
@@ -186,7 +204,7 @@ class StickyHitsTest {
   }
 
   @Test
-  void playerChoosesOnlyTheLeftoverHitsAndMayNotSpreadThem() {
+  void playerChoosesOnlyTheLeftoverHitsAndASpreadIsAppliedTheStickyWay() {
     gameData.getProperties().set(Constants.STICKY_HITS, true);
     final IDelegateBridge bridge = newDelegateBridge(british);
     final Unit damaged = newBattleship(1);
@@ -219,10 +237,9 @@ class StickyHitsTest {
             invocation -> {
               offeredUnits.add(invocation.getArgument(0));
               offeredHits.add(invocation.getArgument(2));
-              // first answer spreads the hits over two battleships; the second takes the default
-              return asked.getAndIncrement() == 0
-                  ? new CasualtyDetails(List.of(), List.of(fresh1, fresh2), false)
-                  : new CasualtyDetails(invocation.<CasualtyList>getArgument(10), false);
+              // the player spreads the hits over two battleships
+              asked.getAndIncrement();
+              return new CasualtyDetails(List.of(), List.of(fresh1, fresh2), false);
             });
 
     final CasualtyDetails result = selectCasualties(bridge, targets, 4);
@@ -230,10 +247,10 @@ class StickyHitsTest {
     // 2 of the 4 hits finish the damaged battleship automatically; 2 are left to choose
     assertThat(offeredHits.get(0), is(2));
     assertThat(offeredUnits.get(0).contains(damaged), is(false));
-    assertThat(asked.get(), is(2));
-    verify(bridge.getRemotePlayer()).reportError(startsWith("Sticky hits"));
+    // not refused: both chosen hits go to the first battleship picked, the sticky way
+    assertThat(asked.get(), is(1));
     assertThat(result.getKilled(), hasItem(damaged));
-    assertThat(result.getKilled().size() + result.getDamaged().size(), is(3));
+    assertThat(result.getDamaged(), contains(fresh1, fresh1));
   }
 
   private CasualtyDetails selectCasualties(
