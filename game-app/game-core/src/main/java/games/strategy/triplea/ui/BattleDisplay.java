@@ -318,7 +318,11 @@ public class BattleDisplay extends JPanel {
     // Set an auto-wait expiration if the option is set or
     // waits for the button to be pressed otherwise.
     if (!ClientSetting.confirmDefensiveRolls.getValueOrThrow()) {
-      final int maxWaitTime = 1500;
+      // Flames and Steel: the end of an air battle stays up longer than a routine casualty step
+      final int maxWaitTime =
+          message.endsWith(games.strategy.triplea.delegate.air.AirBattleView.END_PAUSE)
+              ? 5000
+              : 1500;
       Interruptibles.await(() -> continueLatch.await(maxWaitTime, TimeUnit.MILLISECONDS));
     } else {
       Interruptibles.await(continueLatch);

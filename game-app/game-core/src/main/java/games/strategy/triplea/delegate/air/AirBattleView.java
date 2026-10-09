@@ -22,6 +22,12 @@ import org.triplea.java.Interruptibles;
  * units of both sides, the steps, dice, casualties chosen in the battle window, and the result.
  */
 public final class AirBattleView {
+  /**
+   * Ends the message an air battle waits on at its end; the battle window then shows the result for
+   * 5 seconds (rather than stock's 1.5) unless the player continues sooner.
+   */
+  public static final String END_PAUSE = " (next in 5 seconds, or press space)";
+
   private final IDelegateBridge bridge;
   private GamePlayer attacker;
   private GamePlayer defender;
@@ -138,16 +144,14 @@ public final class AirBattleView {
     // let the players see the result before the next battle; the stock "battle over" message comes
     // after the wait, so the window ends with its own close button (sent before, the wait could
     // replace that button and leave the window with none)
-    bridge
-        .getRemotePlayer(attacker)
-        .confirmOwnCasualties(id, message + ": press space to continue");
+    bridge.getRemotePlayer(attacker).confirmOwnCasualties(id, message + END_PAUSE);
     if (!defender.equals(attacker)) {
       final Player other = bridge.getRemotePlayer(defender);
       final Thread t =
           new Thread(
               () -> {
                 try {
-                  other.confirmEnemyCasualties(id, message + ": press space to continue", attacker);
+                  other.confirmEnemyCasualties(id, message + END_PAUSE, attacker);
                 } catch (final Exception e) {
                   // the window may already be gone
                 }
