@@ -104,6 +104,21 @@ final class AirSelection {
     }
   }
 
+  /**
+   * A panel that is never stretched taller than it needs in the Actions tab's vertical layout, so
+   * no gaps open between its rows.
+   */
+  static JPanel compactPanel() {
+    return new JPanel() {
+      private static final long serialVersionUID = 1L;
+
+      @Override
+      public java.awt.Dimension getMaximumSize() {
+        return new java.awt.Dimension(Integer.MAX_VALUE, getPreferredSize().height);
+      }
+    };
+  }
+
   /** HTML text wrapped to the width of the Actions tab. */
   static String wrap(final String text) {
     return "<html><div style='width:190px'>" + text + "</div></html>";

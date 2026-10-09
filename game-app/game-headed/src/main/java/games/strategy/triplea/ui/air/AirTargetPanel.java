@@ -43,7 +43,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 import javax.annotation.Nullable;
-import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.Icon;
@@ -83,7 +82,7 @@ public final class AirTargetPanel extends ActionPanel {
   // what the mouse points at, for the strike preview
   private @Nullable Territory hoverPlace;
   private @Nullable Point mousePoint;
-  private final JPanel targetsPanel = new JPanel();
+  private final JPanel targetsPanel = AirSelection.compactPanel();
   private final MapOverlay overlay = this::paintOverlay;
   private final UnitSelectionListener unitListener =
       (units, territory, md) -> SwingUtilities.invokeLater(() -> clicked(units, territory, md));
@@ -577,16 +576,14 @@ public final class AirTargetPanel extends ActionPanel {
   private void rebuild(final GamePlayer player) {
     removeAll();
     actionLabel.setText(player.getName() + " bomber targets");
+    // the help is a tooltip on the heading; the panel itself lists the strikes
+    actionLabel.setToolTipText(
+        AirSelection.wrap(
+            AirSelection.HELP
+                + " Or use the arrows here, or beside the stack on the air map. The targets"
+                + " all picked bombers can reach light up on the map and are listed here;"
+                + " click one to attack it."));
     add(leftAligned(actionLabel));
-    final JLabel hint =
-        new JLabel(
-            AirSelection.wrap(
-                AirSelection.HELP
-                    + " Or use the arrows here, or beside the stack on the air map. The targets"
-                    + " all picked bombers can reach light up on the map and are listed here;"
-                    + " click one to attack it."));
-    hint.setBorder(BorderFactory.createEmptyBorder(4, 5, 4, 5));
-    add(leftAligned(hint));
 
     if (selectedZone != null) {
       add(leftAligned(new JLabel("Bombers in " + AirAllocation.zoneName(selectedZone) + ":")));
@@ -713,8 +710,10 @@ public final class AirTargetPanel extends ActionPanel {
         .getIcon(ImageKey.builder().player(player).type(type).build());
   }
 
+  /** A left-aligned row that keeps its own height (no gaps stretched between rows). */
   private static JPanel leftAligned(final Component c) {
-    final JPanel p = new JPanel(new BorderLayout());
+    final JPanel p = AirSelection.compactPanel();
+    p.setLayout(new BorderLayout());
     p.add(c, BorderLayout.WEST);
     p.setAlignmentX(LEFT_ALIGNMENT);
     return p;

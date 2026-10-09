@@ -36,7 +36,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 import javax.annotation.Nullable;
-import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
@@ -75,9 +74,8 @@ public final class AirAllocationPanel extends ActionPanel {
   private @Nullable Point mousePoint;
   private final JLabel legalLabel = new JLabel();
 
-  private final JPanel selectionPanel = new JPanel();
-  private final JPanel movesPanel = new JPanel();
-  private final JLabel hint = new JLabel();
+  private final JPanel selectionPanel = AirSelection.compactPanel();
+  private final JPanel movesPanel = AirSelection.compactPanel();
 
   private final MapOverlay overlay = this::paintOverlay;
 
@@ -107,6 +105,8 @@ public final class AirAllocationPanel extends ActionPanel {
     this.draw = new AirDraw(frame.getUiContext());
     selectionPanel.setLayout(new BoxLayout(selectionPanel, BoxLayout.Y_AXIS));
     movesPanel.setLayout(new BoxLayout(movesPanel, BoxLayout.Y_AXIS));
+    selectionPanel.setAlignmentX(LEFT_ALIGNMENT);
+    movesPanel.setAlignmentX(LEFT_ALIGNMENT);
   }
 
   /** Shows the panel and the map tools for the nation's allocation. */
@@ -495,8 +495,8 @@ public final class AirAllocationPanel extends ActionPanel {
                 + (stage == Stage.BOMBERS
                     ? ": bomber allocation (fighters move in the next step)"
                     : ": fighter allocation (bombers have moved)")));
-    add(leftAligned(actionLabel));
-    hint.setText(
+    // the help is a tooltip on the heading; the panel itself lists the moves, as a move panel does
+    actionLabel.setToolTipText(
         AirSelection.wrap(
             AirSelection.HELP
                 + " Or use the arrows here, or beside the stack on the air map."
@@ -504,8 +504,7 @@ public final class AirAllocationPanel extends ActionPanel {
                 + " move, and Undo puts them back.<br>Enemies see these moves only at the"
                 + " reveal"
                 + (stage == Stage.FIGHTERS ? "; the bombers' moves are already revealed." : ".")));
-    hint.setBorder(BorderFactory.createEmptyBorder(4, 5, 4, 5));
-    add(leftAligned(hint));
+    add(leftAligned(actionLabel));
 
     selectionPanel.removeAll();
     if (selectedZone != null) {
@@ -585,8 +584,10 @@ public final class AirAllocationPanel extends ActionPanel {
         .getIcon(ImageKey.builder().player(player).type(type).build());
   }
 
+  /** A left-aligned row that keeps its own height (no gaps stretched between rows). */
   private static JPanel leftAligned(final Component c) {
-    final JPanel p = new JPanel(new BorderLayout());
+    final JPanel p = AirSelection.compactPanel();
+    p.setLayout(new BorderLayout());
     p.add(c, BorderLayout.WEST);
     p.setAlignmentX(LEFT_ALIGNMENT);
     return p;
