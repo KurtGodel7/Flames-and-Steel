@@ -78,6 +78,9 @@ public class NavalNightCombat implements BattleStep {
 
   /** The unit's night combat value from its owner's techs (the best if several). */
   private static int value(final Unit unit) {
+    if (unit.getData() == null || unit.getOwner() == null) {
+      return 0;
+    }
     int best = 0;
     for (final TechAdvance tech :
         TechTracker.getCurrentTechAdvances(
