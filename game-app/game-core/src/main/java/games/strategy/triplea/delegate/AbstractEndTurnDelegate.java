@@ -226,6 +226,7 @@ public abstract class AbstractEndTurnDelegate extends BaseTripleADelegate
         bridge.addChange(upkeep);
       }
     }
+    endTurnReport.append(Munitions.convert(bridge, player));
     endTurnReport.append(AlliedUnitSale.sellAlliedUnits(bridge, player));
     if (GameStepPropertiesHelper.isRepairUnits(data)) {
       MoveDelegate.repairMultipleHitPointUnits(bridge, bridge.getGamePlayer());

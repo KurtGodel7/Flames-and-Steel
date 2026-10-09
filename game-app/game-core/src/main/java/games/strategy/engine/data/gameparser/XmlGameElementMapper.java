@@ -12,6 +12,7 @@ import games.strategy.triplea.attachments.AirUnitAttachment;
 import games.strategy.triplea.attachments.AirZoneAttachment;
 import games.strategy.triplea.attachments.ApcAttachment;
 import games.strategy.triplea.attachments.CanalAttachment;
+import games.strategy.triplea.attachments.MunitionsAttachment;
 import games.strategy.triplea.attachments.PlayerAttachment;
 import games.strategy.triplea.attachments.PoliticalActionAttachment;
 import games.strategy.triplea.attachments.RelationshipTypeAttachment;
@@ -137,6 +138,7 @@ public final class XmlGameElementMapper {
         .put("ApcAttachment", ApcAttachment::new)
         .put("AirZoneAttachment", AirZoneAttachment::new)
         .put("CanalAttachment", CanalAttachment::new)
+        .put("MunitionsAttachment", MunitionsAttachment::new)
         .put("PlayerAttachment", PlayerAttachment::new)
         .put("PoliticalActionAttachment", PoliticalActionAttachment::new)
         .put("RelationshipTypeAttachment", RelationshipTypeAttachment::new)

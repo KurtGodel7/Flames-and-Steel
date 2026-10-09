@@ -17,6 +17,7 @@ import games.strategy.engine.data.properties.GameProperties;
 import games.strategy.triplea.Constants;
 import games.strategy.triplea.Properties;
 import games.strategy.triplea.attachments.CanalAttachment;
+import games.strategy.triplea.attachments.MunitionsAttachment;
 import games.strategy.triplea.attachments.PlayerAttachment;
 import games.strategy.triplea.attachments.RulesAttachment;
 import games.strategy.triplea.attachments.TechAbilityAttachment;
@@ -217,7 +218,9 @@ public class MoveValidator {
     // also checking to make sure we avoid land territories owned by nations with these 2
     // relationship type attachment options
     for (final Territory t : landOnRoute) {
-      if (units.stream().anyMatch(Matches.unitIsLand())
+      // Flames and Steel: lend-lease munitions may enter allied land other land units may not
+      if (units.stream()
+              .anyMatch(Matches.unitIsLand().and(u -> !MunitionsAttachment.isMunitions(u)))
           && !data.getRelationshipTracker().canMoveLandUnitsOverOwnedLand(player, t.getOwner())) {
         return result.setErrorReturnResult(
             player.getName()
@@ -1699,7 +1702,9 @@ public class MoveValidator {
         PredicateBuilder.of(Matches.territoryIsPassableAndNotRestricted(player))
             .and(Matches.territoryEffectsAllowUnits(units))
             .andIf(hasAir, Matches.territoryAllowsCanMoveAirUnitsOverOwnedLand(player))
-            .andIf(hasLand, Matches.territoryAllowsCanMoveLandUnitsOverOwnedLand(player))
+            .andIf(
+                hasLand && !units.stream().allMatch(MunitionsAttachment::isMunitions),
+                Matches.territoryAllowsCanMoveLandUnitsOverOwnedLand(player))
             .andIf(isNeutralsImpassable, noNeutral)
             .andIf(hasSub, noEnemyDestroyer)
             .build();

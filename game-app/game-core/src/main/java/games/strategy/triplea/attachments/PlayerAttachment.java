@@ -56,6 +56,8 @@ public class PlayerAttachment extends DefaultAttachment {
   // Flames and Steel: at the end of our turn, allied units in our land territories are removed
   // and we receive their purchase cost in PUs.
   private boolean sellsAlliedUnitsAtEndTurn = false;
+  // Flames and Steel: munitions on our land become our PUs at the end of our turn
+  private boolean convertsMunitions = false;
   // PUs paid per unit of each non-PU resource in a sold unit's purchase cost (e.g. Manpower: 2)
   private @Nullable IntegerMap<Resource> alliedUnitSaleResourceValue = null;
   // Flames and Steel APCs: national cap on APCs (the Advanced techs also limit them)
@@ -398,6 +400,18 @@ public class PlayerAttachment extends DefaultAttachment {
     return LIBERATED_TO_ORIGINAL_OWNER.equals(liberatedTerritoryGoesTo);
   }
 
+  private void setConvertsMunitions(final String value) {
+    convertsMunitions = getBool(value);
+  }
+
+  private void setConvertsMunitions(final Boolean value) {
+    convertsMunitions = value;
+  }
+
+  public boolean getConvertsMunitions() {
+    return convertsMunitions;
+  }
+
   private void setSellsAlliedUnitsAtEndTurn(final String value) {
     sellsAlliedUnitsAtEndTurn = getBool(value);
   }
@@ -588,6 +602,13 @@ public class PlayerAttachment extends DefaultAttachment {
                   this::setApcProgress,
                   this::getApcProgress,
                   () -> apcProgress = null));
+      case "convertsMunitions" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setConvertsMunitions,
+                  this::setConvertsMunitions,
+                  this::getConvertsMunitions,
+                  () -> convertsMunitions = false));
       case "sellsAlliedUnitsAtEndTurn" ->
           Optional.of(
               MutableProperty.of(

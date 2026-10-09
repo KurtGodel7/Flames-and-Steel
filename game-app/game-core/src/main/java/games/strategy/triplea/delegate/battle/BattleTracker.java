@@ -24,6 +24,7 @@ import games.strategy.triplea.UnitUtils;
 import games.strategy.triplea.attachments.PlayerAttachment;
 import games.strategy.triplea.attachments.TerritoryAttachment;
 import games.strategy.triplea.delegate.Matches;
+import games.strategy.triplea.delegate.Munitions;
 import games.strategy.triplea.delegate.OriginalOwnerTracker;
 import games.strategy.triplea.delegate.TerritoryEffectHelper;
 import games.strategy.triplea.delegate.UndoableMove;
@@ -661,6 +662,10 @@ public class BattleTracker implements Serializable {
       if (bombingBattle != null && !bombingBattle.isEmpty()) {
         throw new IllegalStateException(BOMBING_DEPENDENCY_ERROR);
       }
+    }
+    // Flames and Steel: enemy munitions in a captured territory become the captor's PUs
+    if (isTerritoryOwnerAnEnemy) {
+      Munitions.capture(bridge, territory, gamePlayer, changeTracker);
     }
     captureOrDestroyUnits(territory, gamePlayer, newOwner, bridge, changeTracker);
     // is this territory our capitol or a capitol of our ally

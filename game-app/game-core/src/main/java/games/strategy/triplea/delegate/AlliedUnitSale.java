@@ -12,6 +12,7 @@ import games.strategy.engine.data.UnitType;
 import games.strategy.engine.data.changefactory.ChangeFactory;
 import games.strategy.engine.delegate.IDelegateBridge;
 import games.strategy.triplea.Constants;
+import games.strategy.triplea.attachments.MunitionsAttachment;
 import games.strategy.triplea.attachments.PlayerAttachment;
 import games.strategy.triplea.formatter.MyFormatter;
 import java.util.ArrayList;
@@ -50,7 +51,10 @@ public class AlliedUnitSale {
       }
       final Collection<Unit> units =
           territory.getMatches(
-              Matches.unitIsOwnedBy(player).negate().and(Matches.alliedUnit(player)));
+              Matches.unitIsOwnedBy(player)
+                  .negate()
+                  .and(Matches.alliedUnit(player))
+                  .and(u -> !MunitionsAttachment.isMunitions(u)));
       if (units.isEmpty()) {
         continue;
       }
