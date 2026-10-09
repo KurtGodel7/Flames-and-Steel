@@ -6,6 +6,7 @@ import games.strategy.engine.data.DefaultAttachment;
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GameState;
 import games.strategy.engine.data.MutableProperty;
+import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.UnitType;
 import games.strategy.engine.data.gameparser.GameParseException;
@@ -17,6 +18,7 @@ import games.strategy.triplea.delegate.TechAdvance;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -75,6 +77,12 @@ public class TechAbilityAttachment extends DefaultAttachment {
   private @Nullable IntegerMap<UnitType> hitPointBonus = null;
   // Flames and Steel: extra dogfight dice for the nation's units of a type
   private @Nullable IntegerMap<UnitType> dogfightRollsBonus = null;
+  // Flames and Steel (Yalta): territories that go to this tech's owner when an ally conquers them
+  private @Nullable Set<Territory> alliedConquestTerritories = null;
+  // Flames and Steel (Night Combat): pre-battle naval strike value by unit type, first round only
+  private @Nullable IntegerMap<UnitType> nightCombat = null;
+  // Flames and Steel (Naval Wasserfall): ships hit from the air fire back at defense times this
+  private int airFireBackMultiplier = 0;
   // Flames and Steel research centres: breakthroughs (stars) needed to unlock this tech.
   // 0 means not set, which counts as 1.
   private int researchStarsRequired = 0;
@@ -180,6 +188,58 @@ public class TechAbilityAttachment extends DefaultAttachment {
 
   private void resetHitPointBonus() {
     hitPointBonus = null;
+  }
+
+  private void setAlliedConquestTerritories(final String value) throws GameParseException {
+    if (alliedConquestTerritories == null) {
+      alliedConquestTerritories = new LinkedHashSet<>();
+    }
+    for (final String name : splitOnColon(value)) {
+      final Territory t = getData().getMap().getTerritoryOrNull(name);
+      if (t == null) {
+        throw new GameParseException(
+            "alliedConquestTerritories: no territory " + name + thisErrorMsg());
+      }
+      alliedConquestTerritories.add(t);
+    }
+  }
+
+  private void setAlliedConquestTerritories(final Set<Territory> value) {
+    alliedConquestTerritories = value;
+  }
+
+  /** Territories that go to this tech's owner when one of its allies conquers them (Yalta). */
+  public Set<Territory> getAlliedConquestTerritories() {
+    return getSetProperty(alliedConquestTerritories);
+  }
+
+  private void setNightCombat(final String value) throws GameParseException {
+    if (nightCombat == null) {
+      nightCombat = new IntegerMap<>();
+    }
+    applyCheckedValue("nightCombat", value, nightCombat::put);
+  }
+
+  private void setNightCombat(final IntegerMap<UnitType> value) {
+    nightCombat = value;
+  }
+
+  /** Night Combat strike value by unit type (e.g. destroyer 1, cruiser 2). */
+  public IntegerMap<UnitType> getNightCombat() {
+    return getIntegerMapProperty(nightCombat);
+  }
+
+  private void setAirFireBackMultiplier(final String value) {
+    airFireBackMultiplier = getInt(value);
+  }
+
+  private void setAirFireBackMultiplier(final Integer value) {
+    airFireBackMultiplier = value;
+  }
+
+  /** Multiplier for ships firing back at aircraft (Naval Wasserfall: 2); 0 if not set. */
+  public int getAirFireBackMultiplier() {
+    return airFireBackMultiplier;
   }
 
   private void setDogfightRollsBonus(final String value) throws GameParseException {
@@ -932,6 +992,27 @@ public class TechAbilityAttachment extends DefaultAttachment {
   @Override
   public Optional<MutableProperty<?>> getPropertyOrEmpty(final @NonNls String propertyName) {
     return switch (propertyName) {
+      case "alliedConquestTerritories" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setAlliedConquestTerritories,
+                  this::setAlliedConquestTerritories,
+                  this::getAlliedConquestTerritories,
+                  () -> alliedConquestTerritories = null));
+      case "nightCombat" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setNightCombat,
+                  this::setNightCombat,
+                  this::getNightCombat,
+                  () -> nightCombat = null));
+      case "airFireBackMultiplier" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setAirFireBackMultiplier,
+                  this::setAirFireBackMultiplier,
+                  this::getAirFireBackMultiplier,
+                  () -> airFireBackMultiplier = 0));
       case "dogfightRollsBonus" ->
           Optional.of(
               MutableProperty.of(

@@ -12,9 +12,12 @@ import games.strategy.triplea.attachments.AirUnitAttachment;
 import games.strategy.triplea.attachments.AirZoneAttachment;
 import games.strategy.triplea.attachments.AirZoneAttachment.ZoneType;
 import games.strategy.triplea.attachments.ApcAttachment;
+import games.strategy.triplea.attachments.TechAbilityAttachment;
 import games.strategy.triplea.attachments.TerritoryAttachment;
 import games.strategy.triplea.delegate.DiceRoll;
 import games.strategy.triplea.delegate.Matches;
+import games.strategy.triplea.delegate.TechAdvance;
+import games.strategy.triplea.delegate.TechTracker;
 import games.strategy.triplea.delegate.battle.BattleDelegate;
 import games.strategy.triplea.delegate.battle.BattleState;
 import games.strategy.triplea.delegate.battle.casualty.CasualtySelector;
@@ -224,7 +227,17 @@ public class AirCombat {
   /** Firing power of a ship firing back at aircraft (its defense). */
   public static int shipFireBackPower(final Unit ship) {
     final var ua = ship.getUnitAttachment();
-    return ua.getDefense(ship.getOwner()) * ua.getDefenseRolls(ship.getOwner());
+    int multiplier = 1;
+    for (final TechAdvance tech :
+        TechTracker.getCurrentTechAdvances(
+            ship.getOwner(), ship.getData().getTechnologyFrontier())) {
+      final TechAbilityAttachment ability = TechAbilityAttachment.get(tech);
+      if (ability != null) {
+        // Naval Wasserfall: German ships fire back at double their defense
+        multiplier = Math.max(multiplier, ability.getAirFireBackMultiplier());
+      }
+    }
+    return multiplier * ua.getDefense(ship.getOwner()) * ua.getDefenseRolls(ship.getOwner());
   }
 
   /** Firing power of an anti-aircraft gun at aircraft. */

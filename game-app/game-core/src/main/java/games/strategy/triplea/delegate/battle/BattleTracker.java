@@ -22,10 +22,13 @@ import games.strategy.triplea.Constants;
 import games.strategy.triplea.Properties;
 import games.strategy.triplea.UnitUtils;
 import games.strategy.triplea.attachments.PlayerAttachment;
+import games.strategy.triplea.attachments.TechAbilityAttachment;
 import games.strategy.triplea.attachments.TerritoryAttachment;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.Munitions;
 import games.strategy.triplea.delegate.OriginalOwnerTracker;
+import games.strategy.triplea.delegate.TechAdvance;
+import games.strategy.triplea.delegate.TechTracker;
 import games.strategy.triplea.delegate.TerritoryEffectHelper;
 import games.strategy.triplea.delegate.UndoableMove;
 import games.strategy.triplea.delegate.battle.IBattle.BattleType;
@@ -643,6 +646,10 @@ public class BattleTracker implements Serializable {
               .map(captureOwnershipChange -> captureOwnershipChange.receivingPlayer)
               .orElse(newOwner);
     }
+    // Flames and Steel (Yalta): an ally's conquest of a listed territory goes to the tech's owner
+    if (isTerritoryOwnerAnEnemy && newOwner.equals(gamePlayer)) {
+      newOwner = getAlliedConquestOwner(territory, gamePlayer, data).orElse(newOwner);
+    }
     if (isTerritoryOwnerAnEnemy) {
       addChangeChangeOwnership(
           territory,
@@ -686,6 +693,24 @@ public class BattleTracker implements Serializable {
       arrivedUnits.removeAll(CollectionUtils.getMatches(arrivedUnits, Matches.unitIsLand()));
     }
     markWasInCombat(arrivedUnits, bridge, changeTracker);
+  }
+
+  /** The ally that receives this conquest through a tech such as Yalta, if any. */
+  private static Optional<GamePlayer> getAlliedConquestOwner(
+      final Territory territory, final GamePlayer conqueror, final GameData data) {
+    for (final GamePlayer player : data.getPlayerList().getPlayers()) {
+      if (player.equals(conqueror) || !data.getRelationshipTracker().isAllied(player, conqueror)) {
+        continue;
+      }
+      for (final TechAdvance tech :
+          TechTracker.getCurrentTechAdvances(player, data.getTechnologyFrontier())) {
+        final TechAbilityAttachment ability = TechAbilityAttachment.get(tech);
+        if (ability != null && ability.getAlliedConquestTerritories().contains(territory)) {
+          return Optional.of(player);
+        }
+      }
+    }
+    return Optional.empty();
   }
 
   private static boolean isLiberatedTerritoryToLiberator(final GamePlayer terrOrigOwner) {

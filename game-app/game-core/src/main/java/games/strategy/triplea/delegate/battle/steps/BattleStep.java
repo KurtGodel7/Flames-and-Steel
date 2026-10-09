@@ -18,6 +18,7 @@ import games.strategy.triplea.delegate.battle.steps.change.suicide.RemoveGeneral
 import games.strategy.triplea.delegate.battle.steps.fire.NavalBombardment;
 import games.strategy.triplea.delegate.battle.steps.fire.NavalDestroyerFire;
 import games.strategy.triplea.delegate.battle.steps.fire.NavalKeepDestroyerCasualties;
+import games.strategy.triplea.delegate.battle.steps.fire.NavalNightCombat;
 import games.strategy.triplea.delegate.battle.steps.fire.aa.DefensiveAaFire;
 import games.strategy.triplea.delegate.battle.steps.fire.aa.OffensiveAaFire;
 import games.strategy.triplea.delegate.battle.steps.fire.firststrike.ClearFirstStrikeCasualties;
@@ -59,6 +60,7 @@ public interface BattleStep extends IExecutable {
     SUB_DEFENSIVE_RETREAT_BEFORE_BATTLE,
     REMOVE_UNPROTECTED_UNITS,
     SUBMERGE_SUBS_VS_ONLY_AIR,
+    NAVAL_NIGHT_COMBAT,
     NAVAL_DESTROYERS_OFFENSIVE,
     NAVAL_DESTROYERS_DEFENSIVE,
     NAVAL_KEEP_DESTROYER_CASUALTIES,
@@ -113,6 +115,7 @@ public interface BattleStep extends IExecutable {
         new LandParatroopers(battleState, battleActions),
         new OffensiveSubsRetreat(battleState, battleActions),
         new DefensiveSubsRetreat(battleState, battleActions),
+        new NavalNightCombat(battleState, battleActions),
         new NavalDestroyerFire(battleState, battleActions, BattleState.Side.OFFENSE),
         new NavalDestroyerFire(battleState, battleActions, BattleState.Side.DEFENSE),
         new NavalKeepDestroyerCasualties(battleState, battleActions),
