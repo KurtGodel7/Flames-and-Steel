@@ -9,6 +9,7 @@ import games.strategy.engine.random.IRandomStats.DiceType;
 import games.strategy.triplea.attachments.TechAbilityAttachment;
 import games.strategy.triplea.attachments.TechAttachment;
 import games.strategy.triplea.delegate.data.ResearchResults;
+import games.strategy.triplea.delegate.data.ResearchResults.Breakthrough;
 import games.strategy.triplea.delegate.remote.IResearchDelegate;
 import games.strategy.triplea.delegate.research.ResearchCenters;
 import games.strategy.triplea.delegate.research.ResearchCenters.Mode;
@@ -73,10 +74,11 @@ public class ResearchCenterDelegate extends BaseTripleADelegate implements IRese
     if (error.isPresent()) {
       return ResearchResults.error(error.get());
     }
-    return ResearchResults.success(doResearch(focus, idleCenter));
+    final Turn turn = doResearch(focus, idleCenter);
+    return ResearchResults.success(turn.lines, turn.details);
   }
 
-  private List<String> doResearch(final List<String> focus, final int idleCenter) {
+  private Turn doResearch(final List<String> focus, final int idleCenter) {
     researchDone = true;
     final List<TechAdvance> previouslyUnlocked = getUnlockedButNotQueued();
     final TechAttachment techAttachment = player.getTechAttachment();
@@ -110,7 +112,7 @@ public class ResearchCenterDelegate extends BaseTripleADelegate implements IRese
       bridge.getHistoryWriter().startEvent(player.getName() + " research");
       turn.lines.forEach(line -> bridge.getHistoryWriter().addChildToEvent(line));
     }
-    return turn.lines;
+    return turn;
   }
 
   /**
@@ -142,7 +144,7 @@ public class ResearchCenterDelegate extends BaseTripleADelegate implements IRese
     final Mode mode = ResearchCenters.getMode(unfinished.size(), working.size());
     if (mode == Mode.AUTOMATIC) {
       for (final TechnologyFrontier category : unfinished) {
-        addStar(category, "automatic", turn);
+        addStar(category, 0, "automatic", turn);
       }
       return;
     }
@@ -153,27 +155,27 @@ public class ResearchCenterDelegate extends BaseTripleADelegate implements IRese
             player,
             DiceType.NONCOMBAT,
             player.getName() + " research centre rolls");
-    int randomBreakthroughs = 0;
+    final List<Integer> randomCenters = new ArrayList<>();
     for (int i = 0; i < working.size(); i++) {
       final int center = working.get(i);
       final String entry = focus.get(center);
       final int roll = rolls[i];
-      final String centerName = "Research centre " + (center + 1);
       if (roll < (mode == Mode.PRIMARY_AND_SECONDARY ? 4 : 5)) {
-        addStar(category(ResearchCenters.getPrimary(entry)), centerName + ", primary focus", turn);
+        addStar(category(ResearchCenters.getPrimary(entry)), center + 1, "primary", turn);
       } else if (mode == Mode.PRIMARY_AND_SECONDARY && roll < 6) {
-        addStar(
-            category(ResearchCenters.getSecondary(entry)), centerName + ", secondary focus", turn);
+        addStar(category(ResearchCenters.getSecondary(entry)), center + 1, "secondary", turn);
       } else {
-        randomBreakthroughs++;
+        randomCenters.add(center + 1);
       }
     }
     // random breakthroughs go to categories that have not gained a star yet this turn
-    for (int i = 0; i < randomBreakthroughs; i++) {
+    for (final int center : randomCenters) {
       final List<TechnologyFrontier> candidates = new ArrayList<>(unfinished);
       candidates.removeIf(c -> turn.advancedCategories.contains(c.getName()));
       if (candidates.isEmpty()) {
-        return;
+        turn.lines.add("Research centre " + center + " (random): no category left");
+        turn.details.add(new Breakthrough(center, "random", null, null, 0, 0));
+        continue;
       }
       final int pick =
           candidates.size() == 1
@@ -183,7 +185,7 @@ public class ResearchCenterDelegate extends BaseTripleADelegate implements IRese
                   player,
                   DiceType.NONCOMBAT,
                   player.getName() + " random research breakthrough");
-      addStar(candidates.get(pick), "random breakthrough", turn);
+      addStar(candidates.get(pick), center, "random", turn);
     }
   }
 
@@ -206,9 +208,10 @@ public class ResearchCenterDelegate extends BaseTripleADelegate implements IRese
               DiceType.NONCOMBAT,
               player.getName() + " " + tech.getName() + " research roll");
       if (roll < attachment.getBonusResearchChance()) {
-        addStar(category.get(), tech.getName(), turn);
+        addStar(category.get(), 0, tech.getName(), turn);
       } else {
         turn.lines.add(tech.getName() + ": no breakthrough");
+        turn.details.add(new Breakthrough(0, tech.getName(), category.get().getName(), null, 0, 0));
       }
     }
   }
@@ -218,7 +221,8 @@ public class ResearchCenterDelegate extends BaseTripleADelegate implements IRese
         .orElseThrow(() -> new IllegalStateException("No research category: " + name));
   }
 
-  private void addStar(final TechnologyFrontier category, final String source, final Turn turn) {
+  private void addStar(
+      final TechnologyFrontier category, final int center, final String source, final Turn turn) {
     final Optional<TechAdvance> next = turn.getNextTech(player, category);
     if (next.isEmpty()) {
       return;
@@ -228,14 +232,23 @@ public class ResearchCenterDelegate extends BaseTripleADelegate implements IRese
     turn.advancedCategories.add(category.getName());
     final int stars = turn.stars.getInt(tech.getName());
     final int required = ResearchCenters.getStarsRequired(player, tech);
+    turn.details.add(
+        new Breakthrough(center, source, category.getName(), tech.getName(), stars, required));
     final String progress =
-        category.getName() + ": " + tech.getName() + " " + stars + "/" + required + " stars";
+        (center > 0 ? "Research centre " + center + " (" + source + "): " : source + ": ")
+            + category.getName()
+            + " -> "
+            + tech.getName()
+            + " "
+            + stars
+            + "/"
+            + required
+            + " stars";
     if (stars >= required) {
       turn.unlocked.add(tech);
-      turn.lines.add(
-          progress + ", unlocked (takes effect at the end of the turn) [" + source + "]");
+      turn.lines.add(progress + ", unlocked (takes effect at the end of the turn)");
     } else {
-      turn.lines.add(progress + " [" + source + "]");
+      turn.lines.add(progress);
     }
   }
 
@@ -245,6 +258,7 @@ public class ResearchCenterDelegate extends BaseTripleADelegate implements IRese
     private final Set<String> advancedCategories = new HashSet<>();
     private final List<TechAdvance> unlocked = new ArrayList<>();
     private final List<String> lines = new ArrayList<>();
+    private final List<Breakthrough> details = new ArrayList<>();
 
     private Turn(final IntegerMap<String> startingStars) {
       stars = new IntegerMap<>(startingStars);

@@ -44,8 +44,8 @@ import games.strategy.triplea.formatter.MyFormatter;
 import games.strategy.triplea.player.AbstractBasePlayer;
 import games.strategy.triplea.settings.ClientSetting;
 import games.strategy.triplea.ui.PlaceData;
-import games.strategy.triplea.ui.ResearchFocusDialog;
 import games.strategy.triplea.ui.TripleAFrame;
+import games.strategy.triplea.ui.research.ResearchScreen;
 import java.awt.event.ActionListener;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -372,9 +372,9 @@ public class TripleAPlayer extends AbstractBasePlayer {
       soundPlayedAlreadyTechnology = true;
     }
     while (!getPlayerBridge().isGameOver()) {
-      final Optional<ResearchFocusDialog.Choice> choice = ui.getResearchChoice(getGamePlayer());
+      final Optional<ResearchScreen.Choice> choice = ui.getResearchChoice(getGamePlayer());
       if (choice.isEmpty()) {
-        // dialog interrupted (game closing); the step researches with stored focus when it ends
+        // screen interrupted (game closing); the step researches with stored focus when it ends
         return;
       }
       final ResearchResults results =
@@ -383,13 +383,7 @@ public class TripleAPlayer extends AbstractBasePlayer {
         ui.notifyError(results.getError().get());
         continue;
       }
-      ui.notifyMessage(
-          "<html>"
-              + (results.getBreakthroughs().isEmpty()
-                  ? "No breakthroughs this turn."
-                  : String.join("<br>", results.getBreakthroughs()))
-              + "</html>",
-          getGamePlayer().getName() + " research results");
+      ui.showResearchResults(getGamePlayer(), results);
       return;
     }
   }

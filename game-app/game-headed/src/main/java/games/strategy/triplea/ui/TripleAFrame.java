@@ -61,6 +61,7 @@ import games.strategy.triplea.delegate.battle.ScrambleLogic;
 import games.strategy.triplea.delegate.battle.casualty.CasualtySelector;
 import games.strategy.triplea.delegate.data.BattleListing;
 import games.strategy.triplea.delegate.data.FightBattleDetails;
+import games.strategy.triplea.delegate.data.ResearchResults;
 import games.strategy.triplea.delegate.data.TechResults;
 import games.strategy.triplea.delegate.data.TechRoll;
 import games.strategy.triplea.delegate.power.calculator.CombatValueBuilder;
@@ -78,6 +79,7 @@ import games.strategy.triplea.ui.history.HistoryPanel;
 import games.strategy.triplea.ui.menubar.TripleAMenuBar;
 import games.strategy.triplea.ui.panel.move.MovePanel;
 import games.strategy.triplea.ui.panels.map.MapPanel;
+import games.strategy.triplea.ui.research.ResearchScreen;
 import games.strategy.triplea.util.TuvCostsCalculator;
 import games.strategy.ui.ImageScrollModel;
 import games.strategy.ui.ImageScrollerSmallView;
@@ -116,7 +118,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -187,6 +192,7 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
   private final StatPanel statsPanel;
   private final TechnologyPanel technologyPanel;
   private final ResearchPanel researchPanel;
+  private @Nullable ResearchScreen researchScreen;
   private final EconomyPanel economyPanel;
   private final Runnable clientLeftGame;
   private @Nullable ObjectivePanel objectivePanel;
@@ -410,7 +416,7 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
     actionButtonsPanel.setBorder(null);
     statsPanel = new StatPanel(data, uiContext);
     technologyPanel = new TechnologyPanel(data, uiContext);
-    researchPanel = new ResearchPanel(data);
+    researchPanel = new ResearchPanel(data, this::openResearchScreen);
     economyPanel = new EconomyPanel(data, uiContext);
     objectivePanel = new ObjectivePanel(data, uiContext);
     if (objectivePanel.isEmpty()) {
@@ -595,6 +601,9 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
 
   /** Stops the game and closes this frame window. */
   public void stopGame() {
+    if (researchScreen != null) {
+      researchScreen.shutDown();
+    }
     this.setVisible(false);
     TripleAFrame.this.dispose();
     messageAndDialogThreadPool.shutdown();
@@ -1663,16 +1672,66 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
         .orElse(Map.of());
   }
 
-  /** Flames and Steel: asks for each research centre's focus. */
-  public Optional<ResearchFocusDialog.Choice> getResearchChoice(final GamePlayer gamePlayer) {
+  private ResearchScreen researchScreen() {
+    if (researchScreen == null) {
+      researchScreen = new ResearchScreen(this, data);
+    }
+    return researchScreen;
+  }
+
+  /**
+   * Flames and Steel: opens the research screen on a nation. A nation choosing its research keeps
+   * its choices; the screen offers a way back to it.
+   */
+  void openResearchScreen(final GamePlayer nation) {
+    SwingUtilities.invokeLater(() -> researchScreen().showNation(nation));
+  }
+
+  /**
+   * Flames and Steel: opens the research screen for the nation's research step and waits for the
+   * focus and the Research button.
+   */
+  public Optional<ResearchScreen.Choice> getResearchChoice(final GamePlayer gamePlayer) {
     messageAndDialogThreadPool.waitForAll();
     requestWindowFocus();
+    final Optional<CompletableFuture<ResearchScreen.Choice>> future =
+        Interruptibles.awaitResult(
+                () ->
+                    SwingAction.invokeAndWaitResult(
+                        () -> researchScreen().askForChoice(gamePlayer)))
+            .result;
+    if (future.isEmpty()) {
+      return Optional.empty();
+    }
     return Interruptibles.awaitResult(
-            () ->
-                SwingAction.invokeAndWaitResult(
-                    () -> ResearchFocusDialog.show(TripleAFrame.this, gamePlayer, data)))
-        .result
-        .flatMap(choice -> choice);
+            () -> {
+              try {
+                return future.get().get();
+              } catch (final ExecutionException | CancellationException e) {
+                return null;
+              }
+            })
+        .result;
+  }
+
+  /** Flames and Steel: shows the research roll on the research screen until Continue. */
+  public void showResearchResults(final GamePlayer gamePlayer, final ResearchResults results) {
+    final Optional<CompletableFuture<Void>> future =
+        Interruptibles.awaitResult(
+                () ->
+                    SwingAction.invokeAndWaitResult(
+                        () -> researchScreen().showResults(gamePlayer, results)))
+            .result;
+    future.ifPresent(
+        f ->
+            Interruptibles.await(
+                () -> {
+                  try {
+                    f.get();
+                  } catch (final ExecutionException | CancellationException e) {
+                    // game closing
+                  }
+                }));
   }
 
   public TechRoll getTechRolls(final GamePlayer gamePlayer) {
@@ -1931,6 +1990,9 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
     if (!TechAdvance.getTechAdvances(newGameData.getTechnologyFrontier(), null).isEmpty()) {
       technologyPanel.setGameData(newGameData);
       researchPanel.setGameData(newGameData);
+      if (researchScreen != null) {
+        researchScreen.setGameData(newGameData);
+      }
     }
     statsPanel.setGameData(newGameData);
     economyPanel.setGameData(newGameData);

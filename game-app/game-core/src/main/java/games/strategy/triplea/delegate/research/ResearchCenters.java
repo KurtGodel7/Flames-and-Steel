@@ -3,13 +3,17 @@ package games.strategy.triplea.delegate.research;
 import games.strategy.engine.data.GameMap;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.TechnologyFrontier;
+import games.strategy.triplea.attachments.RulesAttachment;
 import games.strategy.triplea.attachments.TechAbilityAttachment;
 import games.strategy.triplea.attachments.TechAttachment;
 import games.strategy.triplea.attachments.TerritoryAttachment;
+import games.strategy.triplea.attachments.TriggerAttachment;
 import games.strategy.triplea.delegate.TechAdvance;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import lombok.experimental.UtilityClass;
@@ -249,6 +253,29 @@ public class ResearchCenters {
       }
     }
     return Optional.empty();
+  }
+
+  /**
+   * Techs the XML grants this player on a fixed round (China): triggers that give a tech, with a
+   * condition that starts on a round. Maps each tech to the first round it can arrive.
+   */
+  public static Map<TechAdvance, Integer> getFixedTechRounds(final GamePlayer player) {
+    final Map<TechAdvance, Integer> result = new LinkedHashMap<>();
+    for (final TriggerAttachment trigger :
+        TriggerAttachment.collectForAllTriggersMatching(
+            Set.of(player), t -> !t.getTech().isEmpty())) {
+      final int round =
+          trigger.getConditions().stream()
+              .map(RulesAttachment::getRounds)
+              .flatMap(rounds -> rounds.keySet().stream())
+              .mapToInt(Integer::intValue)
+              .min()
+              .orElse(-1);
+      if (round > 0) {
+        trigger.getTech().forEach(tech -> result.merge(tech, round, Math::min));
+      }
+    }
+    return result;
   }
 
   public static String getPrimary(final String focusEntry) {

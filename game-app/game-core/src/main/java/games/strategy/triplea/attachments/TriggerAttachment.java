@@ -1744,7 +1744,7 @@ public class TriggerAttachment extends AbstractTriggerAttachment {
     victory = null;
   }
 
-  private List<TechAdvance> getTech() {
+  public List<TechAdvance> getTech() {
     return getListProperty(tech);
   }
 
