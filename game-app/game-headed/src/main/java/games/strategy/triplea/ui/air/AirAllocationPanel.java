@@ -6,8 +6,10 @@ import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.UnitType;
 import games.strategy.triplea.attachments.AirZoneAttachment;
+import games.strategy.triplea.attachments.AirZoneAttachment.ZoneType;
 import games.strategy.triplea.delegate.air.AirAllocation;
 import games.strategy.triplea.delegate.air.AirAllocation.AirMove;
+import games.strategy.triplea.delegate.air.AirAllocation.CarrierLoad;
 import games.strategy.triplea.delegate.air.AirAllocation.Stage;
 import games.strategy.triplea.image.UnitImageFactory.ImageKey;
 import games.strategy.triplea.ui.ActionPanel;
@@ -40,8 +42,6 @@ import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
-import javax.swing.JSpinner;
-import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingUtilities;
 import org.triplea.java.collections.IntegerMap;
 
@@ -53,6 +53,7 @@ import org.triplea.java.collections.IntegerMap;
  */
 public final class AirAllocationPanel extends ActionPanel {
   private static final long serialVersionUID = 1L;
+  private static final Color PREVIEW_BLOCKED = new Color(230, 60, 50);
 
   private final TripleAFrame frame;
   private final AirDraw draw;
@@ -69,6 +70,10 @@ public final class AirAllocationPanel extends ActionPanel {
   private final IntegerMap<UnitType> selected = new IntegerMap<>();
   private Map<Territory, Optional<String>> destinations = Map.of();
   private boolean listening;
+  // what the mouse points at, for the move preview
+  private @Nullable Territory hoverZone;
+  private @Nullable Point mousePoint;
+  private final JLabel legalLabel = new JLabel();
 
   private final JPanel selectionPanel = new JPanel();
   private final JPanel movesPanel = new JPanel();
@@ -85,6 +90,14 @@ public final class AirAllocationPanel extends ActionPanel {
         @Override
         public void mouseEntered(final @Nullable Territory territory) {
           hovered(territory);
+        }
+
+        @Override
+        public void mouseMoved(final @Nullable Territory territory, final MouseDetails md) {
+          if (listening && selectedZone != null && !selected.isEmpty()) {
+            mousePoint = md.getMapPoint();
+            getMap().repaint();
+          }
         }
       };
 
@@ -194,9 +207,6 @@ public final class AirAllocationPanel extends ActionPanel {
         if (selected.getInt(type.get()) <= 0) {
           selected.removeKey(type.get());
         }
-        if (selected.isEmpty()) {
-          clearSelection();
-        }
       } else {
         clearSelection();
       }
@@ -237,7 +247,15 @@ public final class AirAllocationPanel extends ActionPanel {
                       + " step."
                   : "All of those are already picked or moving; undo a move to change it.");
     }
-    if (selected.isEmpty()) {
+    if (available.isEmpty()) {
+      if (units.isEmpty()) {
+        frame.setStatusErrorMessage(
+            "You have no "
+                + (stage == Stage.BOMBERS ? "bombers" : "fighters")
+                + " to move from "
+                + AirAllocation.zoneName(territory)
+                + ".");
+      }
       clearSelection();
     }
     selectionChanged();
@@ -295,6 +313,11 @@ public final class AirAllocationPanel extends ActionPanel {
   }
 
   private void selectionChanged() {
+    selectionChanged(true);
+  }
+
+  /** Recomputes where the picked aircraft may go; the arrow counters skip rebuilding the panel. */
+  private void selectionChanged(final boolean rebuildPanel) {
     final GamePlayer player = getCurrentPlayer();
     final Map<Territory, Optional<String>> result = new LinkedHashMap<>();
     if (selectedZone != null && !selected.isEmpty()) {
@@ -320,11 +343,23 @@ public final class AirAllocationPanel extends ActionPanel {
     if (selectedZone != null && !selected.isEmpty()) {
       frame.setStatusMessage(
           selectionText()
-              + " picked: click a green zone to send them, or click again to pick more.");
+              + " picked: point at a zone to see the move, click a green zone to make it.");
+    } else if (selectedZone != null) {
+      frame.setStatusMessage(
+          "Pick aircraft in "
+              + AirAllocation.zoneName(selectedZone)
+              + " with the arrows in the panel, or by clicking their stacks.");
     } else {
       frame.clearStatusMessage();
+      mousePoint = null;
     }
-    rebuild(player);
+    legalLabel.setText(
+        selected.isEmpty()
+            ? " "
+            : legalCount() + " zones allowed (green); point at one to preview the move.");
+    if (rebuildPanel) {
+      rebuild(player);
+    }
     getMap().repaint();
   }
 
@@ -352,7 +387,8 @@ public final class AirAllocationPanel extends ActionPanel {
         && !AirZoneAttachment.isAirZone(territory)) {
       territory = mode.zoneOf(territory).orElse(territory);
     }
-    if (!listening || selectedZone == null || territory == null) {
+    hoverZone = territory != null && AirZoneAttachment.isAirZone(territory) ? territory : null;
+    if (!listening || selectedZone == null || selected.isEmpty() || territory == null) {
       return;
     }
     if (!AirZoneAttachment.isAirZone(territory)) {
@@ -403,28 +439,18 @@ public final class AirAllocationPanel extends ActionPanel {
     add(leftAligned(hint));
 
     selectionPanel.removeAll();
-    if (selectedZone != null && !selected.isEmpty()) {
+    if (selectedZone != null) {
       selectionPanel.add(
-          leftAligned(new JLabel("Selected in " + AirAllocation.zoneName(selectedZone) + ":")));
-      final IntegerMap<UnitType> available = available(player, selectedZone);
-      for (final UnitType type : selected.keySet()) {
-        final JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-        row.add(new JLabel(icon(player, type)));
-        final JSpinner spinner =
-            new JSpinner(
-                new SpinnerNumberModel(
-                    selected.getInt(type), 1, Math.max(1, available.getInt(type)), 1));
-        spinner.addChangeListener(
-            e -> {
-              selected.put(type, (Integer) spinner.getValue());
-              selectionChanged();
-            });
-        row.add(spinner);
-        row.add(new JLabel(ResearchView.displayName(type.getName())));
-        selectionPanel.add(leftAligned(row));
-      }
+          leftAligned(new JLabel("Aircraft in " + AirAllocation.zoneName(selectedZone) + ":")));
       selectionPanel.add(
-          leftAligned(new JLabel("Now click a highlighted box (" + legalCount() + " allowed).")));
+          leftAligned(
+              AirSelection.chooser(
+                  frame.getUiContext(),
+                  player,
+                  available(player, selectedZone),
+                  selected,
+                  () -> selectionChanged(false))));
+      selectionPanel.add(leftAligned(legalLabel));
     }
     add(selectionPanel);
 
@@ -547,6 +573,46 @@ public final class AirAllocationPanel extends ActionPanel {
           });
       allied.forEach((owner, moves) -> paintMoves(g, data, owner, moves, true));
       paintMoves(g, data, getCurrentPlayer(), staged, false);
+      if (selectedZone != null && !selected.isEmpty() && mousePoint != null) {
+        paintPreview(g, data);
+      }
+    }
+  }
+
+  /**
+   * What clicking would do, as in a TripleA move: over an allowed zone a green arrow and the
+   * aircraft arriving there; over a forbidden one a red arrow and the reason; elsewhere the
+   * aircraft follow the mouse.
+   */
+  private void paintPreview(final Graphics2D g, final GameData data) {
+    final GamePlayer player = getCurrentPlayer();
+    final Point from = draw.center(selectedZone);
+    final Territory to = hoverZone;
+    if (to != null && !to.equals(selectedZone) && destinations.containsKey(to)) {
+      final Optional<String> problem = destinations.get(to);
+      if (problem.isEmpty()) {
+        Point arrival = draw.center(to);
+        final List<AirMove> after = new ArrayList<>(staged);
+        for (final UnitType type : selected.keySet()) {
+          arrival =
+              draw.ghostStack(
+                  g, data, to, player, type, selected.getInt(type), AirDraw.LEGAL_LINE, false);
+          after.add(new AirMove(selectedZone, to, type, selected.getInt(type)));
+        }
+        String label = selectionText() + " \u2192 " + AirAllocation.zoneName(to);
+        final ZoneType type = AirZoneAttachment.get(to).orElseThrow().getZoneType();
+        if (type == ZoneType.OCEAN || type == ZoneType.COASTAL) {
+          final CarrierLoad load = AirAllocation.carrierLoadAfter(player, stage, after, to);
+          label += "  (carriers " + load.cost() + "/" + load.capacity() + ")";
+        }
+        AirDraw.arrow(g, from, arrival, AirDraw.LEGAL_LINE, 5f, false, label, 20);
+      } else {
+        AirDraw.arrow(
+            g, from, draw.center(to), PREVIEW_BLOCKED, 4f, true, "\u2717 " + problem.get(), 0);
+      }
+    } else if (mousePoint.distance(from) > 20) {
+      AirDraw.arrow(g, from, mousePoint, Color.WHITE, 2.5f, true, "", 0);
+      AirSelection.paintShadow(g, frame.getUiContext(), player, selected, mousePoint);
     }
   }
 

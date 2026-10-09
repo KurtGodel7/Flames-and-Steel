@@ -45,13 +45,12 @@ import java.util.function.Consumer;
 import javax.annotation.Nullable;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
+import javax.swing.BoxLayout;
 import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
-import javax.swing.JSpinner;
-import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingUtilities;
 import org.triplea.java.collections.IntegerMap;
 
@@ -66,6 +65,7 @@ public final class AirTargetPanel extends ActionPanel {
   private static final Color TARGET_FILL = new Color(80, 220, 110, 90);
   private static final Color DIM_FILL = new Color(0, 0, 0, 110);
   private static final Color STRIKE_LINE = new Color(255, 80, 60);
+  private static final Color PREVIEW_BLOCKED = new Color(230, 60, 50);
 
   private final TripleAFrame frame;
   private final AirDraw draw;
@@ -80,6 +80,10 @@ public final class AirTargetPanel extends ActionPanel {
   private Map<Target, Boolean> targets = Map.of();
 
   private boolean listening;
+  // what the mouse points at, for the strike preview
+  private @Nullable Territory hoverPlace;
+  private @Nullable Point mousePoint;
+  private final JPanel targetsPanel = new JPanel();
   private final MapOverlay overlay = this::paintOverlay;
   private final UnitSelectionListener unitListener =
       (units, territory, md) -> SwingUtilities.invokeLater(() -> clicked(units, territory, md));
@@ -89,12 +93,22 @@ public final class AirTargetPanel extends ActionPanel {
         public void mouseEntered(final @Nullable Territory territory) {
           hovered(territory);
         }
+
+        @Override
+        public void mouseMoved(final @Nullable Territory territory, final MouseDetails md) {
+          if (listening && selectedZone != null && !selected.isEmpty()) {
+            mousePoint = md.getMapPoint();
+            getMap().repaint();
+          }
+        }
       };
 
   public AirTargetPanel(final TripleAFrame frame) {
     super(frame);
     this.frame = frame;
     this.draw = new AirDraw(frame.getUiContext());
+    targetsPanel.setLayout(new BoxLayout(targetsPanel, BoxLayout.Y_AXIS));
+    targetsPanel.setAlignmentX(LEFT_ALIGNMENT);
   }
 
   @Override
@@ -269,7 +283,11 @@ public final class AirTargetPanel extends ActionPanel {
                   ? "Fighters do not strike; pick bombers."
                   : "All of those are already picked or have targets; undo a strike to change it.");
     }
-    if (selected.isEmpty()) {
+    if (available.isEmpty()) {
+      if (units.isEmpty()) {
+        frame.setStatusErrorMessage(
+            "You have no bombers without a target in " + AirAllocation.zoneName(zone) + ".");
+      }
       clearSelection();
     }
     selectionChanged();
@@ -321,6 +339,11 @@ public final class AirTargetPanel extends ActionPanel {
   }
 
   private void selectionChanged() {
+    selectionChanged(true);
+  }
+
+  /** Recomputes the reachable targets; the arrow counters skip rebuilding the counters. */
+  private void selectionChanged(final boolean rebuildPanel) {
     final GamePlayer player = getCurrentPlayer();
     final Map<Target, Boolean> result = new LinkedHashMap<>();
     if (selectedZone != null && !selected.isEmpty()) {
@@ -343,13 +366,39 @@ public final class AirTargetPanel extends ActionPanel {
     if (frame.getAirMapMode() != null) {
       frame.getAirMapMode().setBusy(selectedZone != null);
     }
-    frame.clearStatusMessage();
-    rebuild(player);
+    if (selectedZone != null && !selected.isEmpty()) {
+      frame.setStatusMessage(
+          selectionText()
+              + " picked: point at a target to see the strike, click a green one to make it.");
+    } else if (selectedZone != null) {
+      frame.setStatusMessage(
+          "Pick bombers in "
+              + AirAllocation.zoneName(selectedZone)
+              + " with the arrows in the panel, or by clicking their stacks.");
+    } else {
+      frame.clearStatusMessage();
+      mousePoint = null;
+    }
+    if (rebuildPanel) {
+      rebuild(player);
+    } else {
+      fillTargets(player);
+      refresh.run();
+    }
     getMap().repaint();
   }
 
+  private String selectionText() {
+    final List<String> parts = new ArrayList<>();
+    for (final UnitType type : selected.keySet()) {
+      parts.add(selected.getInt(type) + " " + ResearchView.displayName(type.getName()));
+    }
+    return String.join(", ", parts);
+  }
+
   private void hovered(final @Nullable Territory territory) {
-    if (!listening || selectedZone == null || territory == null) {
+    hoverPlace = territory != null && !AirZoneAttachment.isAirZone(territory) ? territory : null;
+    if (!listening || selectedZone == null || selected.isEmpty() || territory == null) {
       return;
     }
     if (AirZoneAttachment.isAirZone(territory)) {
@@ -491,62 +540,18 @@ public final class AirTargetPanel extends ActionPanel {
     hint.setBorder(BorderFactory.createEmptyBorder(4, 5, 4, 5));
     add(leftAligned(hint));
 
-    if (selectedZone != null && !selected.isEmpty()) {
-      add(leftAligned(new JLabel("Selected in " + AirAllocation.zoneName(selectedZone) + ":")));
-      final IntegerMap<UnitType> available = available(player, selectedZone);
-      for (final UnitType type : selected.keySet()) {
-        final JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-        row.add(new JLabel(icon(player, type)));
-        final JSpinner spinner =
-            new JSpinner(
-                new SpinnerNumberModel(
-                    selected.getInt(type), 1, Math.max(1, available.getInt(type)), 1));
-        spinner.addChangeListener(
-            e -> {
-              selected.put(type, (Integer) spinner.getValue());
-              selectionChanged();
-            });
-        row.add(spinner);
-        row.add(
-            new JLabel(
-                ResearchView.displayName(type.getName()) + " (reach " + reach(player, type) + ")"));
-        if (selected.size() > 1) {
-          final JButton only = smallButton("Only these");
-          only.setToolTipText("Drop the other types to see this type's own reach");
-          only.addActionListener(
-              e -> {
-                final int count = selected.getInt(type);
-                selected.clear();
-                selected.put(type, count);
-                selectionChanged();
-              });
-          row.add(only);
-        }
-        add(leftAligned(row));
-      }
-      final List<Target> legal =
-          targets.entrySet().stream().filter(Map.Entry::getValue).map(Map.Entry::getKey).toList();
+    if (selectedZone != null) {
+      add(leftAligned(new JLabel("Bombers in " + AirAllocation.zoneName(selectedZone) + ":")));
       add(
           leftAligned(
-              new JLabel(
-                  legal.isEmpty()
-                      ? "No target in reach of all of them."
-                      : "Targets in reach (" + legal.size() + "):")));
-      try (GameData.Unlocker ignored = getData().acquireReadLock()) {
-        for (final Target target : legal) {
-          final JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-          final JButton attack = smallButton("Attack");
-          attack.addActionListener(e -> assign(target));
-          row.add(attack);
-          final JButton show = smallButton("Show");
-          show.addActionListener(e -> getMap().centerOn(target.territory()));
-          row.add(show);
-          final JLabel text = new JLabel(target.describe());
-          text.setToolTipText(describe(player, target));
-          row.add(text);
-          add(leftAligned(row));
-        }
-      }
+              AirSelection.chooser(
+                  frame.getUiContext(),
+                  player,
+                  available(player, selectedZone),
+                  selected,
+                  () -> selectionChanged(false))));
+      fillTargets(player);
+      add(targetsPanel);
     }
 
     add(Box.createVerticalStrut(6));
@@ -590,6 +595,61 @@ public final class AirTargetPanel extends ActionPanel {
     add(leftAligned(buttons));
     add(Box.createVerticalGlue());
     refresh.run();
+  }
+
+  /** The reach of each picked type, "only" buttons for mixed picks, and the targets in reach. */
+  private void fillTargets(final GamePlayer player) {
+    targetsPanel.removeAll();
+    if (selectedZone == null || selected.isEmpty()) {
+      targetsPanel.revalidate();
+      return;
+    }
+    final List<String> reaches = new ArrayList<>();
+    for (final UnitType type : selected.keySet()) {
+      reaches.add(ResearchView.displayName(type.getName()) + " " + reach(player, type));
+    }
+    targetsPanel.add(leftAligned(new JLabel("Reach: " + String.join(", ", reaches))));
+    if (selected.size() > 1) {
+      final JPanel only = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+      only.add(new JLabel("See one type's own reach:"));
+      for (final UnitType type : selected.keySet()) {
+        final JButton button = smallButton("Only " + ResearchView.displayName(type.getName()));
+        button.addActionListener(
+            e -> {
+              final int count = selected.getInt(type);
+              selected.clear();
+              selected.put(type, count);
+              selectionChanged();
+            });
+        only.add(button);
+      }
+      targetsPanel.add(leftAligned(only));
+    }
+    final List<Target> legal =
+        targets.entrySet().stream().filter(Map.Entry::getValue).map(Map.Entry::getKey).toList();
+    targetsPanel.add(
+        leftAligned(
+            new JLabel(
+                legal.isEmpty()
+                    ? "No target in reach of all of them."
+                    : "Targets in reach (" + legal.size() + "):")));
+    try (GameData.Unlocker ignored = getData().acquireReadLock()) {
+      for (final Target target : legal) {
+        final JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        final JButton attack = smallButton("Attack");
+        attack.addActionListener(e -> assign(target));
+        row.add(attack);
+        final JButton show = smallButton("Show");
+        show.addActionListener(e -> getMap().centerOn(target.territory()));
+        row.add(show);
+        final JLabel text = new JLabel(target.describe());
+        text.setToolTipText(describe(player, target));
+        row.add(text);
+        targetsPanel.add(leftAligned(row));
+      }
+    }
+    targetsPanel.revalidate();
+    targetsPanel.repaint();
   }
 
   private static JButton smallButton(final String text) {
@@ -643,6 +703,9 @@ public final class AirTargetPanel extends ActionPanel {
           AirSelection.paintPicked(g, mode, selectedZone, player, selected);
         }
       }
+      if (selectedZone != null && !selected.isEmpty() && mousePoint != null) {
+        paintPreview(g, player);
+      }
       // strikes: arrow from the box to the target, with the bombers and count at the target
       final Map<Territory, Integer> perTarget = new HashMap<>();
       for (final TargetAssignment a : staged) {
@@ -652,6 +715,46 @@ public final class AirTargetPanel extends ActionPanel {
         AirDraw.arrow(g, draw.center(a.zone()), end, STRIKE_LINE, 4f, false, "", 6);
         draw.iconAt(g, icon, player, a.unitType(), a.count());
       }
+    }
+  }
+
+  /**
+   * What clicking would do: over a target in reach a green arrow and what is there, over anything
+   * else in the zone a red arrow and why not; elsewhere the bombers follow the mouse.
+   */
+  private void paintPreview(final Graphics2D g, final GamePlayer player) {
+    final Point from = draw.center(selectedZone);
+    final Territory place = hoverPlace;
+    if (place != null) {
+      final List<String> parts = new ArrayList<>();
+      targets.forEach(
+          (target, legal) -> {
+            if (legal && target.territory().equals(place)) {
+              parts.add(describe(player, target));
+            }
+          });
+      if (!parts.isEmpty()) {
+        AirDraw.arrow(
+            g,
+            from,
+            draw.middle(place),
+            AirDraw.LEGAL_LINE,
+            5f,
+            false,
+            selectionText() + " \u2192 " + String.join(" | ", parts),
+            6);
+        AirSelection.paintShadow(g, frame.getUiContext(), player, selected, draw.middle(place));
+        return;
+      }
+      final String why = whyNotTarget(player, place);
+      if (!why.isEmpty()) {
+        AirDraw.arrow(g, from, draw.middle(place), PREVIEW_BLOCKED, 4f, true, "\u2717 " + why, 6);
+        return;
+      }
+    }
+    if (mousePoint.distance(from) > 20) {
+      AirDraw.arrow(g, from, mousePoint, Color.WHITE, 2.5f, true, "", 0);
+      AirSelection.paintShadow(g, frame.getUiContext(), player, selected, mousePoint);
     }
   }
 

@@ -4,16 +4,29 @@ import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.UnitType;
+import games.strategy.triplea.image.UnitImageFactory;
+import games.strategy.triplea.image.UnitImageFactory.ImageKey;
 import games.strategy.triplea.ui.MouseDetails;
+import games.strategy.triplea.ui.UiContext;
+import games.strategy.triplea.ui.research.ResearchView;
+import games.strategy.ui.ScrollableTextField;
+import java.awt.AlphaComposite;
 import java.awt.BasicStroke;
 import java.awt.Color;
+import java.awt.Composite;
 import java.awt.Graphics2D;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.Insets;
+import java.awt.Point;
 import java.awt.Rectangle;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Predicate;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
 import org.triplea.java.collections.IntegerMap;
 
 /**
@@ -79,6 +92,78 @@ final class AirSelection {
               .toList());
     }
     return result;
+  }
+
+  /**
+   * The stock unit chooser rows for a zone: each aircraft type available there with the arrow
+   * counter (up one, up to all, down one, down to none). Changing a counter changes the selection
+   * and calls {@code changed}.
+   */
+  static JPanel chooser(
+      final UiContext uiContext,
+      final GamePlayer player,
+      final IntegerMap<UnitType> available,
+      final IntegerMap<UnitType> selected,
+      final Runnable changed) {
+    final JPanel panel = new JPanel(new GridBagLayout());
+    final GridBagConstraints c = new GridBagConstraints();
+    c.anchor = GridBagConstraints.WEST;
+    c.insets = new Insets(1, 4, 1, 4);
+    c.gridy = 0;
+    for (final UnitType type : available.keySet()) {
+      c.gridx = 0;
+      panel.add(
+          new JLabel(
+              uiContext
+                  .getUnitImageFactory()
+                  .getIcon(ImageKey.builder().player(player).type(type).build())),
+          c);
+      final ScrollableTextField field = new ScrollableTextField(0, available.getInt(type));
+      field.setValue(Math.min(selected.getInt(type), available.getInt(type)));
+      field.addChangeListener(
+          f -> {
+            if (f.getValue() > 0) {
+              selected.put(type, f.getValue());
+            } else {
+              selected.removeKey(type);
+            }
+            changed.run();
+          });
+      c.gridx = 1;
+      panel.add(field, c);
+      c.gridx = 2;
+      panel.add(
+          new JLabel(
+              ResearchView.displayName(type.getName()) + " (of " + available.getInt(type) + ")"),
+          c);
+      c.gridy++;
+    }
+    return panel;
+  }
+
+  /** The picked aircraft drawn at the mouse, like the units following the cursor in a move. */
+  static void paintShadow(
+      final Graphics2D g,
+      final UiContext uiContext,
+      final GamePlayer player,
+      final IntegerMap<UnitType> selected,
+      final Point at) {
+    final UnitImageFactory images = uiContext.getUnitImageFactory();
+    int x = at.x + 12;
+    final int y = at.y + 12;
+    final Composite old = g.getComposite();
+    for (final UnitType type : selected.keySet()) {
+      g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.8f));
+      g.drawImage(
+          images.getImage(ImageKey.builder().player(player).type(type).build()), x, y, null);
+      g.setComposite(old);
+      AirDraw.countLabel(
+          g,
+          String.valueOf(selected.getInt(type)),
+          x + images.getUnitImageWidth() + 12,
+          y + images.getUnitImageHeight());
+      x += images.getUnitImageWidth() + 16;
+    }
   }
 
   /** Marks the selected stacks in air map mode: an orange frame and "2 picked". */

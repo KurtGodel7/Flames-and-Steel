@@ -359,6 +359,12 @@ public class AirAllocation {
     return new CarrierLoad(cost, capacity, jetCost, fleetCapacity, unfit);
   }
 
+  /** A nation's carrier load in an ocean or coastal zone once these moves are made. */
+  public static CarrierLoad carrierLoadAfter(
+      final GamePlayer player, final Stage stage, final List<AirMove> moves, final Territory zone) {
+    return carrierLoad(player, zone, aircraftAfterMoves(player, stage, moves, zone));
+  }
+
   /** Types of the player's aircraft in the zone once the moves are made (bomber stage: bombers). */
   private static List<UnitType> aircraftAfterMoves(
       final GamePlayer player, final Stage stage, final List<AirMove> moves, final Territory zone) {
