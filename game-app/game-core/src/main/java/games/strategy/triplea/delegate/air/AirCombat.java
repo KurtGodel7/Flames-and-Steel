@@ -11,6 +11,7 @@ import games.strategy.engine.random.IRandomStats.DiceType;
 import games.strategy.triplea.attachments.AirUnitAttachment;
 import games.strategy.triplea.attachments.AirZoneAttachment;
 import games.strategy.triplea.attachments.AirZoneAttachment.ZoneType;
+import games.strategy.triplea.attachments.ApcAttachment;
 import games.strategy.triplea.attachments.TerritoryAttachment;
 import games.strategy.triplea.delegate.DiceRoll;
 import games.strategy.triplea.delegate.Matches;
@@ -91,7 +92,9 @@ public class AirCombat {
         final GamePlayer bombed = attachment.getBombedPlayer();
         if (bombed != null && atWar(player, bombed)) {
           for (final Territory t : player.getData().getMap().getTerritoriesOwnedBy(bombed)) {
-            if (t.anyUnitsMatch(Matches.unitCanProduceUnits())) {
+            // factories and APCs are strategic targets
+            if (t.anyUnitsMatch(
+                Matches.unitCanProduceUnits().or(u -> ApcAttachment.isApc(u.getType())))) {
               targets.add(new Target(t, TargetKind.STRATEGIC));
             }
           }
