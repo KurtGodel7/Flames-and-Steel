@@ -80,6 +80,35 @@ final class AirSelection {
     return added;
   }
 
+  /**
+   * An arrow button beside a stack on the map: one more or one fewer; with Ctrl or Shift, all or
+   * none.
+   */
+  static void applyArrow(
+      final IntegerMap<UnitType> selected,
+      final IntegerMap<UnitType> available,
+      final AirMapMode.ArrowHit arrow,
+      final MouseDetails md) {
+    final UnitType type = arrow.type();
+    final int max = available.getInt(type);
+    final boolean all = md.isControlDown() || md.isShiftDown();
+    final int current = selected.getInt(type);
+    final int next =
+        arrow.delta() > 0
+            ? (all ? max : Math.min(max, current + 1))
+            : (all ? 0 : Math.max(0, current - 1));
+    if (next > 0) {
+      selected.put(type, next);
+    } else {
+      selected.removeKey(type);
+    }
+  }
+
+  /** HTML text wrapped to the width of the Actions tab. */
+  static String wrap(final String text) {
+    return "<html><div style='width:190px'>" + text + "</div></html>";
+  }
+
   /** The selected aircraft themselves, for highlighting their stacks in the boxes. */
   static List<Collection<Unit>> highlight(
       final IntegerMap<UnitType> selected, final List<Unit> zoneAircraft) {
@@ -111,13 +140,22 @@ final class AirSelection {
     c.insets = new Insets(1, 4, 1, 4);
     c.gridy = 0;
     for (final UnitType type : available.keySet()) {
+      // icon on the left; name above, arrow counter below (fits the narrow Actions tab)
       c.gridx = 0;
+      c.gridheight = 2;
       panel.add(
           new JLabel(
               uiContext
                   .getUnitImageFactory()
                   .getIcon(ImageKey.builder().player(player).type(type).build())),
           c);
+      c.gridheight = 1;
+      c.gridx = 1;
+      panel.add(
+          new JLabel(
+              ResearchView.displayName(type.getName()) + " (" + available.getInt(type) + " here)"),
+          c);
+      c.gridy++;
       final ScrollableTextField field = new ScrollableTextField(0, available.getInt(type));
       field.setValue(Math.min(selected.getInt(type), available.getInt(type)));
       field.addChangeListener(
@@ -131,11 +169,6 @@ final class AirSelection {
           });
       c.gridx = 1;
       panel.add(field, c);
-      c.gridx = 2;
-      panel.add(
-          new JLabel(
-              ResearchView.displayName(type.getName()) + " (of " + available.getInt(type) + ")"),
-          c);
       c.gridy++;
     }
     return panel;
@@ -166,7 +199,7 @@ final class AirSelection {
     }
   }
 
-  /** Marks the selected stacks in air map mode: an orange frame and "2 picked". */
+  /** Marks the selected stacks in air map mode: an orange frame and the number picked. */
   static void paintPicked(
       final Graphics2D g,
       final AirMapMode mode,
@@ -182,7 +215,15 @@ final class AirSelection {
       g.setColor(AirDraw.ORIGIN_LINE);
       g.setStroke(new BasicStroke(3f));
       g.drawRoundRect(s.x - 2, s.y - 2, s.width + 4, s.height + 4, 6, 6);
-      AirDraw.tag(g, selected.getInt(type) + " picked", s.x + s.width / 2, s.y - 8, Color.ORANGE);
+      // the number picked, as an orange badge on the stack's corner
+      final String n = String.valueOf(selected.getInt(type));
+      g.setFont(g.getFont().deriveFont(java.awt.Font.BOLD, 12f));
+      final int bw = Math.max(16, g.getFontMetrics().stringWidth(n) + 8);
+      g.setColor(Color.ORANGE);
+      g.fillOval(s.x - 6, s.y - 6, bw, 16);
+      g.setColor(Color.BLACK);
+      g.drawOval(s.x - 6, s.y - 6, bw, 16);
+      g.drawString(n, s.x - 6 + (bw - g.getFontMetrics().stringWidth(n)) / 2, s.y + 6);
     }
   }
 }

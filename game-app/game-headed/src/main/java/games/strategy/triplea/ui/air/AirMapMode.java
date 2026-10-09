@@ -35,6 +35,7 @@ import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics2D;
 import java.awt.Point;
+import java.awt.Polygon;
 import java.awt.Rectangle;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -48,6 +49,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 import javax.annotation.Nullable;
 import javax.swing.SwingUtilities;
+import org.triplea.java.collections.IntegerMap;
 
 /**
  * Flames and Steel air map mode: the air war on the real map. Each theatre air zone's coverage is
@@ -115,6 +117,17 @@ public final class AirMapMode implements MapOverlay {
   private final Map<String, Rectangle> stackRect = new HashMap<>();
 
   private @Nullable Territory hovered;
+
+  /** An arrow button beside a stack: pick one more ({@code delta} 1) or one fewer (-1). */
+  public record ArrowHit(UnitType type, int delta) {}
+
+  // set by the air panels
+  private volatile Map<String, Integer> leaving = Map.of();
+  private @Nullable Territory openZone;
+  private @Nullable GamePlayer openPlayer;
+  private Set<UnitType> arrowTypes = Set.of();
+  private final List<Rectangle> arrowRects = new ArrayList<>();
+  private final List<ArrowHit> arrowHits = new ArrayList<>();
 
   public AirMapMode(
       final UiContext uiContext,
@@ -244,6 +257,54 @@ public final class AirMapMode implements MapOverlay {
     return Optional.empty();
   }
 
+  /**
+   * Aircraft already staged to leave their zone: they are taken off that zone's stacks (the move's
+   * arrow and the destination show them).
+   */
+  public void setLeaving(final Map<Territory, Map<GamePlayer, IntegerMap<UnitType>>> moves) {
+    final Map<String, Integer> result = new HashMap<>();
+    moves.forEach(
+        (zone, byOwner) ->
+            byOwner.forEach(
+                (owner, types) ->
+                    types
+                        .keySet()
+                        .forEach(
+                            type ->
+                                result.merge(
+                                    stackKey(zone, owner, type),
+                                    types.getInt(type),
+                                    Integer::sum))));
+    leaving = result;
+    repaint();
+  }
+
+  /** The zone whose aircraft the player is picking: its stacks get arrow buttons. */
+  public void setOpenZone(
+      final @Nullable Territory zone,
+      final @Nullable GamePlayer player,
+      final Set<UnitType> types) {
+    openZone = zone;
+    openPlayer = player;
+    arrowTypes = Set.copyOf(types);
+    repaint();
+  }
+
+  /** The arrow button at a map point, when this view is on. */
+  public Optional<ArrowHit> arrowHit(final Point mapPoint) {
+    if (!enabled) {
+      return Optional.empty();
+    }
+    synchronized (hits) {
+      for (int i = 0; i < arrowRects.size(); i++) {
+        if (arrowRects.get(i).contains(mapPoint)) {
+          return Optional.of(arrowHits.get(i));
+        }
+      }
+    }
+    return Optional.empty();
+  }
+
   /** Where a nation's stack of one aircraft type is drawn in a zone's panel, while painting. */
   public Optional<Rectangle> stackRect(
       final Territory zone, final GamePlayer owner, final UnitType type) {
@@ -319,6 +380,8 @@ public final class AirMapMode implements MapOverlay {
     synchronized (hits) {
       hitRects.clear();
       hits.clear();
+      arrowRects.clear();
+      arrowHits.clear();
     }
     pendingSpot.clear();
     panelRect.clear();
@@ -432,14 +495,31 @@ public final class AirMapMode implements MapOverlay {
     g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 13));
     final FontMetrics fm = g.getFontMetrics();
     final int titleHeight = fm.getHeight() + 2;
+    // what each stack shows once staged departures are taken off
+    final Map<String, Integer> leftToRemove = new HashMap<>();
+    final Map<UnitCategory, Integer> shown = new HashMap<>();
     int rows = 0;
     int maxPerRow = 0;
     for (final Group group : groups) {
-      final int n = group.categories().size();
+      int n = 0;
+      for (final UnitCategory category : group.categories()) {
+        final String key = stackKey(zone, group.owner(), category.getType());
+        final int remove =
+            Math.min(
+                category.getUnits().size(),
+                leftToRemove.computeIfAbsent(key, k -> leaving.getOrDefault(k, 0)));
+        leftToRemove.put(key, leftToRemove.get(key) - remove);
+        final int count = category.getUnits().size() - remove;
+        shown.put(category, count);
+        if (count > 0) {
+          n++;
+        }
+      }
       rows += (n + ICONS_PER_ROW - 1) / ICONS_PER_ROW;
       maxPerRow = Math.max(maxPerRow, Math.min(n, ICONS_PER_ROW));
     }
-    final int cell = w + 16;
+    final boolean open = zone.equals(openZone);
+    final int cell = w + 16 + (open ? 18 : 0);
     final int width = Math.max(fm.stringWidth(title) + 12, 14 + maxPerRow * cell);
     final int height = titleHeight + rows * (h + 4) + 6;
     final Rectangle r = new Rectangle(at.x - width / 2, at.y - height / 2, width, height);
@@ -459,24 +539,39 @@ public final class AirMapMode implements MapOverlay {
     g.drawString(title, r.x + 6, r.y + fm.getAscent() + 2);
     record(new Rectangle(r.x, r.y, r.width, titleHeight), new Hit(zone, List.of()));
     int y = r.y + titleHeight;
+    final Set<UnitType> arrowsDrawn = new HashSet<>();
     for (final Group group : groups) {
       int col = 0;
+      boolean any = false;
       for (final UnitCategory category : group.categories()) {
+        final int count = shown.get(category);
+        if (count <= 0) {
+          continue;
+        }
         if (col == ICONS_PER_ROW) {
           col = 0;
           y += h + 4;
         }
+        any = true;
         final int x = r.x + 6 + col * cell;
         g.setColor(mapData.getPlayerColor(group.owner().getName()));
         g.fillRect(x, y + 2, 4, h - 4);
         g.drawImage(images.getImage(ImageKey.of(category)), x + 5, y, null);
-        AirDraw.countLabel(g, String.valueOf(category.getUnits().size()), x + w + 14, y + h);
+        AirDraw.countLabel(g, String.valueOf(count), x + w + 14, y + h);
         record(new Rectangle(x, y, cell, h), new Hit(zone, List.copyOf(category.getUnits())));
         stackRect.putIfAbsent(
-            stackKey(zone, group.owner(), category.getType()), new Rectangle(x, y, cell, h));
+            stackKey(zone, group.owner(), category.getType()), new Rectangle(x, y, w + 16, h));
+        if (open
+            && group.owner().equals(openPlayer)
+            && arrowTypes.contains(category.getType())
+            && arrowsDrawn.add(category.getType())) {
+          paintArrows(g, category.getType(), x + w + 17, y, h);
+        }
         col++;
       }
-      y += h + 4;
+      if (any) {
+        y += h + 4;
+      }
     }
     pendingSpot.put(zone, new Point(r.x + 6, r.y + r.height + 6));
     if (contested) {
@@ -490,6 +585,41 @@ public final class AirMapMode implements MapOverlay {
         ly += 18;
       }
     }
+  }
+
+  /** Up and down buttons beside a stack, like the stock unit chooser's arrows. */
+  private void paintArrows(
+      final Graphics2D g, final UnitType type, final int x, final int y, final int h) {
+    final int half = h / 2 - 1;
+    paintArrow(g, new Rectangle(x, y, 15, half), true);
+    paintArrow(g, new Rectangle(x, y + half + 2, 15, half), false);
+    synchronized (hits) {
+      arrowRects.add(new Rectangle(x, y, 15, half));
+      arrowHits.add(new ArrowHit(type, 1));
+      arrowRects.add(new Rectangle(x, y + half + 2, 15, half));
+      arrowHits.add(new ArrowHit(type, -1));
+    }
+  }
+
+  private static void paintArrow(final Graphics2D g, final Rectangle b, final boolean up) {
+    g.setColor(new Color(235, 235, 235));
+    g.fillRoundRect(b.x, b.y, b.width, b.height, 4, 4);
+    g.setColor(Color.DARK_GRAY);
+    g.setStroke(new BasicStroke(1f));
+    g.drawRoundRect(b.x, b.y, b.width, b.height, 4, 4);
+    final Polygon tri = new Polygon();
+    final int cx = b.x + b.width / 2;
+    if (up) {
+      tri.addPoint(cx, b.y + 2);
+      tri.addPoint(b.x + 3, b.y + b.height - 2);
+      tri.addPoint(b.x + b.width - 3, b.y + b.height - 2);
+    } else {
+      tri.addPoint(cx, b.y + b.height - 2);
+      tri.addPoint(b.x + 3, b.y + 2);
+      tri.addPoint(b.x + b.width - 3, b.y + 2);
+    }
+    g.setColor(Color.BLACK);
+    g.fillPolygon(tri);
   }
 
   private void record(final Rectangle rect, final Hit hit) {

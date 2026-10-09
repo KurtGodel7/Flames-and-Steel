@@ -128,6 +128,7 @@ public final class AirTargetPanel extends ActionPanel {
           this.store = store;
           clearSelection();
           draw.setAirMapMode(frame.getAirMapMode());
+          showAssigned();
           if (!listening) {
             listening = true;
             getMap().addUnitSelectionListener(unitListener);
@@ -154,6 +155,8 @@ public final class AirTargetPanel extends ActionPanel {
       getMap().setUnitHighlight(List.of());
       if (frame.getAirMapMode() != null) {
         frame.getAirMapMode().setBusy(false);
+        frame.getAirMapMode().setLeaving(Map.of());
+        frame.getAirMapMode().setOpenZone(null, null, java.util.Set.of());
       }
       frame.clearStatusMessage();
     }
@@ -196,6 +199,13 @@ public final class AirTargetPanel extends ActionPanel {
     Territory territory = clicked;
     final AirMapMode mode = frame.getAirMapMode();
     if (mode != null && mode.isEnabled()) {
+      final Optional<AirMapMode.ArrowHit> arrow = mode.arrowHit(md.getMapPoint());
+      if (arrow.isPresent() && selectedZone != null && isActive() && listening) {
+        AirSelection.applyArrow(
+            selected, available(getCurrentPlayer(), selectedZone), arrow.get(), md);
+        selectionChanged();
+        return;
+      }
       final Optional<AirMapMode.Hit> hit = mode.hit(md.getMapPoint());
       if (hit.isPresent()) {
         units = hit.get().units();
@@ -365,6 +375,12 @@ public final class AirTargetPanel extends ActionPanel {
     targets = result;
     if (frame.getAirMapMode() != null) {
       frame.getAirMapMode().setBusy(selectedZone != null);
+      frame
+          .getAirMapMode()
+          .setOpenZone(
+              selectedZone,
+              player,
+              selectedZone == null ? java.util.Set.of() : available(player, selectedZone).keySet());
     }
     if (selectedZone != null && !selected.isEmpty()) {
       frame.setStatusMessage(
@@ -518,7 +534,24 @@ public final class AirTargetPanel extends ActionPanel {
     };
   }
 
+  /** Takes bombers that already have a target off their zone's stacks in air map mode. */
+  private void showAssigned() {
+    final AirMapMode mode = frame.getAirMapMode();
+    if (mode == null) {
+      return;
+    }
+    final Map<Territory, Map<GamePlayer, IntegerMap<UnitType>>> leaving = new HashMap<>();
+    for (final TargetAssignment a : staged) {
+      leaving
+          .computeIfAbsent(a.zone(), k -> new HashMap<>())
+          .computeIfAbsent(getCurrentPlayer(), k -> new IntegerMap<>())
+          .add(a.unitType(), a.count());
+    }
+    mode.setLeaving(leaving);
+  }
+
   private void strikesChanged() {
+    showAssigned();
     final List<TargetAssignment> snapshot = List.copyOf(staged);
     storeExecutor.execute(() -> store.accept(snapshot));
     rebuild(getCurrentPlayer());
@@ -533,10 +566,11 @@ public final class AirTargetPanel extends ActionPanel {
     add(leftAligned(actionLabel));
     final JLabel hint =
         new JLabel(
-            "<html>"
-                + AirSelection.HELP
-                + " The targets all picked bombers can reach light up on the map and are listed"
-                + " here; click one to attack it.</html>");
+            AirSelection.wrap(
+                AirSelection.HELP
+                    + " Or use the arrows here, or beside the stack on the air map. The targets"
+                    + " all picked bombers can reach light up on the map and are listed here;"
+                    + " click one to attack it."));
     hint.setBorder(BorderFactory.createEmptyBorder(4, 5, 4, 5));
     add(leftAligned(hint));
 

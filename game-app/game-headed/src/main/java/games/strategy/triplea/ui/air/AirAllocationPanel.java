@@ -127,6 +127,7 @@ public final class AirAllocationPanel extends ActionPanel {
           this.store = store;
           clearSelection();
           draw.setAirMapMode(frame.getAirMapMode());
+          showDepartures();
           if (!listening) {
             listening = true;
             getMap().addUnitSelectionListener(unitListener);
@@ -153,6 +154,8 @@ public final class AirAllocationPanel extends ActionPanel {
       getMap().setUnitHighlight(List.of());
       if (frame.getAirMapMode() != null) {
         frame.getAirMapMode().setBusy(false);
+        frame.getAirMapMode().setLeaving(Map.of());
+        frame.getAirMapMode().setOpenZone(null, null, java.util.Set.of());
       }
       frame.clearStatusMessage();
     }
@@ -187,6 +190,13 @@ public final class AirAllocationPanel extends ActionPanel {
     Territory territory = clicked;
     final AirMapMode mode = frame.getAirMapMode();
     if (mode != null && mode.isEnabled()) {
+      final Optional<AirMapMode.ArrowHit> arrow = mode.arrowHit(md.getMapPoint());
+      if (arrow.isPresent() && selectedZone != null && isActive() && listening) {
+        AirSelection.applyArrow(
+            selected, available(getCurrentPlayer(), selectedZone), arrow.get(), md);
+        selectionChanged();
+        return;
+      }
       final Optional<AirMapMode.Hit> hit = mode.hit(md.getMapPoint());
       if (hit.isPresent()) {
         units = hit.get().units();
@@ -339,6 +349,12 @@ public final class AirAllocationPanel extends ActionPanel {
     destinations = result;
     if (frame.getAirMapMode() != null) {
       frame.getAirMapMode().setBusy(selectedZone != null);
+      frame
+          .getAirMapMode()
+          .setOpenZone(
+              selectedZone,
+              player,
+              selectedZone == null ? java.util.Set.of() : available(player, selectedZone).keySet());
     }
     if (selectedZone != null && !selected.isEmpty()) {
       frame.setStatusMessage(
@@ -356,7 +372,8 @@ public final class AirAllocationPanel extends ActionPanel {
     legalLabel.setText(
         selected.isEmpty()
             ? " "
-            : legalCount() + " zones allowed (green); point at one to preview the move.");
+            : AirSelection.wrap(
+                legalCount() + " zones allowed (green); point at one to preview the move."));
     if (rebuildPanel) {
       rebuild(player);
     }
@@ -414,7 +431,28 @@ public final class AirAllocationPanel extends ActionPanel {
     return String.join(", ", parts);
   }
 
+  /** Takes staged (own and allies') departures off the zones' stacks in air map mode. */
+  private void showDepartures() {
+    final AirMapMode mode = frame.getAirMapMode();
+    if (mode == null) {
+      return;
+    }
+    final Map<Territory, Map<GamePlayer, IntegerMap<UnitType>>> leaving = new HashMap<>();
+    final Map<GamePlayer, List<AirMove>> all = new LinkedHashMap<>(allied);
+    all.put(getCurrentPlayer(), staged);
+    all.forEach(
+        (owner, moves) ->
+            moves.forEach(
+                m ->
+                    leaving
+                        .computeIfAbsent(m.from(), k -> new HashMap<>())
+                        .computeIfAbsent(owner, k -> new IntegerMap<>())
+                        .add(m.unitType(), m.count())));
+    mode.setLeaving(leaving);
+  }
+
   private void movesChanged() {
+    showDepartures();
     final List<AirMove> snapshot = List.copyOf(staged);
     storeExecutor.execute(() -> store.accept(snapshot));
     rebuild(getCurrentPlayer());
@@ -429,12 +467,12 @@ public final class AirAllocationPanel extends ActionPanel {
         player.getName() + (stage == Stage.BOMBERS ? " bomber" : " fighter") + " allocation");
     add(leftAligned(actionLabel));
     hint.setText(
-        "<html>"
-            + AirSelection.HELP
-            + " Then click the zone to send them to."
-            + "<br>Enemies see these moves only at the reveal"
-            + (stage == Stage.FIGHTERS ? "; the bombers' moves are already revealed." : ".")
-            + "</html>");
+        AirSelection.wrap(
+            AirSelection.HELP
+                + " Or use the arrows here, or beside the stack on the air map."
+                + " Then click the zone to send them to.<br>Enemies see these moves only at the"
+                + " reveal"
+                + (stage == Stage.FIGHTERS ? "; the bombers' moves are already revealed." : ".")));
     hint.setBorder(BorderFactory.createEmptyBorder(4, 5, 4, 5));
     add(leftAligned(hint));
 
