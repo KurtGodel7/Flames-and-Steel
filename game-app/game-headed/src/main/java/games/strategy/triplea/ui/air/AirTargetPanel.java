@@ -494,22 +494,43 @@ public final class AirTargetPanel extends ActionPanel {
     }
     final Target target = there.get(0);
     for (final UnitType type : selected.keySet()) {
+      final String name = ResearchView.displayName(type.getName());
+      final String narrow = selected.size() > 1 ? " Pick only the other types to attack it." : "";
       if (!AirCombat.mayAttack(type, target.kind())) {
-        return ResearchView.displayName(type.getName())
-            + " cannot attack "
-            + kindName(target.kind()).toLowerCase()
-            + ". Narrow the selection to the other types.";
+        return name + " cannot attack " + kindName(target.kind()).toLowerCase() + "." + narrow;
       }
       if (!AirCombat.mayAttack(player, selectedZone, type, target)) {
-        return territory.getName()
-            + " is out of range for "
-            + ResearchView.displayName(type.getName())
-            + " (reach "
-            + reach(player, type)
-            + "). Narrow the selection to the longer-ranged types.";
+        // a target must be within half the bomber's range of a place it can land
+        final int reach = reach(player, type);
+        final java.util.OptionalInt distance =
+            AirRange.landingDistance(player, selectedZone, type, territory, reach + 6);
+        return "Out of range: "
+            + territory.getName()
+            + (distance.isPresent()
+                ? " is " + distance.getAsInt() + " steps from the nearest "
+                : " is more than " + (reach + 6) + " steps from any ")
+            + player.getName()
+            + " landing spot; a "
+            + name
+            + " strikes up to "
+            + reach
+            + (reach == 1 ? " step" : " steps")
+            + " from one (half its range of "
+            + rangeInForce(player, type)
+            + ", rounded down)."
+            + narrow;
       }
     }
     return "";
+  }
+
+  /** The range a bomber of this type flies at from the selected zone (escorts limit Bomb zones). */
+  private int rangeInForce(final GamePlayer player, final UnitType type) {
+    if (selectedZone != null
+        && AirZoneAttachment.get(selectedZone).orElseThrow().getZoneType() == ZoneType.BOMB) {
+      return bombZoneRange(player, selectedZone);
+    }
+    return AirRange.range(type, player);
   }
 
   private int reach(final GamePlayer player, final UnitType type) {
@@ -762,18 +783,24 @@ public final class AirTargetPanel extends ActionPanel {
     }
     final Territory place = hoverPlace;
     Color color = Color.WHITE;
+    String why = "";
     if (place != null) {
       final boolean inReach =
           targets.entrySet().stream()
               .anyMatch(e -> e.getValue() && e.getKey().territory().equals(place));
       if (inReach) {
         color = AirDraw.LEGAL_LINE;
-      } else if (!whyNotTarget(player, place).isEmpty()) {
-        color = PREVIEW_BLOCKED;
+      } else {
+        why = whyNotTarget(player, place);
+        color = why.isEmpty() ? Color.WHITE : PREVIEW_BLOCKED;
       }
     }
     AirDraw.routeLine(g, from, mousePoint, color);
     AirSelection.paintShadow(g, frame.getUiContext(), player, selected, mousePoint);
+    if (!why.isEmpty()) {
+      // the reason next to the mouse, where the player is looking
+      AirDraw.tag(g, why, mousePoint.x, mousePoint.y + 52, new Color(255, 140, 120));
+    }
   }
 
   private void fill(final Graphics2D g, final Territory t, final Color color) {

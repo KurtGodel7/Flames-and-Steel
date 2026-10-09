@@ -13,6 +13,7 @@ import games.strategy.triplea.delegate.Matches;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.OptionalInt;
 import java.util.Set;
 import lombok.experimental.UtilityClass;
 
@@ -61,6 +62,38 @@ public class AirRange {
       }
     }
     return false;
+  }
+
+  /**
+   * How many steps (borders, land or sea) the target is from the nearest place this nation's
+   * aircraft of this type, striking from this zone, could land, looking up to {@code maxSteps}
+   * away; empty if there is none that close. Uses the same landing spots as {@link #canReach}.
+   */
+  public static OptionalInt landingDistance(
+      final GamePlayer player,
+      final Territory zone,
+      final UnitType type,
+      final Territory target,
+      final int maxSteps) {
+    final GameMap map = target.getData().getMap();
+    final ZoneType zoneType = AirZoneAttachment.get(zone).orElseThrow().getZoneType();
+    final boolean jet =
+        AirUnitAttachment.get(type).map(AirUnitAttachment::isFleetCarrierOnly).orElse(false);
+    for (int steps = 0; steps <= maxSteps; steps++) {
+      final Set<Territory> around = new HashSet<>(map.getNeighbors(target, steps));
+      around.add(target);
+      for (final Territory t : around) {
+        if (zoneType != ZoneType.OCEAN && isLandLandingSpot(player, t)) {
+          return OptionalInt.of(steps);
+        }
+        if ((zoneType == ZoneType.OCEAN || zoneType == ZoneType.COASTAL)
+            && type.getUnitAttachment().getCarrierCost() > 0
+            && hasOwnCarrier(player, t, jet)) {
+          return OptionalInt.of(steps);
+        }
+      }
+    }
+    return OptionalInt.empty();
   }
 
   /**

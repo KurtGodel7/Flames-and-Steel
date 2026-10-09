@@ -650,5 +650,14 @@ public final class AirAllocationPanel extends ActionPanel {
     }
     AirDraw.routeLine(g, from, mousePoint, color);
     AirSelection.paintShadow(g, frame.getUiContext(), getCurrentPlayer(), selected, mousePoint);
+    if (color == PREVIEW_BLOCKED) {
+      // the reason next to the mouse, where the player is looking
+      AirDraw.tag(
+          g,
+          destinations.get(to).orElse(""),
+          mousePoint.x,
+          mousePoint.y + 52,
+          new Color(255, 140, 120));
+    }
   }
 }
