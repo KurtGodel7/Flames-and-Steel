@@ -309,8 +309,7 @@ public abstract class AbstractAi extends AbstractBasePlayer {
         final int num =
             Math.min(
                 attackTokens.getInt(resource),
-                (u.getUnitAttachment().getHitPoints()
-                    * (Math.random() < .3 ? 1 : (Math.random() < .5 ? 2 : 3))));
+                (Unit.maxHitPoints(u) * (Math.random() < .3 ? 1 : (Math.random() < .5 ? 2 : 3))));
         resourceMap.put(resource, num);
         kamikazeSuicideAttacks.computeIfAbsent(t, key -> new HashMap<>()).put(u, resourceMap);
         attackTokens.add(resource, -num);

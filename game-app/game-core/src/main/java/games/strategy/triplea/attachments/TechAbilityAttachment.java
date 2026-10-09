@@ -71,6 +71,10 @@ public class TechAbilityAttachment extends DefaultAttachment {
   private @Nullable IntegerMap<UnitType> attackRollsBonus = null;
   private @Nullable IntegerMap<UnitType> defenseRollsBonus = null;
   private @Nullable IntegerMap<UnitType> bombingBonus = null;
+  // Flames and Steel: extra hit points for the nation's units of a type while this tech is owned
+  private @Nullable IntegerMap<UnitType> hitPointBonus = null;
+  // Flames and Steel: extra dogfight dice for the nation's units of a type
+  private @Nullable IntegerMap<UnitType> dogfightRollsBonus = null;
   // Flames and Steel research centres: breakthroughs (stars) needed to unlock this tech.
   // 0 means not set, which counts as 1.
   private int researchStarsRequired = 0;
@@ -156,6 +160,42 @@ public class TechAbilityAttachment extends DefaultAttachment {
 
   private void resetAttackBonus() {
     attackBonus = null;
+  }
+
+  private void setHitPointBonus(final String value) throws GameParseException {
+    if (hitPointBonus == null) {
+      hitPointBonus = new IntegerMap<>();
+    }
+    applyCheckedValue("hitPointBonus", value, hitPointBonus::put);
+  }
+
+  private void setHitPointBonus(final IntegerMap<UnitType> value) {
+    hitPointBonus = value;
+  }
+
+  /** Extra hit points, by unit type, for the owning nation's units. */
+  public IntegerMap<UnitType> getHitPointBonus() {
+    return getIntegerMapProperty(hitPointBonus);
+  }
+
+  private void resetHitPointBonus() {
+    hitPointBonus = null;
+  }
+
+  private void setDogfightRollsBonus(final String value) throws GameParseException {
+    if (dogfightRollsBonus == null) {
+      dogfightRollsBonus = new IntegerMap<>();
+    }
+    applyCheckedValue("dogfightRollsBonus", value, dogfightRollsBonus::put);
+  }
+
+  private void setDogfightRollsBonus(final IntegerMap<UnitType> value) {
+    dogfightRollsBonus = value;
+  }
+
+  /** Extra dogfight dice, by unit type, for the owning nation's aircraft. */
+  public IntegerMap<UnitType> getDogfightRollsBonus() {
+    return getIntegerMapProperty(dogfightRollsBonus);
   }
 
   private void setDefenseBonus(final String value) throws GameParseException {
@@ -892,6 +932,20 @@ public class TechAbilityAttachment extends DefaultAttachment {
   @Override
   public Optional<MutableProperty<?>> getPropertyOrEmpty(final @NonNls String propertyName) {
     return switch (propertyName) {
+      case "dogfightRollsBonus" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setDogfightRollsBonus,
+                  this::setDogfightRollsBonus,
+                  this::getDogfightRollsBonus,
+                  () -> dogfightRollsBonus = null));
+      case "hitPointBonus" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setHitPointBonus,
+                  this::setHitPointBonus,
+                  this::getHitPointBonus,
+                  this::resetHitPointBonus));
       case "attackBonus" ->
           Optional.of(
               MutableProperty.of(

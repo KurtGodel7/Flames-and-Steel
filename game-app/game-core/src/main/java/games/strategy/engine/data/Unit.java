@@ -513,8 +513,26 @@ public class Unit extends GameDataComponent implements DynamicallyModifiable {
     return alreadyMoved.compareTo(BigDecimal.ZERO) > 0;
   }
 
+  /**
+   * This unit's hit points: its type's, plus its owner's tech bonuses (Flames and Steel hit point
+   * techs are per nation).
+   */
+  public int getMaxHitPoints() {
+    return maxHitPoints(this);
+  }
+
+  /** Static form of {@link #getMaxHitPoints()} (also safe for units without game data). */
+  public static int maxHitPoints(final Unit unit) {
+    final int base = unit.getUnitAttachment().getHitPoints();
+    final GameData data = unit.getData();
+    if (data == null || unit.getOwner() == null) {
+      return base;
+    }
+    return base + data.getTechTracker().getHitPointBonus(unit.getOwner(), unit.getType());
+  }
+
   public int hitsUnitCanTakeHitWithoutBeingKilled() {
-    return getUnitAttachment().getHitPoints() - 1 - hits;
+    return maxHitPoints(this) - 1 - hits;
   }
 
   public boolean canTakeHitWithoutBeingKilled() {

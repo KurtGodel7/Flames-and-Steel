@@ -60,6 +60,22 @@ public class TechTracker {
     return getCached(player, type, "getMovementBonus", getter);
   }
 
+  /**
+   * Flames and Steel: extra dogfight dice from the nation's techs for its aircraft of this type.
+   */
+  public int getDogfightRollsBonus(GamePlayer player, UnitType type) {
+    final Supplier<Integer> getter =
+        () -> getSumOfBonuses(TechAbilityAttachment::getDogfightRollsBonus, type, player);
+    return getCached(player, type, "getDogfightRollsBonus", getter);
+  }
+
+  /** Flames and Steel: extra hit points from the nation's techs for its units of this type. */
+  public int getHitPointBonus(GamePlayer player, UnitType type) {
+    final Supplier<Integer> getter =
+        () -> getSumOfBonuses(TechAbilityAttachment::getHitPointBonus, type, player);
+    return getCached(player, type, "getHitPointBonus", getter);
+  }
+
   public int getAttackBonus(GamePlayer player, UnitType type) {
     final Supplier<Integer> getter =
         () -> getSumOfBonuses(TechAbilityAttachment::getAttackBonus, type, player);

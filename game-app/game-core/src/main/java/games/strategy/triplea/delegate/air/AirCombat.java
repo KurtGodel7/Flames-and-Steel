@@ -201,8 +201,10 @@ public class AirCombat {
 
   /** Firing power of an aircraft in a dogfight. */
   public static int dogfightPower(final Unit unit) {
+    final int extraRolls =
+        unit.getData().getTechTracker().getDogfightRollsBonus(unit.getOwner(), unit.getType());
     return AirUnitAttachment.get(unit.getType())
-        .map(a -> a.getDogfight() * a.getDogfightRolls())
+        .map(a -> a.getDogfight() * (a.getDogfightRolls() + extraRolls))
         .orElse(0);
   }
 

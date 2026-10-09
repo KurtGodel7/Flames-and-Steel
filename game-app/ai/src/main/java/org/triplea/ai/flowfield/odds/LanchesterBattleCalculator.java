@@ -1,6 +1,7 @@
 package org.triplea.ai.flowfield.odds;
 
 import com.google.common.base.Preconditions;
+import games.strategy.engine.data.Unit;
 import games.strategy.triplea.delegate.battle.BattleState;
 import games.strategy.triplea.delegate.power.calculator.TotalPowerAndTotalRolls;
 import lombok.Value;
@@ -48,8 +49,7 @@ public class LanchesterBattleCalculator {
               .mapToDouble(
                   unit ->
                       unit.getPower()
-                          * (unit.getUnit().getUnitAttachment().getHitPoints()
-                              - unit.getUnit().getHits()))
+                          * (Unit.maxHitPoints(unit.getUnit()) - unit.getUnit().getHits()))
               .average()
               .orElse(0.0);
 

@@ -115,7 +115,7 @@ public class SelectMainBattleCasualties
   private static int getMaxHits(final Collection<Unit> units) {
     int count = 0;
     for (final Unit unit : units) {
-      count += unit.getUnitAttachment().getHitPoints();
+      count += Unit.maxHitPoints(unit);
       count -= unit.getHits();
     }
     return count;

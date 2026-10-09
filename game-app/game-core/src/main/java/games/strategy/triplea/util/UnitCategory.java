@@ -92,7 +92,9 @@ public class UnitCategory implements Comparable<UnitCategory> {
   }
 
   public int getHitPoints() {
-    return type.getUnitAttachment().getHitPoints();
+    // includes the owner's hit point techs (Flames and Steel)
+    return type.getUnitAttachment().getHitPoints()
+        + (owner == null ? 0 : type.getData().getTechTracker().getHitPointBonus(owner, type));
   }
 
   public boolean getCanRetreat() {

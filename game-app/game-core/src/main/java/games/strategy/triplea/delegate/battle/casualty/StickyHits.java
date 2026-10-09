@@ -71,7 +71,7 @@ public class StickyHits {
   }
 
   private static int hitPointsLeft(final Unit unit) {
-    return unit.getUnitAttachment().getHitPoints() - unit.getHits();
+    return Unit.maxHitPoints(unit) - unit.getHits();
   }
 
   /** Why this choice of casualties breaks the sticky hit rule, if it does. */
@@ -122,7 +122,7 @@ public class StickyHits {
       if (hitsLeft <= 0) {
         break;
       }
-      final int hitPointsLeft = unit.getUnitAttachment().getHitPoints() - unit.getHits();
+      final int hitPointsLeft = Unit.maxHitPoints(unit) - unit.getHits();
       final int taken = Math.min(hitsLeft, hitPointsLeft);
       // a unit listed as damaged and then killed takes all its remaining hit points
       for (int i = 0; i < Math.min(taken, hitPointsLeft - 1); i++) {

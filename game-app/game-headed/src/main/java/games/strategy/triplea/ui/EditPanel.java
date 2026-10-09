@@ -712,8 +712,7 @@ class EditPanel extends ActionPanel {
             // unit mapped to <max, min, current>
             final Map<Unit, Triple<Integer, Integer, Integer>> currentDamageMap = new HashMap<>();
             for (final Unit u : units) {
-              currentDamageMap.put(
-                  u, Triple.of(u.getUnitAttachment().getHitPoints() - 1, 0, u.getHits()));
+              currentDamageMap.put(u, Triple.of(Unit.maxHitPoints(u) - 1, 0, u.getHits()));
             }
             final IndividualUnitPanel unitPanel =
                 new IndividualUnitPanel(

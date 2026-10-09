@@ -80,7 +80,7 @@ public final class Matches {
   }
 
   public static Predicate<Unit> unitHasMoreThanOneHitPointTotal() {
-    return unit -> unitTypeHasMoreThanOneHitPointTotal().test(unit.getType());
+    return unit -> Unit.maxHitPoints(unit) > 1;
   }
 
   public static Predicate<Unit> unitHasTakenSomeDamage() {

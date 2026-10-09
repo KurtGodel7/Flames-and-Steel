@@ -47,7 +47,7 @@ public class SelectDestroyerCasualties
   }
 
   private static int hitPointsLeft(final Collection<Unit> units) {
-    return units.stream().mapToInt(u -> u.getUnitAttachment().getHitPoints() - u.getHits()).sum();
+    return units.stream().mapToInt(u -> Unit.maxHitPoints(u) - u.getHits()).sum();
   }
 
   private static CasualtyDetails select(

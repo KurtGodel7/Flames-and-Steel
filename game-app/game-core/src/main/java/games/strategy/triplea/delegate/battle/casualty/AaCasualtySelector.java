@@ -94,8 +94,8 @@ public class AaCasualtySelector {
     for (final Unit target : targets) {
       final int hpLeft =
           allowMultipleHitsPerUnit
-              ? (target.getUnitAttachment().getHitPoints() - target.getHits())
-              : Math.min(1, target.getUnitAttachment().getHitPoints() - target.getHits());
+              ? (Unit.maxHitPoints(target) - target.getHits())
+              : Math.min(1, Unit.maxHitPoints(target) - target.getHits());
       for (int hp = 0; hp < hpLeft; ++hp) {
         // if allowMultipleHitsPerUnit, then the target needs to be added for each hp
         targetsList.add(target);

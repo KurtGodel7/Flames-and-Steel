@@ -1449,7 +1449,7 @@ public class BattleDelegate extends BaseTripleADelegate implements IBattleDelega
     if (hits > 0) {
       final UnitAttachment ua = unitUnderFire.getUnitAttachment();
       final int currentHits = unitUnderFire.getHits();
-      if (ua.getHitPoints() <= currentHits + hits) {
+      if (Unit.maxHitPoints(unitUnderFire) <= currentHits + hits) {
         HistoryChangeFactory.removeUnitsFromTerritory(location, List.of(unitUnderFire))
             .perform(bridge);
       } else {

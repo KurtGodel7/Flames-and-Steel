@@ -223,7 +223,7 @@ public class UnitUtils {
             unitGivingAttributes.getHits(),
             // ensure the receiving unit has at least 1 hit point after hits are
             // transferred
-            receivingUnit.getUnitAttachment().getHitPoints() - 1);
+            Unit.maxHitPoints(receivingUnit) - 1);
     if (transferHits > 0) {
       unitChange.add(
           ChangeFactory.unitsHit(

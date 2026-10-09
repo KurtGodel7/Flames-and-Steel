@@ -281,7 +281,8 @@ public class CasualtySelector {
         final UnitAttachment ua = unit.getUnitAttachment();
         final int damageToUnit = Collections.frequency(damaged, unit);
         // allowed damage
-        numhits += Math.max(0, Math.min(damageToUnit, (ua.getHitPoints() - (1 + unit.getHits()))));
+        numhits +=
+            Math.max(0, Math.min(damageToUnit, (Unit.maxHitPoints(unit) - (1 + unit.getHits()))));
         // remove from damaged list, since they will die
         damaged.removeIf(unit::equals);
       }
@@ -388,7 +389,8 @@ public class CasualtySelector {
         }
         final UnitAttachment ua = unit.getUnitAttachment();
         final int extraHitPoints =
-            Math.min((hits - numSelectedCasualties), (ua.getHitPoints() - (1 + unit.getHits())));
+            Math.min(
+                (hits - numSelectedCasualties), (Unit.maxHitPoints(unit) - (1 + unit.getHits())));
         for (int i = 0; i < extraHitPoints; i++) {
           defaultCasualtySelection.addToDamaged(unit);
         }
