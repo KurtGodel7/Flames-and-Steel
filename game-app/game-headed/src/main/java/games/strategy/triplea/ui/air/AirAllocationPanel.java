@@ -210,43 +210,34 @@ public final class AirAllocationPanel extends ActionPanel {
       moveSelectionTo(territory);
       return;
     }
-    // select aircraft in this zone: the clicked stack, or all with shift
+    // pick aircraft in this zone, as in a TripleA move
     final IntegerMap<UnitType> available = available(player, territory);
-    final List<UnitType> types = new ArrayList<>();
-    if (md.isShiftDown()) {
-      types.addAll(available.keySet());
-    } else {
-      units.stream()
-          .filter(u -> u.isOwnedBy(player) && AirAllocation.isInStage(u, stage))
-          .map(Unit::getType)
-          .distinct()
-          .forEach(types::add);
-    }
-    if (types.isEmpty()) {
-      if (territory.equals(selectedZone)) {
-        clearSelection();
-        selectionChanged();
-      } else if (!units.isEmpty()) {
-        frame.setStatusErrorMessage(
-            units.get(0).isOwnedBy(player)
-                ? "Those aircraft move in the "
-                    + (stage == Stage.BOMBERS ? "fighter" : "bomber")
-                    + " step."
-                : "Those are not your aircraft.");
-      }
-      return;
-    }
     if (!territory.equals(selectedZone)) {
       selected.clear();
       selectedZone = territory;
     }
-    for (final UnitType type : types) {
-      if (available.getInt(type) > 0) {
-        selected.put(type, available.getInt(type));
-      }
+    final int added =
+        AirSelection.add(
+            selected,
+            available,
+            units,
+            u ->
+                u.isOwnedBy(player)
+                    && AirAllocation.isInStage(u, stage)
+                    && available.getInt(u.getType()) > 0,
+            md);
+    if (added == 0 && !units.isEmpty()) {
+      final Unit unit = units.get(0);
+      frame.setStatusErrorMessage(
+          !unit.isOwnedBy(player)
+              ? "Those are not your aircraft."
+              : !AirAllocation.isInStage(unit, stage)
+                  ? "Those aircraft move in the "
+                      + (stage == Stage.BOMBERS ? "fighter" : "bomber")
+                      + " step."
+                  : "All of those are already picked or moving; undo a move to change it.");
     }
     if (selected.isEmpty()) {
-      frame.setStatusErrorMessage("Those aircraft are already moving; undo the move to change it.");
       clearSelection();
     }
     selectionChanged();
@@ -312,17 +303,13 @@ public final class AirAllocationPanel extends ActionPanel {
           result.put(zone, problem(player, zone));
         }
       }
-      // highlight the selected stacks
-      final List<java.util.Collection<Unit>> highlight = new ArrayList<>();
+      // highlight the picked aircraft in the box
       try (GameData.Unlocker ignored = getData().acquireReadLock()) {
-        for (final UnitType type : selected.keySet()) {
-          highlight.add(
-              AirAllocation.getAircraft(player, selectedZone, stage).stream()
-                  .filter(u -> u.getType().equals(type))
-                  .toList());
-        }
+        getMap()
+            .setUnitHighlight(
+                AirSelection.highlight(
+                    selected, AirAllocation.getAircraft(player, selectedZone, stage)));
       }
-      getMap().setUnitHighlight(highlight);
     } else {
       getMap().setUnitHighlight(List.of());
     }
@@ -330,7 +317,13 @@ public final class AirAllocationPanel extends ActionPanel {
     if (frame.getAirMapMode() != null) {
       frame.getAirMapMode().setBusy(selectedZone != null);
     }
-    frame.clearStatusMessage();
+    if (selectedZone != null && !selected.isEmpty()) {
+      frame.setStatusMessage(
+          selectionText()
+              + " picked: click a green zone to send them, or click again to pick more.");
+    } else {
+      frame.clearStatusMessage();
+    }
     rebuild(player);
     getMap().repaint();
   }
@@ -400,8 +393,9 @@ public final class AirAllocationPanel extends ActionPanel {
         player.getName() + (stage == Stage.BOMBERS ? " bomber" : " fighter") + " allocation");
     add(leftAligned(actionLabel));
     hint.setText(
-        "<html>Click aircraft in an air box, then click the box to send them to."
-            + " Shift-click takes every aircraft in the box; right-click drops one or clears."
+        "<html>"
+            + AirSelection.HELP
+            + " Then click the zone to send them to."
             + "<br>Enemies see these moves only at the reveal"
             + (stage == Stage.FIGHTERS ? "; the bombers' moves are already revealed." : ".")
             + "</html>");
@@ -525,6 +519,10 @@ public final class AirAllocationPanel extends ActionPanel {
               }
             });
         draw.outlineBox(g, selectedZone, AirDraw.ORIGIN_LINE, 5f);
+        final AirMapMode mode = frame.getAirMapMode();
+        if (mode != null) {
+          AirSelection.paintPicked(g, mode, selectedZone, getCurrentPlayer(), selected);
+        }
       }
       // revealed bomber moves (fighter step): thin dashed grey arrows, arrivals labelled
       revealed.forEach(

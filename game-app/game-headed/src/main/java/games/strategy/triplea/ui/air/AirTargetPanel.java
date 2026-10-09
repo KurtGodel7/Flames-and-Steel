@@ -206,7 +206,7 @@ public final class AirTargetPanel extends ActionPanel {
       return;
     }
     if (AirZoneAttachment.isAirZone(territory)) {
-      selectBombers(player, territory, units, md.isShiftDown());
+      selectBombers(player, territory, units, md);
       return;
     }
     if (selectedZone == null || selected.isEmpty()) {
@@ -244,42 +244,32 @@ public final class AirTargetPanel extends ActionPanel {
   }
 
   private void selectBombers(
-      final GamePlayer player, final Territory zone, final List<Unit> units, final boolean all) {
+      final GamePlayer player,
+      final Territory zone,
+      final List<Unit> units,
+      final MouseDetails md) {
     final IntegerMap<UnitType> available = available(player, zone);
-    final List<UnitType> types = new ArrayList<>();
-    if (all) {
-      types.addAll(available.keySet());
-    } else {
-      units.stream()
-          .filter(u -> u.isOwnedBy(player) && AirCombat.isBomber(u))
-          .map(Unit::getType)
-          .distinct()
-          .forEach(types::add);
-    }
-    if (types.isEmpty()) {
-      if (zone.equals(selectedZone)) {
-        clearSelection();
-        selectionChanged();
-      } else if (!units.isEmpty()) {
-        frame.setStatusErrorMessage(
-            units.get(0).isOwnedBy(player)
-                ? "Fighters do not strike; select bombers."
-                : "Those are not your aircraft.");
-      }
-      return;
-    }
     if (!zone.equals(selectedZone)) {
       selected.clear();
       selectedZone = zone;
     }
-    for (final UnitType type : types) {
-      if (available.getInt(type) > 0) {
-        selected.put(type, available.getInt(type));
-      }
+    final int added =
+        AirSelection.add(
+            selected,
+            available,
+            units,
+            u -> u.isOwnedBy(player) && AirCombat.isBomber(u) && available.getInt(u.getType()) > 0,
+            md);
+    if (added == 0 && !units.isEmpty()) {
+      final Unit unit = units.get(0);
+      frame.setStatusErrorMessage(
+          !unit.isOwnedBy(player)
+              ? "Those are not your aircraft."
+              : !AirCombat.isBomber(unit)
+                  ? "Fighters do not strike; pick bombers."
+                  : "All of those are already picked or have targets; undo a strike to change it.");
     }
     if (selected.isEmpty()) {
-      frame.setStatusErrorMessage(
-          "Those bombers already have targets; undo a strike to change it.");
       clearSelection();
     }
     selectionChanged();
@@ -342,12 +332,8 @@ public final class AirTargetPanel extends ActionPanel {
               selected.keySet().stream()
                   .allMatch(type -> AirCombat.mayAttack(player, selectedZone, type, target)));
         }
-        for (final UnitType type : selected.keySet()) {
-          highlight.add(
-              AirCombat.getBombers(player, selectedZone).stream()
-                  .filter(u -> u.getType().equals(type))
-                  .toList());
-        }
+        highlight.addAll(
+            AirSelection.highlight(selected, AirCombat.getBombers(player, selectedZone)));
       }
       getMap().setUnitHighlight(highlight);
     } else {
@@ -498,9 +484,10 @@ public final class AirTargetPanel extends ActionPanel {
     add(leftAligned(actionLabel));
     final JLabel hint =
         new JLabel(
-            "<html>Click bombers in an air box; the targets they can all reach light up on the"
-                + " map and are listed here. Click a target to attack it. Shift-click takes every"
-                + " bomber in the box; right-click drops one or clears.</html>");
+            "<html>"
+                + AirSelection.HELP
+                + " The targets all picked bombers can reach light up on the map and are listed"
+                + " here; click one to attack it.</html>");
     hint.setBorder(BorderFactory.createEmptyBorder(4, 5, 4, 5));
     add(leftAligned(hint));
 
@@ -651,6 +638,10 @@ public final class AirTargetPanel extends ActionPanel {
               }
             });
         draw.outlineBox(g, selectedZone, AirDraw.ORIGIN_LINE, 5f);
+        final AirMapMode mode = frame.getAirMapMode();
+        if (mode != null) {
+          AirSelection.paintPicked(g, mode, selectedZone, player, selected);
+        }
       }
       // strikes: arrow from the box to the target, with the bombers and count at the target
       final Map<Territory, Integer> perTarget = new HashMap<>();

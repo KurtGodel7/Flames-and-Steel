@@ -112,6 +112,7 @@ public final class AirMapMode implements MapOverlay {
   private final List<Hit> hits = new ArrayList<>();
   private final Map<Territory, Point> pendingSpot = new HashMap<>();
   private final Map<Territory, Rectangle> panelRect = new HashMap<>();
+  private final Map<String, Rectangle> stackRect = new HashMap<>();
 
   private @Nullable Territory hovered;
 
@@ -243,6 +244,19 @@ public final class AirMapMode implements MapOverlay {
     return Optional.empty();
   }
 
+  /** Where a nation's stack of one aircraft type is drawn in a zone's panel, while painting. */
+  public Optional<Rectangle> stackRect(
+      final Territory zone, final GamePlayer owner, final UnitType type) {
+    return enabled
+        ? Optional.ofNullable(stackRect.get(stackKey(zone, owner, type)))
+        : Optional.empty();
+  }
+
+  private static String stackKey(
+      final Territory zone, final GamePlayer owner, final UnitType type) {
+    return zone.getName() + "|" + owner.getName() + "|" + type.getName();
+  }
+
   /** Where arrows to and from a zone attach: its stack on the map. */
   public Optional<Point> anchorOf(final Territory zone) {
     if (!enabled) {
@@ -308,6 +322,7 @@ public final class AirMapMode implements MapOverlay {
     }
     pendingSpot.clear();
     panelRect.clear();
+    stackRect.clear();
     final MapData mapData = uiContext.getMapData();
     try (GameData.Unlocker ignored = paintData.acquireReadLock()) {
       if (zoneArea.isEmpty()) {
@@ -457,6 +472,8 @@ public final class AirMapMode implements MapOverlay {
         g.drawImage(images.getImage(ImageKey.of(category)), x + 5, y, null);
         AirDraw.countLabel(g, String.valueOf(category.getUnits().size()), x + w + 14, y + h);
         record(new Rectangle(x, y, cell, h), new Hit(zone, List.copyOf(category.getUnits())));
+        stackRect.putIfAbsent(
+            stackKey(zone, group.owner(), category.getType()), new Rectangle(x, y, cell, h));
         col++;
       }
       y += h + 4;
