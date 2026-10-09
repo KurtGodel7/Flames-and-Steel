@@ -154,7 +154,7 @@ public final class AirAllocationPanel extends ActionPanel {
       getMap().setUnitHighlight(List.of());
       if (frame.getAirMapMode() != null) {
         frame.getAirMapMode().setBusy(false);
-        frame.getAirMapMode().setLeaving(Map.of());
+        frame.getAirMapMode().setPending(Map.of(), Map.of());
         frame.getAirMapMode().setOpenZone(null, null, java.util.Set.of());
       }
       frame.clearStatusMessage();
@@ -189,7 +189,7 @@ public final class AirAllocationPanel extends ActionPanel {
     List<Unit> units = clickedUnits;
     Territory territory = clicked;
     final AirMapMode mode = frame.getAirMapMode();
-    if (mode != null && mode.isEnabled()) {
+    if (mode != null) {
       final Optional<AirMapMode.ArrowHit> arrow = mode.arrowHit(md.getMapPoint());
       if (arrow.isPresent() && selectedZone != null && isActive() && listening) {
         AirSelection.applyArrow(
@@ -198,10 +198,15 @@ public final class AirAllocationPanel extends ActionPanel {
         return;
       }
       final Optional<AirMapMode.Hit> hit = mode.hit(md.getMapPoint());
+      if (hit.isPresent() && hit.get().moved() && !md.isRightButton()) {
+        frame.setStatusErrorMessage(
+            "Those aircraft have already moved this step; undo the move to change it.");
+        return;
+      }
       if (hit.isPresent()) {
         units = hit.get().units();
         territory = hit.get().zone();
-      } else if (territory != null && !AirZoneAttachment.isAirZone(territory)) {
+      } else if (mode.isEnabled() && territory != null && !AirZoneAttachment.isAirZone(territory)) {
         units = List.of();
         territory = mode.zoneOf(territory).orElse(null);
       }
@@ -431,24 +436,33 @@ public final class AirAllocationPanel extends ActionPanel {
     return String.join(", ", parts);
   }
 
-  /** Takes staged (own and allies') departures off the zones' stacks in air map mode. */
+  /**
+   * Shows the staged moves (own and allies') as made, as a TripleA move would: the aircraft leave
+   * their zone and appear in the new one, in the boxes and on the air map.
+   */
   private void showDepartures() {
     final AirMapMode mode = frame.getAirMapMode();
     if (mode == null) {
       return;
     }
     final Map<Territory, Map<GamePlayer, IntegerMap<UnitType>>> leaving = new HashMap<>();
+    final Map<Territory, Map<GamePlayer, IntegerMap<UnitType>>> arriving = new HashMap<>();
     final Map<GamePlayer, List<AirMove>> all = new LinkedHashMap<>(allied);
     all.put(getCurrentPlayer(), staged);
     all.forEach(
         (owner, moves) ->
             moves.forEach(
-                m ->
-                    leaving
-                        .computeIfAbsent(m.from(), k -> new HashMap<>())
-                        .computeIfAbsent(owner, k -> new IntegerMap<>())
-                        .add(m.unitType(), m.count())));
-    mode.setLeaving(leaving);
+                m -> {
+                  leaving
+                      .computeIfAbsent(m.from(), k -> new HashMap<>())
+                      .computeIfAbsent(owner, k -> new IntegerMap<>())
+                      .add(m.unitType(), m.count());
+                  arriving
+                      .computeIfAbsent(m.to(), k -> new HashMap<>())
+                      .computeIfAbsent(owner, k -> new IntegerMap<>())
+                      .add(m.unitType(), m.count());
+                }));
+    mode.setPending(leaving, arriving);
   }
 
   private void movesChanged() {
@@ -470,7 +484,8 @@ public final class AirAllocationPanel extends ActionPanel {
         AirSelection.wrap(
             AirSelection.HELP
                 + " Or use the arrows here, or beside the stack on the air map."
-                + " Then click the zone to send them to.<br>Enemies see these moves only at the"
+                + " Then click the zone to send them to: they move there at once, as in any"
+                + " move, and Undo puts them back.<br>Enemies see these moves only at the"
                 + " reveal"
                 + (stage == Stage.FIGHTERS ? "; the bombers' moves are already revealed." : ".")));
     hint.setBorder(BorderFactory.createEmptyBorder(4, 5, 4, 5));
@@ -609,8 +624,6 @@ public final class AirAllocationPanel extends ActionPanel {
                   draw.mapData().getPlayerColor(owner.getName()));
             }
           });
-      allied.forEach((owner, moves) -> paintMoves(g, data, owner, moves, true));
-      paintMoves(g, data, getCurrentPlayer(), staged, false);
       if (selectedZone != null && !selected.isEmpty() && mousePoint != null) {
         paintPreview(g, data);
       }
@@ -651,46 +664,6 @@ public final class AirAllocationPanel extends ActionPanel {
     } else if (mousePoint.distance(from) > 20) {
       AirDraw.arrow(g, from, mousePoint, Color.WHITE, 2.5f, true, "", 0);
       AirSelection.paintShadow(g, frame.getUiContext(), player, selected, mousePoint);
-    }
-  }
-
-  private void paintMoves(
-      final Graphics2D g,
-      final GameData data,
-      final GamePlayer owner,
-      final List<AirMove> moves,
-      final boolean ally) {
-    final Color color = draw.mapData().getPlayerColor(owner.getName());
-    final Map<Territory, Integer> outCount = new HashMap<>();
-    for (final AirMove m : moves) {
-      final Point arrival =
-          draw.ghostStack(
-              g,
-              data,
-              m.to(),
-              owner,
-              m.unitType(),
-              m.count(),
-              ally ? color : AirDraw.PENDING_LINE,
-              true);
-      AirDraw.arrow(
-          g,
-          draw.center(m.from()),
-          arrival,
-          ally ? color : AirDraw.PENDING_LINE,
-          ally ? 3f : 4.5f,
-          ally,
-          "",
-          20);
-      outCount.merge(m.from(), m.count(), Integer::sum);
-    }
-    if (!ally) {
-      // how many leave each box
-      outCount.forEach(
-          (zone, count) -> {
-            final Point c = draw.center(zone);
-            AirDraw.tag(g, count + " leaving", c.x, c.y - 30, AirDraw.PENDING_LINE);
-          });
     }
   }
 }

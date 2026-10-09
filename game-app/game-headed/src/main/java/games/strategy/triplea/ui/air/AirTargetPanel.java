@@ -155,7 +155,7 @@ public final class AirTargetPanel extends ActionPanel {
       getMap().setUnitHighlight(List.of());
       if (frame.getAirMapMode() != null) {
         frame.getAirMapMode().setBusy(false);
-        frame.getAirMapMode().setLeaving(Map.of());
+        frame.getAirMapMode().setPending(Map.of(), Map.of());
         frame.getAirMapMode().setOpenZone(null, null, java.util.Set.of());
       }
       frame.clearStatusMessage();
@@ -198,7 +198,7 @@ public final class AirTargetPanel extends ActionPanel {
     List<Unit> units = clickedUnits;
     Territory territory = clicked;
     final AirMapMode mode = frame.getAirMapMode();
-    if (mode != null && mode.isEnabled()) {
+    if (mode != null) {
       final Optional<AirMapMode.ArrowHit> arrow = mode.arrowHit(md.getMapPoint());
       if (arrow.isPresent() && selectedZone != null && isActive() && listening) {
         AirSelection.applyArrow(
@@ -547,7 +547,7 @@ public final class AirTargetPanel extends ActionPanel {
           .computeIfAbsent(getCurrentPlayer(), k -> new IntegerMap<>())
           .add(a.unitType(), a.count());
     }
-    mode.setLeaving(leaving);
+    mode.setPending(leaving, Map.of());
   }
 
   private void strikesChanged() {

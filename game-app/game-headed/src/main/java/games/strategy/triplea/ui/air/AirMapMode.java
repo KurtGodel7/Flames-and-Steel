@@ -80,7 +80,11 @@ public final class AirMapMode implements MapOverlay {
   private static final int ICONS_PER_ROW = 5;
 
   /** A drawn aircraft stack (or a zone's name label) that can be clicked. */
-  public record Hit(Territory zone, List<Unit> units) {}
+  public record Hit(Territory zone, List<Unit> units, boolean moved) {}
+
+  /** One stack as drawn: an owner's aircraft of one type (moved ones merged in). */
+  private record Item(
+      GamePlayer owner, ImageKey key, UnitType type, int count, List<Unit> units, boolean moved) {}
 
   private record Group(GamePlayer owner, List<UnitCategory> categories) {}
 
@@ -123,6 +127,11 @@ public final class AirMapMode implements MapOverlay {
 
   // set by the air panels
   private volatile Map<String, Integer> leaving = Map.of();
+  private volatile Map<Territory, Map<GamePlayer, IntegerMap<UnitType>>> arriving = Map.of();
+  private volatile Set<Territory> changedZones = Set.of();
+  private final List<Rectangle> boxHitRects = new ArrayList<>();
+  private final List<Hit> boxHits = new ArrayList<>();
+  private final Map<String, Rectangle> boxStackRect = new HashMap<>();
   private @Nullable Territory openZone;
   private @Nullable GamePlayer openPlayer;
   private Set<UnitType> arrowTypes = Set.of();
@@ -244,10 +253,15 @@ public final class AirMapMode implements MapOverlay {
 
   /** The stack (or zone label) drawn at a map point, when this view is on. */
   public Optional<Hit> hit(final Point mapPoint) {
-    if (!enabled) {
-      return Optional.empty();
-    }
     synchronized (hits) {
+      for (int i = boxHitRects.size() - 1; i >= 0; i--) {
+        if (boxHitRects.get(i).contains(mapPoint)) {
+          return Optional.of(boxHits.get(i));
+        }
+      }
+      if (!enabled) {
+        return Optional.empty();
+      }
       for (int i = hitRects.size() - 1; i >= 0; i--) {
         if (hitRects.get(i).contains(mapPoint)) {
           return Optional.of(hits.get(i));
@@ -258,12 +272,18 @@ public final class AirMapMode implements MapOverlay {
   }
 
   /**
-   * Aircraft already staged to leave their zone: they are taken off that zone's stacks (the move's
-   * arrow and the destination show them).
+   * Moves staged this step, shown as if made, as a TripleA move would be: the aircraft are taken
+   * off their zone and drawn in their new zone (in the boxes and on the air map). The game itself
+   * changes only at the reveal.
+   *
+   * @param leaving aircraft leaving each zone, by owner and type
+   * @param arriving aircraft arriving in each zone, by owner and type
    */
-  public void setLeaving(final Map<Territory, Map<GamePlayer, IntegerMap<UnitType>>> moves) {
+  public void setPending(
+      final Map<Territory, Map<GamePlayer, IntegerMap<UnitType>>> leaving,
+      final Map<Territory, Map<GamePlayer, IntegerMap<UnitType>>> arriving) {
     final Map<String, Integer> result = new HashMap<>();
-    moves.forEach(
+    leaving.forEach(
         (zone, byOwner) ->
             byOwner.forEach(
                 (owner, types) ->
@@ -275,7 +295,11 @@ public final class AirMapMode implements MapOverlay {
                                     stackKey(zone, owner, type),
                                     types.getInt(type),
                                     Integer::sum))));
-    leaving = result;
+    this.leaving = result;
+    this.arriving = Map.copyOf(arriving);
+    final Set<Territory> changed = new HashSet<>(leaving.keySet());
+    changed.addAll(arriving.keySet());
+    this.changedZones = Set.copyOf(changed);
     repaint();
   }
 
@@ -308,9 +332,8 @@ public final class AirMapMode implements MapOverlay {
   /** Where a nation's stack of one aircraft type is drawn in a zone's panel, while painting. */
   public Optional<Rectangle> stackRect(
       final Territory zone, final GamePlayer owner, final UnitType type) {
-    return enabled
-        ? Optional.ofNullable(stackRect.get(stackKey(zone, owner, type)))
-        : Optional.empty();
+    final String key = stackKey(zone, owner, type);
+    return Optional.ofNullable(enabled ? stackRect.get(key) : boxStackRect.get(key));
   }
 
   private static String stackKey(
@@ -382,7 +405,10 @@ public final class AirMapMode implements MapOverlay {
       hits.clear();
       arrowRects.clear();
       arrowHits.clear();
+      boxHitRects.clear();
+      boxHits.clear();
     }
+    boxStackRect.clear();
     pendingSpot.clear();
     panelRect.clear();
     stackRect.clear();
@@ -394,6 +420,9 @@ public final class AirMapMode implements MapOverlay {
       if (dirty) {
         dirty = false;
         refresh(paintData, mapData);
+      }
+      for (final Territory zone : changedZones) {
+        paintBox(g, paintData, mapData, zone);
       }
       if (!enabled) {
         paintHoverLink(g, mapData);
@@ -479,6 +508,119 @@ public final class AirMapMode implements MapOverlay {
     }
   }
 
+  /** A zone's stacks as drawn: departures taken off, arrivals added, each owner in turn order. */
+  private List<List<Item>> items(final GameData paintData, final Territory zone) {
+    final Map<GamePlayer, List<Item>> byOwner = new LinkedHashMap<>();
+    final Map<String, Integer> leftToRemove = new HashMap<>();
+    for (final Group group : stacks.getOrDefault(zone, List.of())) {
+      for (final UnitCategory category : group.categories()) {
+        final String key = stackKey(zone, group.owner(), category.getType());
+        final int remove =
+            Math.min(
+                category.getUnits().size(),
+                leftToRemove.computeIfAbsent(key, k -> leaving.getOrDefault(k, 0)));
+        leftToRemove.put(key, leftToRemove.get(key) - remove);
+        final int count = category.getUnits().size() - remove;
+        if (count > 0) {
+          byOwner
+              .computeIfAbsent(group.owner(), k -> new ArrayList<>())
+              .add(
+                  new Item(
+                      group.owner(),
+                      ImageKey.of(category),
+                      category.getType(),
+                      count,
+                      List.copyOf(category.getUnits()),
+                      false));
+        }
+      }
+    }
+    arriving
+        .getOrDefault(zone, Map.of())
+        .forEach(
+            (owner, types) -> {
+              final List<Item> list = byOwner.computeIfAbsent(owner, k -> new ArrayList<>());
+              for (final UnitType type : types.keySet()) {
+                final int n = types.getInt(type);
+                boolean merged = false;
+                for (int i = 0; i < list.size() && !merged; i++) {
+                  final Item item = list.get(i);
+                  if (item.type().equals(type) && !item.key().isDamaged()) {
+                    list.set(
+                        i,
+                        new Item(owner, item.key(), type, item.count() + n, item.units(), false));
+                    merged = true;
+                  }
+                }
+                if (!merged) {
+                  list.add(
+                      new Item(
+                          owner,
+                          ImageKey.builder().player(owner).type(type).build(),
+                          type,
+                          n,
+                          List.of(),
+                          true));
+                }
+              }
+            });
+    final List<List<Item>> result = new ArrayList<>();
+    for (final GamePlayer p : paintData.getPlayerList().getPlayers()) {
+      final List<Item> list = byOwner.get(p);
+      if (list != null && !list.isEmpty()) {
+        result.add(list);
+      }
+    }
+    return result;
+  }
+
+  private static final Map<ZoneType, Color> BOX_FILL =
+      Map.of(
+          ZoneType.OCEAN, new Color(0x1F, 0x3D, 0x62),
+          ZoneType.COASTAL, new Color(0x2C, 0x54, 0x70),
+          ZoneType.LAND, new Color(0x5B, 0x50, 0x35),
+          ZoneType.BOMB, new Color(0x5E, 0x2B, 0x29),
+          ZoneType.RESERVE, new Color(0x45, 0x45, 0x45));
+
+  /**
+   * Redraws a box's stacks when staged moves change them, the way the map draws units: icons with
+   * counts in the box's unit spots.
+   */
+  private void paintBox(
+      final Graphics2D g, final GameData paintData, final MapData mapData, final Territory zone) {
+    final Rectangle box = mapData.getBoundingRect(zone);
+    final List<Point> spots = mapData.getPlacementPoints(zone);
+    if (spots.isEmpty()) {
+      return;
+    }
+    final int top = spots.stream().mapToInt(p -> p.y).min().orElse(box.y) - 2;
+    final ZoneType type = AirZoneAttachment.get(zone).orElseThrow().getZoneType();
+    g.setColor(BOX_FILL.getOrDefault(type, Color.DARK_GRAY));
+    g.fillRect(box.x + 1, top, box.width - 2, box.y + box.height - top - 1);
+    final UnitImageFactory images = uiContext.getUnitImageFactory();
+    final int w = images.getUnitImageWidth();
+    final int h = images.getUnitImageHeight();
+    int slot = 0;
+    for (final List<Item> group : items(paintData, zone)) {
+      for (final Item item : group) {
+        if (slot >= spots.size()) {
+          return;
+        }
+        final Point p = spots.get(slot++);
+        g.drawImage(images.getImage(item.key()), p.x, p.y, null);
+        if (item.count() > 1) {
+          AirDraw.countLabel(g, String.valueOf(item.count()), p.x + w + 2, p.y + h);
+        }
+        final Rectangle rect = new Rectangle(p.x, p.y, w, h);
+        synchronized (hits) {
+          boxHitRects.add(rect);
+          boxHits.add(new Hit(zone, item.units(), item.moved()));
+        }
+        boxStackRect.putIfAbsent(stackKey(zone, item.owner(), item.type()), rect);
+      }
+    }
+  }
+
   /** One zone's aircraft: a dark panel with the zone's name and each nation's stacks. */
   private void paintPanel(
       final Graphics2D g,
@@ -490,31 +632,15 @@ public final class AirMapMode implements MapOverlay {
     final UnitImageFactory images = uiContext.getUnitImageFactory();
     final int w = images.getUnitImageWidth();
     final int h = images.getUnitImageHeight();
-    final List<Group> groups = stacks.getOrDefault(zone, List.of());
     final String title = (bomb ? "STRATEGIC: " : "") + AirAllocation.zoneName(zone);
     g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 13));
     final FontMetrics fm = g.getFontMetrics();
     final int titleHeight = fm.getHeight() + 2;
-    // what each stack shows once staged departures are taken off
-    final Map<String, Integer> leftToRemove = new HashMap<>();
-    final Map<UnitCategory, Integer> shown = new HashMap<>();
+    final List<List<Item>> groups = items(paintData, zone);
     int rows = 0;
     int maxPerRow = 0;
-    for (final Group group : groups) {
-      int n = 0;
-      for (final UnitCategory category : group.categories()) {
-        final String key = stackKey(zone, group.owner(), category.getType());
-        final int remove =
-            Math.min(
-                category.getUnits().size(),
-                leftToRemove.computeIfAbsent(key, k -> leaving.getOrDefault(k, 0)));
-        leftToRemove.put(key, leftToRemove.get(key) - remove);
-        final int count = category.getUnits().size() - remove;
-        shown.put(category, count);
-        if (count > 0) {
-          n++;
-        }
-      }
+    for (final List<Item> group : groups) {
+      final int n = group.size();
       rows += (n + ICONS_PER_ROW - 1) / ICONS_PER_ROW;
       maxPerRow = Math.max(maxPerRow, Math.min(n, ICONS_PER_ROW));
     }
@@ -526,7 +652,7 @@ public final class AirMapMode implements MapOverlay {
     panelRect.put(zone, r);
     g.setColor(PANEL_BACK);
     g.fillRoundRect(r.x, r.y, r.width, r.height, 10, 10);
-    final boolean contested = isContested(zone, groups);
+    final boolean contested = isContested(zone, stacks.getOrDefault(zone, List.of()));
     if (bomb) {
       g.setColor(bombColor(paintData, mapData, zone));
       g.setStroke(dashed(3f));
@@ -537,41 +663,34 @@ public final class AirMapMode implements MapOverlay {
     g.drawRoundRect(r.x, r.y, r.width, r.height, 10, 10);
     g.setColor(Color.WHITE);
     g.drawString(title, r.x + 6, r.y + fm.getAscent() + 2);
-    record(new Rectangle(r.x, r.y, r.width, titleHeight), new Hit(zone, List.of()));
+    record(new Rectangle(r.x, r.y, r.width, titleHeight), new Hit(zone, List.of(), false));
     int y = r.y + titleHeight;
     final Set<UnitType> arrowsDrawn = new HashSet<>();
-    for (final Group group : groups) {
+    for (final List<Item> group : groups) {
       int col = 0;
-      boolean any = false;
-      for (final UnitCategory category : group.categories()) {
-        final int count = shown.get(category);
-        if (count <= 0) {
-          continue;
-        }
+      for (final Item item : group) {
         if (col == ICONS_PER_ROW) {
           col = 0;
           y += h + 4;
         }
-        any = true;
         final int x = r.x + 6 + col * cell;
-        g.setColor(mapData.getPlayerColor(group.owner().getName()));
+        g.setColor(mapData.getPlayerColor(item.owner().getName()));
         g.fillRect(x, y + 2, 4, h - 4);
-        g.drawImage(images.getImage(ImageKey.of(category)), x + 5, y, null);
-        AirDraw.countLabel(g, String.valueOf(count), x + w + 14, y + h);
-        record(new Rectangle(x, y, cell, h), new Hit(zone, List.copyOf(category.getUnits())));
+        g.drawImage(images.getImage(item.key()), x + 5, y, null);
+        AirDraw.countLabel(g, String.valueOf(item.count()), x + w + 14, y + h);
+        record(new Rectangle(x, y, cell, h), new Hit(zone, item.units(), item.moved()));
         stackRect.putIfAbsent(
-            stackKey(zone, group.owner(), category.getType()), new Rectangle(x, y, w + 16, h));
+            stackKey(zone, item.owner(), item.type()), new Rectangle(x, y, w + 16, h));
         if (open
-            && group.owner().equals(openPlayer)
-            && arrowTypes.contains(category.getType())
-            && arrowsDrawn.add(category.getType())) {
-          paintArrows(g, category.getType(), x + w + 17, y, h);
+            && item.owner().equals(openPlayer)
+            && arrowTypes.contains(item.type())
+            && !item.moved()
+            && arrowsDrawn.add(item.type())) {
+          paintArrows(g, item.type(), x + w + 17, y, h);
         }
         col++;
       }
-      if (any) {
-        y += h + 4;
-      }
+      y += h + 4;
     }
     pendingSpot.put(zone, new Point(r.x + 6, r.y + r.height + 6));
     if (contested) {
