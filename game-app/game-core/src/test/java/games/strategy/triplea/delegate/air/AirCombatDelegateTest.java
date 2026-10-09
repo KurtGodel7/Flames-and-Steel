@@ -12,6 +12,7 @@ import static games.strategy.triplea.delegate.GameDataTestUtil.removeFrom;
 import static games.strategy.triplea.delegate.GameDataTestUtil.russians;
 import static games.strategy.triplea.delegate.GameDataTestUtil.submarine;
 import static games.strategy.triplea.delegate.GameDataTestUtil.territory;
+import static games.strategy.triplea.delegate.GameDataTestUtil.transport;
 import static games.strategy.triplea.delegate.MockDelegateBridge.advanceToStep;
 import static games.strategy.triplea.delegate.MockDelegateBridge.newDelegateBridge;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -159,6 +160,31 @@ class AirCombatDelegateTest {
     assertThat(count(seaZone, british), is(0));
     // the sunk battleship fires back with its defense and the remainder die hits
     assertThat(count(naval, germans), is(2));
+  }
+
+  @Test
+  void transportsAreLostOnceTheirEscortIsSunk() {
+    addTo(naval, bomber.create(3, germans)); // 12: two hits sink the battleship
+    addTo(seaZone, battleship(gameData).create(1, british));
+    addTo(seaZone, transport(gameData).create(2, british));
+
+    strike(
+        germans, new TargetAssignment(naval, bomber, 3, new Target(seaZone, TargetKind.SURFACE)));
+
+    assertThat(count(seaZone, british), is(0));
+  }
+
+  @Test
+  void transportsAreNeverCasualtiesWhileEscorted() {
+    addTo(naval, bomber.create(1, germans)); // 4: remainder die hits once
+    addTo(seaZone, battleship(gameData).create(1, british));
+    addTo(seaZone, transport(gameData).create(2, british));
+
+    strike(
+        germans, new TargetAssignment(naval, bomber, 1, new Target(seaZone, TargetKind.SURFACE)));
+
+    // the hit damaged the battleship; both transports are untouched
+    assertThat(seaZone.getUnitCollection().countMatches(Matches.unitIsSeaTransport()), is(2));
   }
 
   @Test

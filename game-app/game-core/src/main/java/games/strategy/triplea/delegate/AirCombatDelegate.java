@@ -225,6 +225,18 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
       if (kind == TargetKind.SURFACE && !hit.all().isEmpty()) {
         shipsHit.put(strike, hit.all());
       }
+      if (kind == TargetKind.SURFACE && !strike.survivors().isEmpty()) {
+        // transports are never casualties, but are lost once nothing protects them
+        final List<Unit> transports = AirCombat.getUndefendedTransports(attacker, t);
+        if (!transports.isEmpty()) {
+          bridge
+              .getHistoryWriter()
+              .addChildToEvent(
+                  MyFormatter.unitsToText(transports) + " undefended in " + t.getName() + ", lost",
+                  transports);
+          bridge.addChange(ChangeFactory.removeUnits(t, transports));
+        }
+      }
     }
     // 3. strategic bombing
     final IntegerMap<Territory> bombed = new IntegerMap<>();

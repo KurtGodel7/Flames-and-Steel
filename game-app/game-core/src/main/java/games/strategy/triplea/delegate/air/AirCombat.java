@@ -160,14 +160,35 @@ public class AirCombat {
                     && Matches.unitIsNotInfrastructure().test(u));
   }
 
-  /** Enemy ships of the given kind (surface or submarines) in a sea zone. */
+  /**
+   * Enemy ships of the given kind (surface or submarines) in a sea zone that can take hits.
+   * Transports are never casualties; see {@link #getUndefendedTransports}.
+   */
   public static List<Unit> getShipTargetUnits(
       final GamePlayer attacker, final Territory seaZone, final boolean subs) {
     return seaZone
         .getUnitCollection()
         .getMatches(
             enemyShip(attacker)
-                .and(subs ? Matches.unitCanEvade() : Matches.unitCanEvade().negate()));
+                .and(subs ? Matches.unitCanEvade() : Matches.unitCanEvade().negate())
+                .and(Matches.unitIsSeaTransportButNotCombatSeaTransport().negate()));
+  }
+
+  /**
+   * Enemy transports in the sea zone once no other enemy ship is left to protect them; an attack
+   * with surviving aircraft destroys them.
+   */
+  public static List<Unit> getUndefendedTransports(
+      final GamePlayer attacker, final Territory seaZone) {
+    final boolean defended =
+        seaZone.anyUnitsMatch(
+            enemyShip(attacker).and(Matches.unitIsSeaTransportButNotCombatSeaTransport().negate()));
+    return defended
+        ? List.of()
+        : seaZone
+            .getUnitCollection()
+            .getMatches(
+                enemyShip(attacker).and(Matches.unitIsSeaTransportButNotCombatSeaTransport()));
   }
 
   private static java.util.function.Predicate<Unit> enemyShip(final GamePlayer player) {

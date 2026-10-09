@@ -13,7 +13,6 @@ import games.strategy.triplea.attachments.ApcAttachment;
 import games.strategy.triplea.attachments.PlayerAttachment;
 import games.strategy.triplea.attachments.TechAbilityAttachment;
 import games.strategy.triplea.delegate.AirReserve;
-import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.TechAdvance;
 import games.strategy.triplea.delegate.TechTracker;
 import games.strategy.triplea.formatter.MyFormatter;
@@ -223,7 +222,7 @@ public class Apcs {
         lines.add(
             "APC in "
                 + territory.get().getName()
-                + ": no free sea zone next to it, so no "
+                + ": no sea zone next to it, so no "
                 + type.get().getName()
                 + " this turn");
         continue;
@@ -249,7 +248,7 @@ public class Apcs {
 
   /**
    * Where an APC's new units appear: its own territory, or for ships the first adjacent sea zone
-   * without enemy units.
+   * (enemy ships there do not prevent it).
    */
   private static Optional<Territory> placeFor(
       final UnitType type,
@@ -262,7 +261,6 @@ public class Apcs {
     return map.getNeighbors(apcTerritory).stream()
         .filter(Territory::isWater)
         .filter(t -> !AirZoneAttachment.isAirZone(t))
-        .filter(t -> !t.anyUnitsMatch(Matches.enemyUnit(player)))
         .sorted(Comparator.comparing(Territory::getName))
         .findFirst();
   }
