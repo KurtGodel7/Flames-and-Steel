@@ -24,6 +24,8 @@ import games.strategy.engine.delegate.IDelegateBridge;
 import games.strategy.triplea.attachments.AirUnitAttachment;
 import games.strategy.triplea.attachments.AirZoneAttachment;
 import games.strategy.triplea.delegate.AirAllocationDelegate;
+import games.strategy.triplea.delegate.AirCarrierCheckDelegate;
+import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.air.AirAllocation.AirMove;
 import games.strategy.triplea.delegate.air.AirAllocation.Stage;
 import games.strategy.triplea.xml.TestMapGameData;
@@ -59,6 +61,10 @@ class AirAllocationTest {
     zone(frontB, "zoneType", "land");
     zone(frontC, "zoneType", "land");
     zone(ocean, "zoneType", "ocean");
+    // the fronts cover British land, so British aircraft are in range there
+    for (final Territory front : List.of(frontA, frontB, frontC)) {
+      zone(front, "coveredTerritories", "United Kingdom");
+    }
     zone(frontA, "adjacentZones", frontB.getName());
     zone(frontB, "adjacentZones", frontA.getName());
     zone(ocean, "coveredTerritories", oceanSeaZone.getName());
@@ -145,6 +151,91 @@ class AirAllocationTest {
 
     airUnit(carrier(gameData), "fleetCarrier", "true");
     assertThat(valid(Stage.FIGHTERS, new AirMove(frontA, ocean, fighter, 1)), is(true));
+  }
+
+  @Test
+  void landFrontOutOfRangeIsRefused() {
+    final Territory far = farFromBritishLand();
+    zone(frontC, "coveredTerritories", far.getName());
+    resetCovered(frontC, far);
+
+    assertThat(valid(Stage.BOMBERS, new AirMove(reserve, frontC, bomber, 1)), is(false));
+  }
+
+  @Test
+  void aircraftStayingInAZoneOutOfRangeBlockTheAllocation() {
+    // front A's only covered territory is now far away: its bombers must leave
+    resetCovered(frontA, farFromBritishLand());
+
+    assertThat(valid(Stage.BOMBERS), is(false));
+    assertThat(valid(Stage.BOMBERS, new AirMove(frontA, reserve, bomber, 2)), is(true));
+  }
+
+  @Test
+  void bombZoneDefendersMayAlwaysEnterAttackersNeedATargetInRange() {
+    final Territory bombZone = territory("8 Sea Zone", gameData);
+    removeFrom(bombZone, bombZone.getUnits());
+    zone(bombZone, "zoneType", "bomb");
+    zone(bombZone, "bombedPlayer", british.getName());
+    final GamePlayer germans = germans(gameData);
+    addTo(reserve, bomber.create(1, germans));
+    // British land (with factories) is far beyond a range-2 German bomber's reach
+    final int savedMovement = bomber.getUnitAttachment().getMovement(germans);
+    setMovement(2);
+
+    assertThat(valid(Stage.BOMBERS, new AirMove(reserve, bombZone, bomber, 1)), is(true));
+    assertThat(
+        AirAllocation.validate(
+                germans,
+                Stage.BOMBERS,
+                List.of(new AirMove(reserve, bombZone, bomber, 1)),
+                gameData.getMap())
+            .isPresent(),
+        is(true));
+    setMovement(savedMovement);
+  }
+
+  @Test
+  void aircraftOutOfRangeReturnToTheReserveAtTheEndOfTheRound() {
+    resetCovered(frontA, farFromBritishLand());
+    final AirCarrierCheckDelegate check = new AirCarrierCheckDelegate();
+    check.initialize("airCarrierCheck", "Carrier check");
+    gameData
+        .getSequence()
+        .addStep(new GameStep("airCarrierCheck", "check", null, check, gameData, new Properties()));
+    final IDelegateBridge bridge = newDelegateBridge(british);
+    advanceToStep(bridge, "airCarrierCheck");
+    check.setDelegateBridgeAndPlayer(bridge);
+
+    check.start();
+
+    assertThat(frontA.getUnitCollection().countMatches(Matches.unitIsAir()), is(0));
+    assertThat(AirAllocation.getAircraft(british, reserve, Stage.FIGHTERS).size(), is(3));
+  }
+
+  private Territory farFromBritishLand() {
+    final int range = AirRange.range(bomber, british);
+    return gameData.getMap().getTerritories().stream()
+        .filter(t -> !t.isWater())
+        .filter(t -> !AirRange.landWithinReach(british, List.of(t), range))
+        .findFirst()
+        .orElseThrow();
+  }
+
+  private void resetCovered(final Territory zone, final Territory only) {
+    try {
+      AirZoneAttachment.get(zone)
+          .orElseThrow()
+          .getPropertyOrThrow("coveredTerritories")
+          .resetValue();
+    } catch (final Exception e) {
+      throw new IllegalStateException(e);
+    }
+    zone(zone, "coveredTerritories", only.getName());
+  }
+
+  private void setMovement(final int movement) {
+    set(bomber.getUnitAttachment(), "movement", String.valueOf(movement));
   }
 
   @Test

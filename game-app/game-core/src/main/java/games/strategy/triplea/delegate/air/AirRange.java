@@ -8,8 +8,11 @@ import games.strategy.engine.data.UnitType;
 import games.strategy.triplea.attachments.AirUnitAttachment;
 import games.strategy.triplea.attachments.AirZoneAttachment;
 import games.strategy.triplea.attachments.AirZoneAttachment.ZoneType;
+import games.strategy.triplea.attachments.ApcAttachment;
+import games.strategy.triplea.delegate.Matches;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import lombok.experimental.UtilityClass;
 
@@ -58,6 +61,43 @@ public class AirRange {
       }
     }
     return false;
+  }
+
+  /**
+   * Whether an aircraft of this type could fly to the zone and back (fork request, 2026-10-08).
+   * Land fronts: a covered territory within half its range of a friendly land landing spot. Bomb
+   * zones: always for the bombed nation and its allies (they defend); for attackers, a factory or
+   * APC territory of the bombed nation within half the range of a landing spot. Coastal and
+   * open-ocean zones are checked with carrier capacity elsewhere; the reserve needs no check.
+   */
+  public static boolean canOperateIn(
+      final GamePlayer player, final Territory zone, final UnitType type) {
+    final AirZoneAttachment attachment = AirZoneAttachment.get(zone).orElseThrow();
+    final int range = range(type, player);
+    switch (attachment.getZoneType()) {
+      case LAND:
+        return landWithinReach(player, attachment.getCoveredTerritories(), range);
+      case BOMB:
+        final GamePlayer bombed = attachment.getBombedPlayer();
+        if (bombed == null
+            || bombed.equals(player)
+            || player.getData().getRelationshipTracker().isAllied(player, bombed)) {
+          return true;
+        }
+        return landWithinReach(player, bombingTargets(bombed), range);
+      default:
+        return true;
+    }
+  }
+
+  /** The bombed nation's factory and APC territories. */
+  private static List<Territory> bombingTargets(final GamePlayer bombed) {
+    return bombed.getData().getMap().getTerritoriesOwnedBy(bombed).stream()
+        .filter(
+            t ->
+                t.anyUnitsMatch(
+                    Matches.unitCanProduceUnits().or(u -> ApcAttachment.isApc(u.getType()))))
+        .toList();
   }
 
   /** Whether some friendly land landing spot is within half the range of any of these places. */

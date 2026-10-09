@@ -46,12 +46,52 @@ public class AirCarrierCheckDelegate extends BaseTripleADelegate {
         }
       }
     } else if (step.startsWith("airCarrierCheck")) {
+      returnOutOfRangeAircraft();
       for (final GamePlayer player : getData().getPlayerList().getPlayers()) {
         for (final Territory zone : AirZoneAttachment.getAirZones(getData().getMap())) {
           checkZone(player, zone);
         }
       }
       carrierZoneAtStart = new HashMap<>();
+    }
+  }
+
+  /**
+   * Aircraft in a land front or Bomb zone they could no longer enter (landing spots lost during the
+   * round) return to the reserve; they are not destroyed.
+   */
+  private void returnOutOfRangeAircraft() {
+    final Optional<Territory> reserve = AirZoneAttachment.getReserve(getData().getMap());
+    if (reserve.isEmpty()) {
+      return;
+    }
+    final CompositeChange change = new CompositeChange();
+    final List<String> lines = new ArrayList<>();
+    for (final Territory zone : AirZoneAttachment.getAirZones(getData().getMap())) {
+      final ZoneType type = AirZoneAttachment.get(zone).orElseThrow().getZoneType();
+      if (type != ZoneType.LAND && type != ZoneType.BOMB) {
+        continue;
+      }
+      final List<Unit> outOfRange =
+          zone.getUnitCollection()
+              .getMatches(
+                  u ->
+                      Matches.unitIsAir().test(u)
+                          && !AirRange.canOperateIn(u.getOwner(), zone, u.getType()));
+      if (!outOfRange.isEmpty()) {
+        change.add(ChangeFactory.moveUnits(zone, reserve.get(), outOfRange));
+        lines.add(
+            MyFormatter.unitsToText(outOfRange)
+                + " out of range in "
+                + zone.getName()
+                + ", back to "
+                + reserve.get().getName());
+      }
+    }
+    if (!lines.isEmpty()) {
+      bridge.getHistoryWriter().startEvent("Aircraft out of range return to the reserve");
+      lines.forEach(line -> bridge.getHistoryWriter().addChildToEvent(line));
+      bridge.addChange(change);
     }
   }
 

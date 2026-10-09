@@ -130,7 +130,60 @@ public class AirAllocation {
                 + ".");
       }
     }
+    final Optional<String> rangeError = checkRange(player, stage, moves, map);
+    if (rangeError.isPresent()) {
+      return rangeError;
+    }
     return checkCarrierCapacity(player, stage, moves, map);
+  }
+
+  /**
+   * Every aircraft of this stage that would be in a land front or Bomb zone after the moves (moving
+   * in or staying) must be able to fly there and back.
+   */
+  private static Optional<String> checkRange(
+      final GamePlayer player, final Stage stage, final List<AirMove> moves, final GameMap map) {
+    for (final Territory zone : AirZoneAttachment.getAirZones(map)) {
+      final ZoneType type = AirZoneAttachment.get(zone).orElseThrow().getZoneType();
+      if (type != ZoneType.LAND && type != ZoneType.BOMB) {
+        continue;
+      }
+      for (final UnitType unitType :
+          new HashSet<>(stageAircraftAfterMoves(player, stage, moves, zone))) {
+        if (!AirRange.canOperateIn(player, zone, unitType)) {
+          return Optional.of(
+              unitType.getName()
+                  + " cannot operate in "
+                  + zone.getName()
+                  + ": no "
+                  + (type == ZoneType.BOMB ? "target" : "part of it")
+                  + " is within half its range ("
+                  + AirRange.range(unitType, player) / 2
+                  + ") of a friendly landing spot. Move it elsewhere or to the reserve.");
+        }
+      }
+    }
+    return Optional.empty();
+  }
+
+  /** Types of the player's aircraft of this stage in the zone once the moves are made. */
+  private static List<UnitType> stageAircraftAfterMoves(
+      final GamePlayer player, final Stage stage, final List<AirMove> moves, final Territory zone) {
+    final List<UnitType> result = new ArrayList<>();
+    for (final Unit unit : getAircraft(player, zone, stage)) {
+      result.add(unit.getType());
+    }
+    for (final AirMove move : moves) {
+      for (int i = 0; i < move.count(); i++) {
+        if (move.from().equals(zone)) {
+          result.remove(move.unitType());
+        }
+        if (move.to().equals(zone)) {
+          result.add(move.unitType());
+        }
+      }
+    }
+    return result;
   }
 
   private static Optional<String> checkCarrierCapacity(
