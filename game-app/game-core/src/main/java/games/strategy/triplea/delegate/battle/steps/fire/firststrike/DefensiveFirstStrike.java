@@ -14,6 +14,7 @@ import games.strategy.triplea.delegate.battle.MustFightBattle.ReturnFire;
 import games.strategy.triplea.delegate.battle.steps.BattleStep;
 import games.strategy.triplea.delegate.battle.steps.fire.FireRoundStepsFactory;
 import games.strategy.triplea.delegate.battle.steps.fire.MainDiceRoller;
+import games.strategy.triplea.delegate.battle.steps.fire.NavalPhases;
 import games.strategy.triplea.delegate.battle.steps.fire.SelectMainBattleCasualties;
 import games.strategy.triplea.delegate.battle.steps.fire.general.FiringGroupSplitterGeneral;
 import java.util.Collections;
@@ -66,8 +67,9 @@ public class DefensiveFirstStrike implements BattleStep {
       return State.NOT_APPLICABLE;
     }
 
-    // ww2v2 rules require subs to always fire in a sub phase
-    if (Properties.getWW2V2(battleState.getGameData().getProperties())) {
+    // ww2v2 rules require subs to always fire in a sub phase; so do Flames and Steel naval phases
+    if (Properties.getWW2V2(battleState.getGameData().getProperties())
+        || NavalPhases.apply(battleState)) {
       return State.FIRST_STRIKE;
     }
 

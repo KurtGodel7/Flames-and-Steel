@@ -56,6 +56,8 @@ public interface Constants {
   String TWO_HIT_BATTLESHIPS_REPAIR_END_OF_TURN = "Units Repair Hits End Turn";
   // Flames and Steel: once a unit is hit, later hits go to it until it dies
   String STICKY_HITS = "Sticky Hits";
+  // Flames and Steel: destroyers fire first, then subs (surprise shot), then the rest of the fleet
+  String NAVAL_COMBAT_PHASES = "Naval Combat Phases";
   String WW2V2 = "WW2V2";
   String TOTAL_VICTORY = "Total Victory";
   String HONORABLE_SURRENDER = "Honorable Surrender";

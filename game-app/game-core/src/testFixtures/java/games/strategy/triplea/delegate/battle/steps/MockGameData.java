@@ -35,6 +35,7 @@ import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.UnitType;
 import games.strategy.engine.data.UnitTypeList;
 import games.strategy.engine.data.properties.GameProperties;
+import games.strategy.triplea.Constants;
 import games.strategy.triplea.delegate.TechTracker;
 import java.util.List;
 import java.util.Set;
@@ -171,6 +172,11 @@ public class MockGameData {
 
   public MockGameData withAlliedAirIndependent(final boolean value) {
     when(gameProperties.get(ALLIED_AIR_INDEPENDENT, false)).thenReturn(value);
+    return this;
+  }
+
+  public MockGameData withNavalCombatPhases(final boolean value) {
+    when(gameProperties.get(Constants.NAVAL_COMBAT_PHASES, false)).thenReturn(value);
     return this;
   }
 

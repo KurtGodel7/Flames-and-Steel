@@ -12,6 +12,7 @@ import games.strategy.triplea.Properties;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.battle.BattleState;
 import games.strategy.triplea.delegate.battle.steps.fire.FiringGroup;
+import games.strategy.triplea.delegate.battle.steps.fire.NavalPhases;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -45,7 +46,9 @@ public class FiringGroupSplitterGeneral
 
   public enum Type {
     NORMAL,
-    FIRST_STRIKE
+    FIRST_STRIKE,
+    /** Flames and Steel naval phases: destroyers fire first. */
+    DESTROYERS
   }
 
   BattleState.Side side;
@@ -114,10 +117,17 @@ public class FiringGroupSplitterGeneral
   }
 
   private Predicate<Unit> getFiringUnitPredicate(final BattleState battleState) {
+    if (type == Type.DESTROYERS) {
+      return Matches.unitIsDestroyer();
+    }
     final Predicate<Unit> predicate =
         (side == OFFENSE)
             ? Matches.unitIsFirstStrike()
             : Matches.unitIsFirstStrikeOnDefense(battleState.getGameData().getProperties());
+    if (type == Type.NORMAL && NavalPhases.apply(battleState)) {
+      // destroyers already fired in the destroyer phase
+      return predicate.negate().and(Matches.unitIsDestroyer().negate());
+    }
     return type == Type.NORMAL ? predicate.negate() : predicate;
   }
 

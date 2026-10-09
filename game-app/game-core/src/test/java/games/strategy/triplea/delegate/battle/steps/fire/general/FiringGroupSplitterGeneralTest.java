@@ -412,7 +412,11 @@ class FiringGroupSplitterGeneralTest {
         FiringGroupSplitterGeneral.of(OFFENSE, FiringGroupSplitterGeneral.Type.NORMAL, UNITS)
             .apply(
                 givenBattleStateBuilder()
-                    .gameData(givenGameData().withAlliedAirIndependent(true).build())
+                    .gameData(
+                        givenGameData()
+                            .withAlliedAirIndependent(true)
+                            .withNavalCombatPhases(false)
+                            .build())
                     .attacker(attacker)
                     .defender(defender)
                     .attackingUnits(List.of(airUnit, attackingSeaUnit))

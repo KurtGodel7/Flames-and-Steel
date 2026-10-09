@@ -14,6 +14,18 @@ public interface BattleActions {
 
   void clearWaitingToDieAndDamagedChangesInto(IDelegateBridge bridge, BattleState.Side... sides);
 
+  /**
+   * Flames and Steel naval phases: remembers the units now waiting to die (victims of the destroyer
+   * phase) so that they stay in the battle, and still fire, until the end of the round.
+   */
+  default void keepCurrentCasualtiesUntilRoundEnd() {}
+
+  /** Like clearWaitingToDieAndDamagedChangesInto, but keeps the remembered casualties. */
+  default void clearWaitingToDieExceptKept(
+      final IDelegateBridge bridge, final BattleState.Side... sides) {
+    clearWaitingToDieAndDamagedChangesInto(bridge, sides);
+  }
+
   void endBattle(IBattle.WhoWon whoWon, IDelegateBridge bridge);
 
   /**

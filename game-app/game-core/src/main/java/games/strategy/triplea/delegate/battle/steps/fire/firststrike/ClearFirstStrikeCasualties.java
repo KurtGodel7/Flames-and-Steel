@@ -13,6 +13,7 @@ import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.battle.BattleActions;
 import games.strategy.triplea.delegate.battle.BattleState;
 import games.strategy.triplea.delegate.battle.steps.BattleStep;
+import games.strategy.triplea.delegate.battle.steps.fire.NavalPhases;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
@@ -42,6 +43,11 @@ public class ClearFirstStrikeCasualties implements BattleStep {
   }
 
   private State calculateOffenseState() {
+    if (NavalPhases.apply(battleState)) {
+      return battleState.filterUnits(ALIVE, OFFENSE).stream().anyMatch(Matches.unitIsFirstStrike())
+          ? State.SNEAK_ATTACK
+          : State.NO_SNEAK_ATTACK;
+    }
     if (battleState.filterUnits(ALIVE, OFFENSE).stream().anyMatch(Matches.unitIsFirstStrike())) {
       final boolean canSneakAttack =
           battleState.filterUnits(ALIVE, DEFENSE).stream().noneMatch(Matches.unitIsDestroyer());
@@ -53,6 +59,13 @@ public class ClearFirstStrikeCasualties implements BattleStep {
   }
 
   private State calculateDefenseState() {
+    if (NavalPhases.apply(battleState)) {
+      return battleState.filterUnits(ALIVE, DEFENSE).stream()
+              .anyMatch(
+                  Matches.unitIsFirstStrikeOnDefense(battleState.getGameData().getProperties()))
+          ? State.SNEAK_ATTACK
+          : State.NO_SNEAK_ATTACK;
+    }
     if (battleState.filterUnits(ALIVE, DEFENSE).stream()
         .anyMatch(Matches.unitIsFirstStrikeOnDefense(battleState.getGameData().getProperties()))) {
       final GameState gameData = battleState.getGameData();
@@ -87,6 +100,11 @@ public class ClearFirstStrikeCasualties implements BattleStep {
       return;
     }
 
+    if (NavalPhases.apply(battleState)) {
+      // victims of the surprise shot go now; destroyer-phase victims still fire this round
+      battleActions.clearWaitingToDieExceptKept(bridge, OFFENSE, DEFENSE);
+      return;
+    }
     battleActions.clearWaitingToDieAndDamagedChangesInto(
         bridge, getSidesToClear().toArray(new BattleState.Side[0]));
   }

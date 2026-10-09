@@ -318,6 +318,11 @@ public final class Properties implements Constants {
     return properties.get(TWO_HIT_BATTLESHIPS_REPAIR_END_OF_TURN, false);
   }
 
+  /** Flames and Steel: naval battles fire destroyers, then subs, then the rest of the fleet. */
+  public static boolean getNavalCombatPhases(final GameProperties properties) {
+    return properties.get(NAVAL_COMBAT_PHASES, false);
+  }
+
   /** Flames and Steel: damaged units must take hits first, one unit filled at a time. */
   public static boolean getStickyHits(final GameProperties properties) {
     return properties.get(STICKY_HITS, false);

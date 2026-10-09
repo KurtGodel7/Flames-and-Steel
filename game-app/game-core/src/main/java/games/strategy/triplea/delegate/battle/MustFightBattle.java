@@ -76,6 +76,7 @@ import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import javax.annotation.Nullable;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.triplea.java.PredicateBuilder;
@@ -116,6 +117,9 @@ public class MustFightBattle extends DependentBattle
   private final Collection<Unit> killed = new ArrayList<>();
   // keep track of all the units that die this round to see if they change into another unit
   @RemoveOnNextMajorRelease private final List<Unit> killedDuringCurrentRound = new ArrayList<>();
+  // Flames and Steel naval phases: destroyer-phase casualties that stay until the round ends
+  // (null in saves from before this field existed)
+  private @Nullable List<Unit> keptCasualties = new ArrayList<>();
   // Our current execution state, we keep a stack of executables, this allows us to save our state
   // and resume while in the middle of a battle.
   private final ExecutionStack stack = new ExecutionStack();
@@ -517,6 +521,30 @@ public class MustFightBattle extends DependentBattle
       }
     }
     killedDuringCurrentRound.clear();
+  }
+
+  @Override
+  public void keepCurrentCasualtiesUntilRoundEnd() {
+    keptCasualties = new ArrayList<>(attackingWaitingToDie);
+    keptCasualties.addAll(defendingWaitingToDie);
+  }
+
+  @Override
+  public void clearWaitingToDieExceptKept(
+      final IDelegateBridge bridge, final BattleState.Side... sides) {
+    if (keptCasualties == null || keptCasualties.isEmpty()) {
+      clearWaitingToDieAndDamagedChangesInto(bridge, sides);
+      return;
+    }
+    final List<Unit> keptAttackers = new ArrayList<>(attackingWaitingToDie);
+    keptAttackers.retainAll(keptCasualties);
+    final List<Unit> keptDefenders = new ArrayList<>(defendingWaitingToDie);
+    keptDefenders.retainAll(keptCasualties);
+    attackingWaitingToDie.removeAll(keptAttackers);
+    defendingWaitingToDie.removeAll(keptDefenders);
+    clearWaitingToDieAndDamagedChangesInto(bridge, sides);
+    attackingWaitingToDie.addAll(keptAttackers);
+    defendingWaitingToDie.addAll(keptDefenders);
   }
 
   @RemoveOnNextMajorRelease("unitsKilledDuringRound can be removed as a parameter")
