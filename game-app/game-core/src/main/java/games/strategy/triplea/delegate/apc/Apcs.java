@@ -8,13 +8,17 @@ import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.UnitType;
 import games.strategy.engine.data.changefactory.ChangeFactory;
 import games.strategy.engine.delegate.IDelegateBridge;
+import games.strategy.triplea.attachments.AirZoneAttachment;
 import games.strategy.triplea.attachments.ApcAttachment;
 import games.strategy.triplea.attachments.PlayerAttachment;
 import games.strategy.triplea.attachments.TechAbilityAttachment;
+import games.strategy.triplea.delegate.AirReserve;
+import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.TechAdvance;
 import games.strategy.triplea.delegate.TechTracker;
 import games.strategy.triplea.formatter.MyFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -214,10 +218,24 @@ public class Apcs {
         continue;
       }
       progress.removeKey(id);
+      final Optional<Territory> placeAt = placeFor(type.get(), territory.get(), player, map);
+      if (placeAt.isEmpty()) {
+        lines.add(
+            "APC in "
+                + territory.get().getName()
+                + ": no free sea zone next to it, so no "
+                + type.get().getName()
+                + " this turn");
+        continue;
+      }
       final List<Unit> built = type.get().create(rate.getApcUnitsPerTurn(), player);
-      change.add(ChangeFactory.addUnits(territory.get(), built));
+      change.add(ChangeFactory.addUnits(placeAt.get(), built));
       lines.add(
-          "APC in " + territory.get().getName() + " builds " + MyFormatter.unitsToText(built));
+          "APC in "
+              + territory.get().getName()
+              + " builds "
+              + MyFormatter.unitsToText(built)
+              + (placeAt.get().equals(territory.get()) ? "" : " in " + placeAt.get().getName()));
     }
     change.add(ChangeFactory.attachmentPropertyChange(attachment, progress, "apcProgress"));
     if (!lines.isEmpty()) {
@@ -225,5 +243,27 @@ public class Apcs {
       lines.forEach(line -> bridge.getHistoryWriter().addChildToEvent(line));
     }
     bridge.addChange(change);
+    // aircraft built by APCs go straight to the aircraft reserve
+    AirReserve.sendAircraftToReserve(bridge, player);
+  }
+
+  /**
+   * Where an APC's new units appear: its own territory, or for ships the first adjacent sea zone
+   * without enemy units.
+   */
+  private static Optional<Territory> placeFor(
+      final UnitType type,
+      final Territory apcTerritory,
+      final GamePlayer player,
+      final GameMap map) {
+    if (!type.getUnitAttachment().isSea()) {
+      return Optional.of(apcTerritory);
+    }
+    return map.getNeighbors(apcTerritory).stream()
+        .filter(Territory::isWater)
+        .filter(t -> !AirZoneAttachment.isAirZone(t))
+        .filter(t -> !t.anyUnitsMatch(Matches.enemyUnit(player)))
+        .sorted(Comparator.comparing(Territory::getName))
+        .findFirst();
   }
 }

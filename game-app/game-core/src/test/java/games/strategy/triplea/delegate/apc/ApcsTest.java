@@ -125,6 +125,28 @@ class ApcsTest {
   }
 
   @Test
+  void shipsAppearInAnAdjacentSeaZone() {
+    final IDelegateBridge bridge = newDelegateBridge(germans);
+    final UnitType ship = gameData.getUnitTypeList().getUnitTypeOrThrow("submarine");
+    apc(ship, "apcUnitsPerTurn", "2");
+    Apcs.setProduction(bridge, germans, Map.of(germanApc, ship));
+
+    Apcs.produce(bridge, germans);
+
+    assertThat(count(germany, ship), is(0));
+    final int nearby =
+        gameData.getMap().getNeighbors(germany).stream()
+            .filter(Territory::isWater)
+            .mapToInt(
+                t ->
+                    t.getUnitCollection()
+                        .countMatches(
+                            Matches.unitIsOfType(ship).and(Matches.unitIsOwnedBy(germans))))
+            .sum();
+    assertThat(nearby > 0, is(true));
+  }
+
+  @Test
   void unitsNeedTheirTech() {
     assertThat(Apcs.getBuildableTypes(germans), contains(armour(gameData)));
     assertThat(
