@@ -129,6 +129,21 @@ public final class AirTargetPanel extends ActionPanel {
           clearSelection();
           draw.setAirMapMode(frame.getAirMapMode());
           showAssigned();
+          if (frame.getAirMapMode() != null) {
+            frame
+                .getAirMapMode()
+                .setActing(
+                    player,
+                    (zone, unit) ->
+                        unit.isOwnedBy(player)
+                            && AirCombat.isBomber(unit)
+                            && !AirCombat.getBombers(player, zone).isEmpty(),
+                    (zone, unit) ->
+                        AirZoneAttachment.get(zone).orElseThrow().getZoneType() == ZoneType.RESERVE
+                            ? "Aircraft in the reserve do not fight."
+                            : ResearchView.displayName(unit.getType().getName())
+                                + ": fighters do not strike targets.");
+          }
           if (!listening) {
             listening = true;
             getMap().addUnitSelectionListener(unitListener);
@@ -156,7 +171,7 @@ public final class AirTargetPanel extends ActionPanel {
       if (frame.getAirMapMode() != null) {
         frame.getAirMapMode().setBusy(false);
         frame.getAirMapMode().setPending(Map.of(), Map.of());
-        frame.getAirMapMode().setOpenZone(null, null, java.util.Set.of());
+        frame.getAirMapMode().setActing(null, (zone, unit) -> false, (zone, unit) -> "");
       }
       frame.clearStatusMessage();
     }
@@ -200,7 +215,12 @@ public final class AirTargetPanel extends ActionPanel {
     final AirMapMode mode = frame.getAirMapMode();
     if (mode != null) {
       final Optional<AirMapMode.ArrowHit> arrow = mode.arrowHit(md.getMapPoint());
-      if (arrow.isPresent() && selectedZone != null && isActive() && listening) {
+      if (arrow.isPresent() && isActive() && listening) {
+        // an arrow beside any of the nation's stacks: pick in that zone
+        if (!arrow.get().zone().equals(selectedZone)) {
+          selected.clear();
+          selectedZone = arrow.get().zone();
+        }
         AirSelection.applyArrow(
             selected, available(getCurrentPlayer(), selectedZone), arrow.get(), md);
         selectionChanged();
@@ -375,12 +395,6 @@ public final class AirTargetPanel extends ActionPanel {
     targets = result;
     if (frame.getAirMapMode() != null) {
       frame.getAirMapMode().setBusy(selectedZone != null);
-      frame
-          .getAirMapMode()
-          .setOpenZone(
-              selectedZone,
-              player,
-              selectedZone == null ? java.util.Set.of() : available(player, selectedZone).keySet());
     }
     if (selectedZone != null && !selected.isEmpty()) {
       frame.setStatusMessage(

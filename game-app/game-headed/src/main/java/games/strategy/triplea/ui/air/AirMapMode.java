@@ -34,18 +34,23 @@ import java.awt.Color;
 import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics2D;
+import java.awt.Image;
 import java.awt.Point;
 import java.awt.Polygon;
 import java.awt.Rectangle;
+import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.BiFunction;
+import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import javax.annotation.Nullable;
 import javax.swing.SwingUtilities;
@@ -80,7 +85,7 @@ public final class AirMapMode implements MapOverlay {
   private static final int ICONS_PER_ROW = 5;
 
   /** A drawn aircraft stack (or a zone's name label) that can be clicked. */
-  public record Hit(Territory zone, List<Unit> units, boolean moved) {}
+  public record Hit(Territory zone, List<Unit> units, boolean moved, @Nullable String greyed) {}
 
   /** One stack as drawn: an owner's aircraft of one type (moved ones merged in). */
   private record Item(
@@ -123,7 +128,7 @@ public final class AirMapMode implements MapOverlay {
   private @Nullable Territory hovered;
 
   /** An arrow button beside a stack: pick one more ({@code delta} 1) or one fewer (-1). */
-  public record ArrowHit(UnitType type, int delta) {}
+  public record ArrowHit(Territory zone, UnitType type, int delta) {}
 
   // set by the air panels
   private volatile Map<String, Integer> leaving = Map.of();
@@ -132,11 +137,16 @@ public final class AirMapMode implements MapOverlay {
   private final List<Rectangle> boxHitRects = new ArrayList<>();
   private final List<Hit> boxHits = new ArrayList<>();
   private final Map<String, Rectangle> boxStackRect = new HashMap<>();
-  private @Nullable Territory openZone;
-  private @Nullable GamePlayer openPlayer;
-  private Set<UnitType> arrowTypes = Set.of();
+  // the nation picking aircraft now (allocation or targets), which of its aircraft it may pick,
+  // and why the others are greyed
+  private @Nullable GamePlayer actingPlayer;
+  private BiPredicate<Territory, Unit> selectable = (zone, unit) -> false;
+  private BiFunction<Territory, Unit, String> greyReason = (zone, unit) -> "";
   private final List<Rectangle> arrowRects = new ArrayList<>();
   private final List<ArrowHit> arrowHits = new ArrayList<>();
+  private final List<Rectangle> boxArrowRects = new ArrayList<>();
+  private final List<ArrowHit> boxArrowHits = new ArrayList<>();
+  private final Map<ImageKey, Image> greyImages = new HashMap<>();
 
   public AirMapMode(
       final UiContext uiContext,
@@ -153,6 +163,20 @@ public final class AirMapMode implements MapOverlay {
           @Override
           public void mouseEntered(final @Nullable Territory territory) {
             hovered(territory);
+          }
+
+          @Override
+          public void mouseMoved(
+              final @Nullable Territory territory,
+              final games.strategy.triplea.ui.MouseDetails md) {
+            hit(md.getMapPoint())
+                .map(Hit::greyed)
+                .ifPresent(
+                    reason -> {
+                      if (!reason.isEmpty()) {
+                        status.accept(reason);
+                      }
+                    });
           }
         });
   }
@@ -303,23 +327,32 @@ public final class AirMapMode implements MapOverlay {
     repaint();
   }
 
-  /** The zone whose aircraft the player is picking: its stacks get arrow buttons. */
-  public void setOpenZone(
-      final @Nullable Territory zone,
+  /**
+   * The nation picking aircraft now. Its aircraft it may pick get arrow buttons everywhere (boxes
+   * and air map); its other aircraft are greyed, and pointing at them gives the reason. Pass null
+   * when no air step is running.
+   */
+  public void setActing(
       final @Nullable GamePlayer player,
-      final Set<UnitType> types) {
-    openZone = zone;
-    openPlayer = player;
-    arrowTypes = Set.copyOf(types);
+      final BiPredicate<Territory, Unit> selectable,
+      final BiFunction<Territory, Unit, String> greyReason) {
+    actingPlayer = player;
+    this.selectable = selectable;
+    this.greyReason = greyReason;
     repaint();
   }
 
-  /** The arrow button at a map point, when this view is on. */
+  /** The arrow button at a map point (in a box, or on the air map when it is on). */
   public Optional<ArrowHit> arrowHit(final Point mapPoint) {
-    if (!enabled) {
-      return Optional.empty();
-    }
     synchronized (hits) {
+      for (int i = 0; i < boxArrowRects.size(); i++) {
+        if (boxArrowRects.get(i).contains(mapPoint)) {
+          return Optional.of(boxArrowHits.get(i));
+        }
+      }
+      if (!enabled) {
+        return Optional.empty();
+      }
       for (int i = 0; i < arrowRects.size(); i++) {
         if (arrowRects.get(i).contains(mapPoint)) {
           return Optional.of(arrowHits.get(i));
@@ -405,6 +438,8 @@ public final class AirMapMode implements MapOverlay {
       hits.clear();
       arrowRects.clear();
       arrowHits.clear();
+      boxArrowRects.clear();
+      boxArrowHits.clear();
       boxHitRects.clear();
       boxHits.clear();
     }
@@ -421,7 +456,16 @@ public final class AirMapMode implements MapOverlay {
         dirty = false;
         refresh(paintData, mapData);
       }
-      for (final Territory zone : changedZones) {
+      final Set<Territory> boxes = new LinkedHashSet<>(changedZones);
+      if (actingPlayer != null) {
+        stacks.forEach(
+            (zone, groups) -> {
+              if (groups.stream().anyMatch(gr -> gr.owner().equals(actingPlayer))) {
+                boxes.add(zone);
+              }
+            });
+      }
+      for (final Territory zone : boxes) {
         paintBox(g, paintData, mapData, zone);
       }
       if (!enabled) {
@@ -574,6 +618,59 @@ public final class AirMapMode implements MapOverlay {
     return result;
   }
 
+  private boolean isSelectable(final Territory zone, final Item item) {
+    return actingPlayer != null
+        && item.owner().equals(actingPlayer)
+        && !item.units().isEmpty()
+        && selectable.test(zone, item.units().get(0));
+  }
+
+  /** Why the acting nation's stack cannot be picked now, or null if it is not greyed. */
+  private @Nullable String greyed(final Territory zone, final Item item) {
+    if (actingPlayer == null
+        || !item.owner().equals(actingPlayer)
+        || item.units().isEmpty()
+        || isSelectable(zone, item)) {
+      return null;
+    }
+    return greyReason.apply(zone, item.units().get(0));
+  }
+
+  /** A unit image in faded grey, for aircraft that cannot be picked in this step. */
+  private Image greyImage(final ImageKey key) {
+    return greyImages.computeIfAbsent(
+        key,
+        k -> {
+          final Image base = uiContext.getUnitImageFactory().getImage(k);
+          final int w = Math.max(1, base.getWidth(null));
+          final int h = Math.max(1, base.getHeight(null));
+          final BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+          final Graphics2D ig = img.createGraphics();
+          ig.drawImage(base, 0, 0, null);
+          ig.dispose();
+          for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+              final int argb = img.getRGB(x, y);
+              final int a = (argb >>> 24) & 0xFF;
+              final int lum =
+                  (int)
+                      (0.3 * ((argb >> 16) & 0xFF)
+                          + 0.59 * ((argb >> 8) & 0xFF)
+                          + 0.11 * (argb & 0xFF));
+              final int light = 110 + lum / 3;
+              img.setRGB(x, y, ((a * 55 / 100) << 24) | (light << 16) | (light << 8) | light);
+            }
+          }
+          return img;
+        });
+  }
+
+  private Image imageOf(final Territory zone, final Item item) {
+    return greyed(zone, item) != null
+        ? greyImage(item.key())
+        : uiContext.getUnitImageFactory().getImage(item.key());
+  }
+
   private static final Map<ZoneType, Color> BOX_FILL =
       Map.of(
           ZoneType.OCEAN, new Color(0x1F, 0x3D, 0x62),
@@ -600,23 +697,36 @@ public final class AirMapMode implements MapOverlay {
     final UnitImageFactory images = uiContext.getUnitImageFactory();
     final int w = images.getUnitImageWidth();
     final int h = images.getUnitImageHeight();
-    int slot = 0;
+    final int x0 = spots.get(0).x;
+    final int cell = w + 16 + (actingPlayer != null ? 18 : 0);
+    final int cols = Math.max(1, (box.x + box.width - 4 - x0) / cell);
+    int x = x0;
+    int y = spots.get(0).y;
+    int col = 0;
+    final Set<UnitType> arrowsDrawn = new HashSet<>();
     for (final List<Item> group : items(paintData, zone)) {
       for (final Item item : group) {
-        if (slot >= spots.size()) {
+        if (col == cols) {
+          col = 0;
+          x = x0;
+          y += h + 6;
+        }
+        if (y + h > box.y + box.height) {
           return;
         }
-        final Point p = spots.get(slot++);
-        g.drawImage(images.getImage(item.key()), p.x, p.y, null);
-        if (item.count() > 1) {
-          AirDraw.countLabel(g, String.valueOf(item.count()), p.x + w + 2, p.y + h);
-        }
-        final Rectangle rect = new Rectangle(p.x, p.y, w, h);
+        g.drawImage(imageOf(zone, item), x, y, null);
+        AirDraw.countLabel(g, String.valueOf(item.count()), x + w + 14, y + h);
+        final Rectangle rect = new Rectangle(x, y, w + 16, h);
         synchronized (hits) {
           boxHitRects.add(rect);
-          boxHits.add(new Hit(zone, item.units(), item.moved()));
+          boxHits.add(new Hit(zone, item.units(), item.moved(), greyed(zone, item)));
         }
         boxStackRect.putIfAbsent(stackKey(zone, item.owner(), item.type()), rect);
+        if (isSelectable(zone, item) && arrowsDrawn.add(item.type())) {
+          paintArrows(g, zone, item.type(), x + w + 17, y, h, true);
+        }
+        col++;
+        x += cell;
       }
     }
   }
@@ -644,8 +754,7 @@ public final class AirMapMode implements MapOverlay {
       rows += (n + ICONS_PER_ROW - 1) / ICONS_PER_ROW;
       maxPerRow = Math.max(maxPerRow, Math.min(n, ICONS_PER_ROW));
     }
-    final boolean open = zone.equals(openZone);
-    final int cell = w + 16 + (open ? 18 : 0);
+    final int cell = w + 16 + (actingPlayer != null ? 18 : 0);
     final int width = Math.max(fm.stringWidth(title) + 12, 14 + maxPerRow * cell);
     final int height = titleHeight + rows * (h + 4) + 6;
     final Rectangle r = new Rectangle(at.x - width / 2, at.y - height / 2, width, height);
@@ -663,7 +772,7 @@ public final class AirMapMode implements MapOverlay {
     g.drawRoundRect(r.x, r.y, r.width, r.height, 10, 10);
     g.setColor(Color.WHITE);
     g.drawString(title, r.x + 6, r.y + fm.getAscent() + 2);
-    record(new Rectangle(r.x, r.y, r.width, titleHeight), new Hit(zone, List.of(), false));
+    record(new Rectangle(r.x, r.y, r.width, titleHeight), new Hit(zone, List.of(), false, null));
     int y = r.y + titleHeight;
     final Set<UnitType> arrowsDrawn = new HashSet<>();
     for (final List<Item> group : groups) {
@@ -676,17 +785,15 @@ public final class AirMapMode implements MapOverlay {
         final int x = r.x + 6 + col * cell;
         g.setColor(mapData.getPlayerColor(item.owner().getName()));
         g.fillRect(x, y + 2, 4, h - 4);
-        g.drawImage(images.getImage(item.key()), x + 5, y, null);
+        g.drawImage(imageOf(zone, item), x + 5, y, null);
         AirDraw.countLabel(g, String.valueOf(item.count()), x + w + 14, y + h);
-        record(new Rectangle(x, y, cell, h), new Hit(zone, item.units(), item.moved()));
+        record(
+            new Rectangle(x, y, cell, h),
+            new Hit(zone, item.units(), item.moved(), greyed(zone, item)));
         stackRect.putIfAbsent(
             stackKey(zone, item.owner(), item.type()), new Rectangle(x, y, w + 16, h));
-        if (open
-            && item.owner().equals(openPlayer)
-            && arrowTypes.contains(item.type())
-            && !item.moved()
-            && arrowsDrawn.add(item.type())) {
-          paintArrows(g, item.type(), x + w + 17, y, h);
+        if (isSelectable(zone, item) && arrowsDrawn.add(item.type())) {
+          paintArrows(g, zone, item.type(), x + w + 17, y, h, false);
         }
         col++;
       }
@@ -708,15 +815,23 @@ public final class AirMapMode implements MapOverlay {
 
   /** Up and down buttons beside a stack, like the stock unit chooser's arrows. */
   private void paintArrows(
-      final Graphics2D g, final UnitType type, final int x, final int y, final int h) {
+      final Graphics2D g,
+      final Territory zone,
+      final UnitType type,
+      final int x,
+      final int y,
+      final int h,
+      final boolean inBox) {
     final int half = h / 2 - 1;
     paintArrow(g, new Rectangle(x, y, 15, half), true);
     paintArrow(g, new Rectangle(x, y + half + 2, 15, half), false);
     synchronized (hits) {
-      arrowRects.add(new Rectangle(x, y, 15, half));
-      arrowHits.add(new ArrowHit(type, 1));
-      arrowRects.add(new Rectangle(x, y + half + 2, 15, half));
-      arrowHits.add(new ArrowHit(type, -1));
+      final List<Rectangle> rects = inBox ? boxArrowRects : arrowRects;
+      final List<ArrowHit> arrows = inBox ? boxArrowHits : arrowHits;
+      rects.add(new Rectangle(x, y, 15, half));
+      arrows.add(new ArrowHit(zone, type, 1));
+      rects.add(new Rectangle(x, y + half + 2, 15, half));
+      arrows.add(new ArrowHit(zone, type, -1));
     }
   }
 
@@ -882,9 +997,6 @@ public final class AirMapMode implements MapOverlay {
           bombs.put(zone, ZoneShape.of(land, mapData));
           bombAnchors.put(zone, bombPanelSpot(d, mapData, a.getBombedPlayer(), land));
         }
-      }
-      if (a.getZoneType() == ZoneType.RESERVE) {
-        continue;
       }
       final List<Unit> aircraft = zone.getUnitCollection().getMatches(Matches.unitIsAir());
       final Map<GamePlayer, List<UnitCategory>> byOwner = new LinkedHashMap<>();

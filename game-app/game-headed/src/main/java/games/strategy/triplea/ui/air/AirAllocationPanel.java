@@ -128,6 +128,19 @@ public final class AirAllocationPanel extends ActionPanel {
           clearSelection();
           draw.setAirMapMode(frame.getAirMapMode());
           showDepartures();
+          if (frame.getAirMapMode() != null) {
+            frame
+                .getAirMapMode()
+                .setActing(
+                    player,
+                    (zone, unit) -> unit.isOwnedBy(player) && AirAllocation.isInStage(unit, stage),
+                    (zone, unit) ->
+                        stage == Stage.BOMBERS
+                            ? ResearchView.displayName(unit.getType().getName())
+                                + ": fighters move in the next step (fighter allocation)."
+                            : ResearchView.displayName(unit.getType().getName())
+                                + ": bombers moved in the bomber step.");
+          }
           if (!listening) {
             listening = true;
             getMap().addUnitSelectionListener(unitListener);
@@ -155,7 +168,7 @@ public final class AirAllocationPanel extends ActionPanel {
       if (frame.getAirMapMode() != null) {
         frame.getAirMapMode().setBusy(false);
         frame.getAirMapMode().setPending(Map.of(), Map.of());
-        frame.getAirMapMode().setOpenZone(null, null, java.util.Set.of());
+        frame.getAirMapMode().setActing(null, (zone, unit) -> false, (zone, unit) -> "");
       }
       frame.clearStatusMessage();
     }
@@ -191,7 +204,12 @@ public final class AirAllocationPanel extends ActionPanel {
     final AirMapMode mode = frame.getAirMapMode();
     if (mode != null) {
       final Optional<AirMapMode.ArrowHit> arrow = mode.arrowHit(md.getMapPoint());
-      if (arrow.isPresent() && selectedZone != null && isActive() && listening) {
+      if (arrow.isPresent() && isActive() && listening) {
+        // an arrow beside any of the nation's stacks: pick in that zone
+        if (!arrow.get().zone().equals(selectedZone)) {
+          selected.clear();
+          selectedZone = arrow.get().zone();
+        }
         AirSelection.applyArrow(
             selected, available(getCurrentPlayer(), selectedZone), arrow.get(), md);
         selectionChanged();
@@ -354,12 +372,6 @@ public final class AirAllocationPanel extends ActionPanel {
     destinations = result;
     if (frame.getAirMapMode() != null) {
       frame.getAirMapMode().setBusy(selectedZone != null);
-      frame
-          .getAirMapMode()
-          .setOpenZone(
-              selectedZone,
-              player,
-              selectedZone == null ? java.util.Set.of() : available(player, selectedZone).keySet());
     }
     if (selectedZone != null && !selected.isEmpty()) {
       frame.setStatusMessage(
@@ -478,7 +490,11 @@ public final class AirAllocationPanel extends ActionPanel {
   private void rebuild(final GamePlayer player) {
     removeAll();
     actionLabel.setText(
-        player.getName() + (stage == Stage.BOMBERS ? " bomber" : " fighter") + " allocation");
+        AirSelection.wrap(
+            player.getName()
+                + (stage == Stage.BOMBERS
+                    ? ": bomber allocation (fighters move in the next step)"
+                    : ": fighter allocation (bombers have moved)")));
     add(leftAligned(actionLabel));
     hint.setText(
         AirSelection.wrap(
