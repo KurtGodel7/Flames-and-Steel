@@ -6,6 +6,7 @@ import games.strategy.engine.data.TerritoryEffect;
 import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.UnitType;
 import games.strategy.triplea.Properties;
+import games.strategy.triplea.delegate.air.AirCombat;
 import games.strategy.triplea.delegate.battle.BattleState;
 import games.strategy.triplea.delegate.battle.IBattle;
 import games.strategy.triplea.delegate.power.calculator.CombatValue;
@@ -103,6 +104,8 @@ final class BattleModel extends DefaultTableModel {
     final List<Unit> units = new ArrayList<>(this.units);
     final TotalPowerAndTotalRolls unitPowerAndRollsMap;
     final boolean isAirPreBattleOrPreRaid = battleType.isAirBattle();
+    // Flames and Steel air phase battles show their own values (dogfight, strike, AA, fire back)
+    final java.util.function.ToIntFunction<Unit> airZoneStrength;
     final boolean lhtrHeavyBombers = Properties.getLhtrHeavyBombers(gameData.getProperties());
     try (GameData.Unlocker ignored = gameData.acquireReadLock()) {
       final CombatValue combatValue;
@@ -127,13 +130,22 @@ final class BattleModel extends DefaultTableModel {
                 .build();
       }
       unitPowerAndRollsMap = PowerStrengthAndRolls.build(units, combatValue);
+      final List<Unit> enemies =
+          enemyBattleModel == null ? List.of() : new ArrayList<>(enemyBattleModel.getUnits());
+      airZoneStrength =
+          isAirPreBattleOrPreRaid && AirCombat.isAirZoneBattle(units, enemies)
+              ? u -> Math.min(gameData.getDiceSides(), AirCombat.displayStrength(u, enemies))
+              : null;
     }
     final List<UnitCategory> unitCategories =
         UnitSeparator.getSortedUnitCategories(units, gameData, uiContext.getMapData());
     for (final UnitCategory category : unitCategories) {
       final int[] shift = new int[gameData.getDiceSides() + 1];
       for (final Unit current : category.getUnits()) {
-        final int strength = unitPowerAndRollsMap.getStrength(current);
+        final int strength =
+            airZoneStrength != null
+                ? airZoneStrength.applyAsInt(current)
+                : unitPowerAndRollsMap.getStrength(current);
         shift[strength]++;
       }
       for (int i = 0; i <= gameData.getDiceSides(); i++) {

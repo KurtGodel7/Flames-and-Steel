@@ -10,6 +10,9 @@ import games.strategy.triplea.Constants;
 import games.strategy.triplea.attachments.AirUnitAttachment;
 import games.strategy.triplea.attachments.AirZoneAttachment;
 import games.strategy.triplea.attachments.AirZoneAttachment.ZoneType;
+import games.strategy.triplea.attachments.ApcAttachment;
+import games.strategy.triplea.delegate.air.AirAllocation;
+import games.strategy.triplea.delegate.air.AirBattleView;
 import games.strategy.triplea.delegate.air.AirCombat;
 import games.strategy.triplea.delegate.air.AirCombat.Hit;
 import games.strategy.triplea.delegate.air.AirCombat.Roll;
@@ -141,36 +144,87 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
       if (AirZoneAttachment.get(zone).orElseThrow().getZoneType() == ZoneType.RESERVE) {
         continue;
       }
-      for (int round = 1; round <= DOGFIGHT_ROUNDS; round++) {
-        final List<Unit> aircraft = zone.getUnitCollection().getMatches(Matches.unitIsAir());
-        if (aircraft.isEmpty()) {
-          break;
+      final List<Unit> aircraft = zone.getUnitCollection().getMatches(Matches.unitIsAir());
+      if (aircraft.isEmpty()) {
+        continue;
+      }
+      final GamePlayer first = aircraft.get(0).getOwner();
+      final List<Unit> sideA = new ArrayList<>();
+      final List<Unit> sideB = new ArrayList<>();
+      for (final Unit unit : aircraft) {
+        if (unit.getOwner().equals(first)
+            || getData().getRelationshipTracker().isAllied(first, unit.getOwner())) {
+          sideA.add(unit);
+        } else if (AirCombat.atWar(first, unit.getOwner())) {
+          sideB.add(unit);
         }
-        final GamePlayer first = aircraft.get(0).getOwner();
-        final List<Unit> sideA = new ArrayList<>();
-        final List<Unit> sideB = new ArrayList<>();
-        for (final Unit unit : aircraft) {
-          if (unit.getOwner().equals(first)
-              || getData().getRelationshipTracker().isAllied(first, unit.getOwner())) {
-            sideA.add(unit);
-          } else if (AirCombat.atWar(first, unit.getOwner())) {
-            sideB.add(unit);
-          }
-        }
-        if (sideB.isEmpty()) {
-          break;
-        }
-        if (round == 1) {
-          bridge.getHistoryWriter().startEvent("Dogfight in " + zone.getName());
-        }
-        final String text = "Dogfight in " + zone.getName() + ", round " + round;
-        final Roll rollA = fire(sideA, AirCombat::dogfightPower, text);
-        final Roll rollB = fire(sideB, AirCombat::dogfightPower, text);
-        // both sides fired before any losses are taken
-        AirCombat.takeHits(bridge, zone, sideB, sideA, rollA, text);
-        AirCombat.takeHits(bridge, zone, sideA, sideB, rollB, text);
+      }
+      if (!sideB.isEmpty()) {
+        fightDogfight(zone, sideA, sideB);
       }
     }
+  }
+
+  private void fightDogfight(final Territory zone, final List<Unit> sideA, final List<Unit> sideB) {
+    final GamePlayer playerA = AirCombat.chooser(sideA);
+    final GamePlayer playerB = AirCombat.chooser(sideB);
+    final List<String> steps = new ArrayList<>();
+    for (int round = 1; round <= DOGFIGHT_ROUNDS; round++) {
+      steps.add(fireStep(playerA, round));
+      steps.add(fireStep(playerB, round));
+      steps.add(casualtyStep(playerB, round));
+      steps.add(casualtyStep(playerA, round));
+    }
+    final AirBattleView view =
+        AirBattleView.show(
+            bridge,
+            zone,
+            "Dogfight in " + AirAllocation.zoneName(zone),
+            sideA,
+            sideB,
+            playerA,
+            playerB,
+            steps);
+    bridge.getHistoryWriter().startEvent("Dogfight in " + zone.getName());
+    for (int round = 1; round <= DOGFIGHT_ROUNDS; round++) {
+      final List<Unit> aliveA = alive(zone, sideA);
+      final List<Unit> aliveB = alive(zone, sideB);
+      if (aliveA.isEmpty() || aliveB.isEmpty()) {
+        break;
+      }
+      final String text = "Dogfight in " + zone.getName() + ", round " + round;
+      final Roll rollA = fire(aliveA, AirCombat::dogfightPower, text);
+      final DiceRoll diceA =
+          view.showDice(rollA, AirCombat.chooser(aliveA), fireStep(playerA, round));
+      final Roll rollB = fire(aliveB, AirCombat::dogfightPower, text);
+      final DiceRoll diceB =
+          view.showDice(rollB, AirCombat.chooser(aliveB), fireStep(playerB, round));
+      // both sides fired before any losses are taken
+      AirCombat.takeHits(
+          bridge, view, casualtyStep(playerB, round), zone, aliveB, aliveA, rollA, diceA, text);
+      AirCombat.takeHits(
+          bridge, view, casualtyStep(playerA, round), zone, aliveA, aliveB, rollB, diceB, text);
+    }
+    view.end(
+        playerA.getName()
+            + " lost "
+            + (sideA.size() - alive(zone, sideA).size())
+            + ", "
+            + playerB.getName()
+            + " lost "
+            + (sideB.size() - alive(zone, sideB).size()));
+  }
+
+  private static String fireStep(final GamePlayer player, final int round) {
+    return player.getName() + " fire, round " + round;
+  }
+
+  private static String casualtyStep(final GamePlayer player, final int round) {
+    return player.getName() + " casualties, round " + round;
+  }
+
+  private static List<Unit> alive(final Territory where, final List<Unit> units) {
+    return units.stream().filter(u -> where.getUnitCollection().contains(u)).toList();
   }
 
   private Roll fire(
@@ -200,6 +254,12 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
     }
   }
 
+  /**
+   * Each strike is one battle: AA at land targets first, then the attack, then (sea targets) the
+   * ships hit fire back. Tactical strikes come before strategic bombing. AA guns cannot be hit by
+   * strikes and each aircraft is in one strike only, so taking the strikes one at a time gives the
+   * same result as AA everywhere first, then all tactical strikes, then all bombing.
+   */
   private void resolveStrikes() {
     final List<Strike> strikes = buildStrikes();
     pending.clear();
@@ -207,86 +267,139 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
       return;
     }
     bridge.getHistoryWriter().startEvent("Air strikes");
-    // 1. AA guns at land targets (tactical and strategic) fire first
-    for (final Strike strike : strikes) {
-      if (strike.target().kind() == TargetKind.LAND
-          || strike.target().kind() == TargetKind.STRATEGIC) {
-        fireAa(strike);
-      }
-    }
-    // 2. tactical strikes
-    final Map<Strike, List<Unit>> shipsHit = new LinkedHashMap<>();
-    for (final Strike strike : strikes) {
-      final TargetKind kind = strike.target().kind();
-      if (kind == TargetKind.STRATEGIC || strike.survivors().isEmpty()) {
-        continue;
-      }
-      final GamePlayer attacker = AirCombat.chooser(strike.survivors());
-      final Territory t = strike.target().territory();
-      final List<Unit> targets =
-          kind == TargetKind.LAND
-              ? AirCombat.getLandTargetUnits(attacker, t)
-              : AirCombat.getShipTargetUnits(attacker, t, kind == TargetKind.SUBS);
-      final String text = "Air strike on " + strike.target().describe();
-      final Roll roll = fire(strike.survivors(), u -> AirCombat.strikePower(u, kind), text);
-      final Hit hit = AirCombat.takeHits(bridge, t, targets, strike.survivors(), roll, text);
-      if (kind == TargetKind.SURFACE && !hit.all().isEmpty()) {
-        shipsHit.put(strike, hit.all());
-      }
-      if (kind == TargetKind.SURFACE && !strike.survivors().isEmpty()) {
-        // transports are never casualties, but are lost once nothing protects them
-        final List<Unit> transports = AirCombat.getUndefendedTransports(attacker, t);
-        if (!transports.isEmpty()) {
-          bridge
-              .getHistoryWriter()
-              .addChildToEvent(
-                  MyFormatter.unitsToText(transports) + " undefended in " + t.getName() + ", lost",
-                  transports);
-          bridge.addChange(ChangeFactory.removeUnits(t, transports));
-        }
-      }
-    }
-    // 3. strategic bombing
     final IntegerMap<Territory> bombed = new IntegerMap<>();
     for (final Strike strike : strikes) {
-      if (strike.target().kind() == TargetKind.STRATEGIC && !strike.survivors().isEmpty()) {
-        strategicBombing(strike, bombed);
+      if (strike.target().kind() != TargetKind.STRATEGIC) {
+        fightStrike(strike, bombed);
       }
     }
-    // 4. ships destroyed or damaged by air attack fire back at their attackers
-    for (final Map.Entry<Strike, List<Unit>> entry : shipsHit.entrySet()) {
-      final Strike strike = entry.getKey();
-      if (strike.survivors().isEmpty()) {
-        continue;
+    for (final Strike strike : strikes) {
+      if (strike.target().kind() == TargetKind.STRATEGIC) {
+        fightStrike(strike, bombed);
       }
-      final String text = "Ships in " + strike.target().territory().getName() + " fire back";
-      final Roll roll = fire(entry.getValue(), AirCombat::shipFireBackPower, text);
-      AirCombat.takeHits(bridge, strike.zone(), strike.survivors(), entry.getValue(), roll, text);
     }
   }
 
-  private void fireAa(final Strike strike) {
-    final List<Unit> attackers = strike.survivors();
-    if (attackers.isEmpty()) {
+  private void fightStrike(final Strike strike, final IntegerMap<Territory> bombed) {
+    if (strike.survivors().isEmpty()) {
       return;
     }
-    final GamePlayer attacker = AirCombat.chooser(attackers);
+    final TargetKind kind = strike.target().kind();
+    final Territory t = strike.target().territory();
+    final GamePlayer attacker = AirCombat.chooser(strike.survivors());
     final List<Unit> aaGuns =
-        strike
-            .target()
-            .territory()
-            .getUnitCollection()
-            .getMatches(
-                Matches.unitIsAaForAnything().and(u -> AirCombat.atWar(attacker, u.getOwner())));
-    if (aaGuns.isEmpty()) {
+        kind == TargetKind.LAND || kind == TargetKind.STRATEGIC
+            ? t.getUnitCollection()
+                .getMatches(
+                    Matches.unitIsAaForAnything().and(u -> AirCombat.atWar(attacker, u.getOwner())))
+            : List.of();
+    final List<Unit> targets =
+        switch (kind) {
+          case LAND -> AirCombat.getLandTargetUnits(attacker, t);
+          case SURFACE -> AirCombat.getShipTargetUnits(attacker, t, false);
+          case SUBS -> AirCombat.getShipTargetUnits(attacker, t, true);
+          case STRATEGIC ->
+              t.getUnitCollection()
+                  .getMatches(
+                      u ->
+                          AirCombat.atWar(attacker, u.getOwner())
+                              && (Matches.unitCanProduceUnits().test(u)
+                                  || ApcAttachment.isApc(u.getType())));
+        };
+    final List<Unit> defenders = new ArrayList<>(targets);
+    aaGuns.stream().filter(u -> !defenders.contains(u)).forEach(defenders::add);
+    final GamePlayer defender = defenders.isEmpty() ? t.getOwner() : AirCombat.chooser(defenders);
+    final String aaFire = "AA fire";
+    final String aaCasualties = attacker.getName() + " casualties from AA";
+    final String strikeStep =
+        kind == TargetKind.STRATEGIC ? "Bombing" : attacker.getName() + " strike";
+    final String strikeCasualties = defender.getName() + " casualties";
+    final String fireBack = "Ships fire back";
+    final String fireBackCasualties = attacker.getName() + " casualties from ships";
+    final List<String> steps = new ArrayList<>();
+    if (!aaGuns.isEmpty()) {
+      steps.add(aaFire);
+      steps.add(aaCasualties);
+    }
+    steps.add(strikeStep);
+    if (kind != TargetKind.STRATEGIC) {
+      steps.add(strikeCasualties);
+    }
+    if (kind == TargetKind.SURFACE) {
+      steps.add(fireBack);
+      steps.add(fireBackCasualties);
+    }
+    final String title =
+        kind == TargetKind.STRATEGIC
+            ? "Strategic bombing of " + t.getName()
+            : "Air strike on " + strike.target().describe();
+    final AirBattleView view =
+        AirBattleView.show(
+            bridge, t, title, strike.survivors(), defenders, attacker, defender, steps);
+
+    // 1. AA guns fire first
+    if (!aaGuns.isEmpty()) {
+      final String text = "AA fire in " + t.getName();
+      final Roll roll = fire(aaGuns, AirCombat::aaPower, text);
+      final DiceRoll dice = view.showDice(roll, AirCombat.chooser(aaGuns), aaFire);
+      AirCombat.takeHits(
+          bridge, view, aaCasualties, strike.zone(), strike.survivors(), aaGuns, roll, dice, text);
+    }
+    if (strike.survivors().isEmpty()) {
+      view.end("All attacking aircraft lost");
       return;
     }
-    final String text = "AA fire in " + strike.target().territory().getName();
-    final Roll roll = fire(aaGuns, AirCombat::aaPower, text);
-    AirCombat.takeHits(bridge, strike.zone(), attackers, aaGuns, roll, text);
+    if (kind == TargetKind.STRATEGIC) {
+      view.gotoStep(strikeStep);
+      view.end(strategicBombing(strike, bombed));
+      return;
+    }
+    // 2. the strike
+    final String text = "Air strike on " + strike.target().describe();
+    final Roll roll = fire(strike.survivors(), u -> AirCombat.strikePower(u, kind), text);
+    final DiceRoll dice = view.showDice(roll, attacker, strikeStep);
+    final Hit hit =
+        AirCombat.takeHits(
+            bridge, view, strikeCasualties, t, targets, strike.survivors(), roll, dice, text);
+    if (kind == TargetKind.SURFACE) {
+      // transports are never casualties, but are lost once nothing protects them
+      final List<Unit> transports = AirCombat.getUndefendedTransports(attacker, t);
+      if (!transports.isEmpty()) {
+        bridge
+            .getHistoryWriter()
+            .addChildToEvent(
+                MyFormatter.unitsToText(transports) + " undefended in " + t.getName() + ", lost",
+                transports);
+        bridge.addChange(ChangeFactory.removeUnits(t, transports));
+      }
+      // 3. ships destroyed or damaged by the strike fire back
+      if (!hit.all().isEmpty() && !strike.survivors().isEmpty()) {
+        final String backText = "Ships in " + t.getName() + " fire back";
+        final Roll back = fire(hit.all(), AirCombat::shipFireBackPower, backText);
+        final DiceRoll backDice = view.showDice(back, AirCombat.chooser(hit.all()), fireBack);
+        AirCombat.takeHits(
+            bridge,
+            view,
+            fireBackCasualties,
+            strike.zone(),
+            strike.survivors(),
+            hit.all(),
+            back,
+            backDice,
+            backText);
+      }
+    }
+    final int lost = strike.aircraft().size() - strike.survivors().size();
+    view.end(
+        hit.killed().size()
+            + " destroyed, "
+            + hit.damaged().size()
+            + " damaged"
+            + (lost > 0 ? "; " + lost + " aircraft lost" : ""));
   }
 
-  private void strategicBombing(final Strike strike, final IntegerMap<Territory> bombed) {
+  /** Bombs the target and returns the result for the battle window. */
+  private String strategicBombing(final Strike strike, final IntegerMap<Territory> bombed) {
     final Territory t = strike.target().territory();
     final GamePlayer victim = t.getOwner();
     final int damage =
@@ -318,6 +431,13 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
     if (loss > 0) {
       bridge.addChange(ChangeFactory.changeResourcesChange(victim, pus, -loss));
     }
+    return damage
+        + " damage: "
+        + victim.getName()
+        + " loses "
+        + loss
+        + MyFormatter.pluralize(" PU", loss)
+        + (damage > capLeft ? " (limit " + AirCombat.bombingCap(t) + " per round)" : "");
   }
 
   private List<Strike> buildStrikes() {

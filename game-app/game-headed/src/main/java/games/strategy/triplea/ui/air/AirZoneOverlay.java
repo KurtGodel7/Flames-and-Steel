@@ -39,6 +39,7 @@ public final class AirZoneOverlay implements MapOverlay {
   static final Color COVER_FILL = new Color(255, 230, 80, 70);
   static final Color COVER_LINE = new Color(255, 214, 0);
   private static final Color LABEL_BACK = new Color(0, 0, 0, 170);
+  private static final Color DOGFIGHT = new Color(255, 70, 50);
 
   private final UiContext uiContext;
   private final @Nullable MapPanel mapPanel;
@@ -48,6 +49,7 @@ public final class AirZoneOverlay implements MapOverlay {
   private @Nullable GameData listening;
   private volatile boolean labelsDirty = true;
   private Map<Territory, List<Label>> labels = Map.of();
+  private List<Territory> contested = List.of();
   private final GameDataChangeListener changeListener = change -> labelsDirty = true;
 
   private record Label(String text, Color color, boolean over) {}
@@ -137,9 +139,38 @@ public final class AirZoneOverlay implements MapOverlay {
           }
         }
         labels = computed;
+        contested =
+            AirZoneAttachment.getAirZones(data.getMap()).stream()
+                .filter(AirZoneOverlay::isContested)
+                .toList();
       }
     }
     labels.forEach((zone, zoneLabels) -> paintLabels(g, mapData, zone, zoneLabels));
+    for (final Territory zone : contested) {
+      outline(g, mapData, zone, DOGFIGHT, 4f);
+      final Rectangle box = mapData.getBoundingRect(zone);
+      AirDraw.tag(g, "Dogfight", box.x + box.width - 45, box.y + 30, DOGFIGHT);
+    }
+  }
+
+  /** Enemy aircraft share the zone: a dogfight is due (not in the reserve). */
+  private static boolean isContested(final Territory zone) {
+    if (AirZoneAttachment.get(zone).orElseThrow().getZoneType() == ZoneType.RESERVE) {
+      return false;
+    }
+    final List<GamePlayer> owners =
+        zone.getUnitCollection().getMatches(Matches.unitIsAir()).stream()
+            .map(Unit::getOwner)
+            .distinct()
+            .toList();
+    for (final GamePlayer a : owners) {
+      for (final GamePlayer b : owners) {
+        if (a.getData().getRelationshipTracker().isAtWar(a, b)) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   static void paintCover(final Graphics2D g, final MapData mapData, final Territory zone) {

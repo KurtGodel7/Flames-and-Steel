@@ -31,7 +31,6 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.stream.Collectors;
 import lombok.experimental.UtilityClass;
 
@@ -287,15 +286,22 @@ public class AirCombat {
   }
 
   /**
-   * The owner with the most of the target units chooses where the hits go (sticky hits apply);
-   * damage is marked and destroyed units are removed.
+   * The owner with the most of the target units chooses where the hits go (sticky hits apply), in
+   * the battle window; damage is marked and destroyed units are removed, and the window shows the
+   * casualties.
+   *
+   * @param step the battle window step the casualties belong to
+   * @param dice the roll as the battle window shows it
    */
   public static Hit takeHits(
       final IDelegateBridge bridge,
+      final AirBattleView view,
+      final String step,
       final Territory location,
       final Collection<Unit> targets,
       final Collection<Unit> firing,
       final Roll roll,
+      final DiceRoll dice,
       final String text) {
     if (roll.hits() <= 0 || targets.isEmpty()) {
       return new Hit(List.of(), List.of());
@@ -320,8 +326,8 @@ public class AirCombat {
             location,
             bridge,
             text,
-            new DiceRoll(roll.dice(), roll.hits(), 0, false, chooser.getName()),
-            UUID.randomUUID(),
+            dice,
+            view.getId(),
             false,
             0,
             true);
@@ -342,7 +348,52 @@ public class AirCombat {
           .addChildToEvent(
               MyFormatter.unitsToText(damaged) + " damaged in " + location.getName(), damaged);
     }
+    view.showCasualties(
+        step, dice, chooser, chooser(firing), killed, damaged, details.getAutoCalculated());
     return new Hit(killed, damaged);
+  }
+
+  /**
+   * Whether a battle window shows an air phase battle: some of its units are in an air zone box
+   * (the aircraft; in a strike the targets are on the map).
+   */
+  public static boolean isAirZoneBattle(
+      final Collection<Unit> side, final Collection<Unit> enemies) {
+    final List<Unit> all = new ArrayList<>(side);
+    all.addAll(enemies);
+    if (all.isEmpty()) {
+      return false;
+    }
+    final GameData data = all.get(0).getData();
+    return AirZoneAttachment.getAirZones(data.getMap()).stream()
+        .anyMatch(zone -> all.stream().anyMatch(u -> zone.getUnitCollection().contains(u)));
+  }
+
+  /**
+   * The value a unit fires at in an air phase battle, for the battle window: dogfight power when
+   * both sides are aircraft, strike power for bombers against a target, AA for anti-aircraft guns,
+   * and fire-back for ships; 0 for units that do not fire.
+   */
+  public static int displayStrength(final Unit unit, final Collection<Unit> enemies) {
+    final boolean air = Matches.unitIsAir().test(unit);
+    final boolean enemiesAir = !enemies.isEmpty() && enemies.stream().allMatch(Matches.unitIsAir());
+    if (air && enemiesAir) {
+      return dogfightPower(unit);
+    }
+    if (air) {
+      final boolean sea = enemies.stream().anyMatch(Matches.unitIsSea());
+      final boolean subs =
+          sea && enemies.stream().filter(Matches.unitIsSea()).allMatch(Matches.unitCanEvade());
+      return strikePower(
+          unit, sea ? (subs ? TargetKind.SUBS : TargetKind.SURFACE) : TargetKind.LAND);
+    }
+    if (Matches.unitIsAaForAnything().test(unit)) {
+      return aaPower(unit);
+    }
+    if (Matches.unitIsSea().test(unit)) {
+      return shipFireBackPower(unit);
+    }
+    return 0;
   }
 
   /** Twice the territory's value: the most PUs one round of strategic bombing can destroy there. */
