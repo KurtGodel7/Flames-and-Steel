@@ -123,8 +123,6 @@ public final class AirZoneOverlay implements MapOverlay {
       final Territory hover = hovered;
       if (hover != null && AirZoneAttachment.isAirZone(hover)) {
         paintCover(g, mapData, hover);
-      } else if (hover != null && zoneOfTerritory.containsKey(hover)) {
-        outline(g, mapData, zoneOfTerritory.get(hover), COVER_LINE, 3f);
       }
       if (selectedZone != null && !selectedZone.equals(hover)) {
         paintCover(g, mapData, selectedZone);
@@ -252,6 +250,36 @@ public final class AirZoneOverlay implements MapOverlay {
       g.drawString(label.text(), box.x + 20, y + fm.getAscent() + 1);
       y += lineHeight;
     }
+  }
+
+  /** The carrier lines of a zone, e.g. "US 6/8 (jets 2/4)". Call with the read lock held. */
+  static List<String> carrierLines(final GameData data, final Territory zone) {
+    final List<String> lines = new ArrayList<>();
+    for (final GamePlayer player : data.getPlayerList().getPlayers()) {
+      final List<UnitType> aircraft = new ArrayList<>();
+      for (final Unit u :
+          zone.getUnitCollection()
+              .getMatches(u -> u.isOwnedBy(player) && Matches.unitIsAir().test(u))) {
+        aircraft.add(u.getType());
+      }
+      final CarrierLoad load = AirAllocation.carrierLoad(player, zone, aircraft);
+      if (load.cost() == 0 && load.capacity() == 0) {
+        continue;
+      }
+      lines.add(
+          shortName(player)
+              + " "
+              + load.cost()
+              + "/"
+              + load.capacity()
+              + (load.jetCost() > 0 || load.fleetCapacity() > 0
+                  ? " (jets " + load.jetCost() + "/" + load.fleetCapacity() + ")"
+                  : "")
+              + (load.cost() > load.capacity() || load.jetCost() > load.fleetCapacity()
+                  ? " over!"
+                  : ""));
+    }
+    return lines;
   }
 
   /** "US", "UK", "USSR" and so on; other nations by their first three letters. */

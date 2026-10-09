@@ -113,6 +113,7 @@ public final class AirTargetPanel extends ActionPanel {
           staged.addAll(start);
           this.store = store;
           clearSelection();
+          draw.setAirMapMode(frame.getAirMapMode());
           if (!listening) {
             listening = true;
             getMap().addUnitSelectionListener(unitListener);
@@ -137,6 +138,9 @@ public final class AirTargetPanel extends ActionPanel {
       getMap().removeMapSelectionListener(hoverListener);
       getMap().removeOverlay(overlay);
       getMap().setUnitHighlight(List.of());
+      if (frame.getAirMapMode() != null) {
+        frame.getAirMapMode().setBusy(false);
+      }
       frame.clearStatusMessage();
     }
   }
@@ -172,7 +176,18 @@ public final class AirTargetPanel extends ActionPanel {
   // ---- selecting bombers and targets
 
   private void clicked(
-      final List<Unit> units, final @Nullable Territory territory, final MouseDetails md) {
+      final List<Unit> clickedUnits, final @Nullable Territory clicked, final MouseDetails md) {
+    // in air map mode a click on a stack means that zone's aircraft
+    List<Unit> units = clickedUnits;
+    Territory territory = clicked;
+    final AirMapMode mode = frame.getAirMapMode();
+    if (mode != null && mode.isEnabled()) {
+      final Optional<AirMapMode.Hit> hit = mode.hit(md.getMapPoint());
+      if (hit.isPresent()) {
+        units = hit.get().units();
+        territory = hit.get().zone();
+      }
+    }
     if (!isActive() || !listening || territory == null) {
       return;
     }
@@ -197,9 +212,10 @@ public final class AirTargetPanel extends ActionPanel {
     if (selectedZone == null || selected.isEmpty()) {
       return;
     }
+    final Territory place = territory;
     final List<Target> here =
         targets.entrySet().stream()
-            .filter(e -> e.getValue() && e.getKey().territory().equals(territory))
+            .filter(e -> e.getValue() && e.getKey().territory().equals(place))
             .map(Map.Entry::getKey)
             .toList();
     if (here.isEmpty()) {
@@ -338,6 +354,9 @@ public final class AirTargetPanel extends ActionPanel {
       getMap().setUnitHighlight(List.of());
     }
     targets = result;
+    if (frame.getAirMapMode() != null) {
+      frame.getAirMapMode().setBusy(selectedZone != null);
+    }
     frame.clearStatusMessage();
     rebuild(player);
     getMap().repaint();

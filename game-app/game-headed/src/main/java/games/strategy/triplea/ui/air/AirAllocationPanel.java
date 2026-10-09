@@ -113,6 +113,7 @@ public final class AirAllocationPanel extends ActionPanel {
           this.revealed = revealed;
           this.store = store;
           clearSelection();
+          draw.setAirMapMode(frame.getAirMapMode());
           if (!listening) {
             listening = true;
             getMap().addUnitSelectionListener(unitListener);
@@ -137,6 +138,9 @@ public final class AirAllocationPanel extends ActionPanel {
       getMap().removeMapSelectionListener(hoverListener);
       getMap().removeOverlay(overlay);
       getMap().setUnitHighlight(List.of());
+      if (frame.getAirMapMode() != null) {
+        frame.getAirMapMode().setBusy(false);
+      }
       frame.clearStatusMessage();
     }
   }
@@ -164,7 +168,21 @@ public final class AirAllocationPanel extends ActionPanel {
   // ---- selection on the map
 
   private void unitsClicked(
-      final List<Unit> units, final @Nullable Territory territory, final MouseDetails md) {
+      final List<Unit> clickedUnits, final @Nullable Territory clicked, final MouseDetails md) {
+    // in air map mode a click on a stack, or anywhere in a zone's area, means that zone
+    List<Unit> units = clickedUnits;
+    Territory territory = clicked;
+    final AirMapMode mode = frame.getAirMapMode();
+    if (mode != null && mode.isEnabled()) {
+      final Optional<AirMapMode.Hit> hit = mode.hit(md.getMapPoint());
+      if (hit.isPresent()) {
+        units = hit.get().units();
+        territory = hit.get().zone();
+      } else if (territory != null && !AirZoneAttachment.isAirZone(territory)) {
+        units = List.of();
+        territory = mode.zoneOf(territory).orElse(null);
+      }
+    }
     if (!isActive() || !listening || territory == null) {
       return;
     }
@@ -309,6 +327,9 @@ public final class AirAllocationPanel extends ActionPanel {
       getMap().setUnitHighlight(List.of());
     }
     destinations = result;
+    if (frame.getAirMapMode() != null) {
+      frame.getAirMapMode().setBusy(selectedZone != null);
+    }
     frame.clearStatusMessage();
     rebuild(player);
     getMap().repaint();
@@ -329,7 +350,15 @@ public final class AirAllocationPanel extends ActionPanel {
     return Optional.empty();
   }
 
-  private void hovered(final @Nullable Territory territory) {
+  private void hovered(final @Nullable Territory hoveredTerritory) {
+    Territory territory = hoveredTerritory;
+    final AirMapMode mode = frame.getAirMapMode();
+    if (mode != null
+        && mode.isEnabled()
+        && territory != null
+        && !AirZoneAttachment.isAirZone(territory)) {
+      territory = mode.zoneOf(territory).orElse(territory);
+    }
     if (!listening || selectedZone == null || territory == null) {
       return;
     }

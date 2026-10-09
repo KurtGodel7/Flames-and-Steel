@@ -56,6 +56,7 @@ public class BottomBar extends JPanel implements TerritoryListener, ZoomMapListe
   private final JLabel stepLabel = new JLabel();
   private final JLabel roundLabel = new JLabel();
   private final JLabel zoomLabel = new JLabel();
+  private @Nullable JPanel stepPanel;
 
   public BottomBar(final UiContext uiContext, final GameData data, final boolean usingDiceServer) {
     this.uiContext = uiContext;
@@ -97,6 +98,7 @@ public class BottomBar extends JPanel implements TerritoryListener, ZoomMapListe
 
   private JPanel createStepPanel(boolean usingDiceServer) {
     final JPanel stepPanel = new JPanel();
+    this.stepPanel = stepPanel;
     stepPanel.setLayout(new java.awt.GridBagLayout());
     final var gridBuilder = new GridBagConstraintsBuilder().fill(GridBagConstraintsFill.BOTH);
     stepPanel.add(playerLabel, gridBuilder.gridX(0).build());
@@ -112,6 +114,16 @@ public class BottomBar extends JPanel implements TerritoryListener, ZoomMapListe
     playerLabel.setBorder(new EtchedBorder(EtchedBorder.RAISED));
     stepLabel.setHorizontalTextPosition(SwingConstants.LEADING);
     return stepPanel;
+  }
+
+  /** Flames and Steel: adds a control (the air map toggle) after the step and round labels. */
+  public void addStepControl(final java.awt.Component control) {
+    if (stepPanel != null) {
+      stepPanel.add(
+          control,
+          new GridBagConstraintsBuilder().fill(GridBagConstraintsFill.BOTH).gridX(4).build());
+      stepPanel.revalidate();
+    }
   }
 
   private void setStatus(final String msg) {

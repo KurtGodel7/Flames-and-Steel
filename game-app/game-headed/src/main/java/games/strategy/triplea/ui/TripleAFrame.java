@@ -73,6 +73,7 @@ import games.strategy.triplea.image.MapImage;
 import games.strategy.triplea.image.TileImageFactory;
 import games.strategy.triplea.settings.ClientSetting;
 import games.strategy.triplea.ui.air.AirAllocationPanel;
+import games.strategy.triplea.ui.air.AirMapMode;
 import games.strategy.triplea.ui.air.AirPanel;
 import games.strategy.triplea.ui.air.AirTargetPanel;
 import games.strategy.triplea.ui.air.AirZoneOverlay;
@@ -200,6 +201,7 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
   private @Nullable ResearchScreen researchScreen;
   private @Nullable AirZoneOverlay airZoneOverlay;
   private @Nullable AirPanel airPanel;
+  @Getter private @Nullable AirMapMode airMapMode;
   private @Nullable GamePlayer lastAirAllocator;
   private final EconomyPanel economyPanel;
   private final Runnable clientLeftGame;
@@ -428,6 +430,17 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
     if (AirZoneOverlay.isUsed(data)) {
       airZoneOverlay = new AirZoneOverlay(uiContext, mapPanel, data);
       mapPanel.addOverlay(airZoneOverlay);
+      airMapMode = new AirMapMode(uiContext, mapPanel, data, this::setStatusMessage);
+      mapPanel.addOverlay(airMapMode);
+      final JToggleButton airMapToggle = new JToggleButton("Air map");
+      airMapToggle.setToolTipText(
+          "Show the air war on the map (Ctrl+I). On by itself during the air phase.");
+      airMapToggle.setFocusable(false);
+      airMapToggle.addActionListener(e -> airMapMode.toggle());
+      airMapMode.addModeListener(
+          on -> SwingUtilities.invokeLater(() -> airMapToggle.setSelected(on)));
+      bottomBar.addStepControl(airMapToggle);
+      SwingKeyBinding.addKeyBindingWithMetaAndCtrlMasks(this, KeyCode.I, airMapMode::toggle);
       airPanel = new AirPanel(data, mapPanel, airZoneOverlay::setSelectedZone);
       data.addGameDataEventListener(GameDataEvent.GAME_STEP_CHANGED, airPanel::followTurn);
     }
@@ -2049,6 +2062,7 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
     statsPanel.setGameData(newGameData);
     if (airZoneOverlay != null) {
       airZoneOverlay.setGameData(newGameData);
+      airMapMode.setGameData(newGameData);
       airPanel.setGameData(newGameData);
     }
     economyPanel.setGameData(newGameData);
