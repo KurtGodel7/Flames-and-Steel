@@ -23,6 +23,8 @@ import org.triplea.java.Interruptibles;
  */
 public final class AirBattleView {
   private final IDelegateBridge bridge;
+  private GamePlayer attacker;
+  private GamePlayer defender;
   private final UUID id = UUID.randomUUID();
 
   private AirBattleView(final IDelegateBridge bridge) {
@@ -44,6 +46,8 @@ public final class AirBattleView {
       final GamePlayer defender,
       final List<String> steps) {
     final AirBattleView view = new AirBattleView(bridge);
+    view.attacker = attacker;
+    view.defender = defender;
     final IDisplay display = bridge.getDisplayChannelBroadcaster();
     display.showBattle(
         view.id,
@@ -132,5 +136,26 @@ public final class AirBattleView {
   /** Ends the battle with a message, e.g. "Germans lose 6 PUs". */
   public void end(final String message) {
     bridge.getDisplayChannelBroadcaster().battleEnd(id, message);
+    // wait until the players have seen the result, as a stock battle does before the next one
+    bridge
+        .getRemotePlayer(attacker)
+        .confirmOwnCasualties(id, message + ": press space to continue");
+    if (!defender.equals(attacker)) {
+      final Player other = bridge.getRemotePlayer(defender);
+      final Thread t =
+          new Thread(
+              () -> {
+                try {
+                  other.confirmEnemyCasualties(id, message + ": press space to continue", attacker);
+                } catch (final Exception e) {
+                  // the window may already be gone
+                }
+              },
+              "air battle end waiter");
+      t.start();
+      bridge.leaveDelegateExecution();
+      Interruptibles.join(t);
+      bridge.enterDelegateExecution();
+    }
   }
 }

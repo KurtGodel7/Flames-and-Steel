@@ -240,7 +240,47 @@ public class UnitImageFactory {
   public Image getImage(final ImageKey imageKey) {
     return Optional.ofNullable(images.get(imageKey))
         .or(() -> getTransformedScaledImage(imageKey))
+        .or(() -> createDamagedImage(imageKey))
         .orElseGet(() -> createNoImageImage(imageKey));
+  }
+
+  /**
+   * Flames and Steel: a damaged unit on a map without "_hit" art gets its normal image tinted red
+   * with a red slash, instead of the missing-image placeholder.
+   */
+  private Optional<Image> createDamagedImage(final ImageKey imageKey) {
+    if (!imageKey.isDamaged()) {
+      return Optional.empty();
+    }
+    final ImageKey healthy =
+        ImageKey.builder()
+            .player(imageKey.getPlayer())
+            .type(imageKey.getType())
+            .disabled(imageKey.isDisabled())
+            .build();
+    final Optional<Image> base =
+        Optional.ofNullable(images.get(healthy)).or(() -> getTransformedScaledImage(healthy));
+    if (base.isEmpty()) {
+      return Optional.empty();
+    }
+    final int width = Math.max(1, base.get().getWidth(null));
+    final int height = Math.max(1, base.get().getHeight(null));
+    final BufferedImage damaged = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+    final Graphics2D g = damaged.createGraphics();
+    g.drawImage(base.get(), 0, 0, null);
+    // red tint on the unit's own pixels only
+    g.setComposite(java.awt.AlphaComposite.getInstance(java.awt.AlphaComposite.SRC_ATOP, 0.35f));
+    g.setColor(Color.RED);
+    g.fillRect(0, 0, width, height);
+    g.setComposite(java.awt.AlphaComposite.SrcOver);
+    g.setRenderingHint(
+        java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+    g.setStroke(new java.awt.BasicStroke(Math.max(2f, width / 12f)));
+    g.setColor(new Color(200, 0, 0));
+    g.drawLine(width / 5, height * 4 / 5, width * 4 / 5, height / 5);
+    g.dispose();
+    images.put(imageKey, damaged);
+    return Optional.of(damaged);
   }
 
   private Optional<Image> getTransformedScaledImage(final ImageKey imageKey) {

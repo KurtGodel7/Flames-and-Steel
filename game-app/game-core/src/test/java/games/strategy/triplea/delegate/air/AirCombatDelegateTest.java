@@ -137,6 +137,20 @@ class AirCombatDelegateTest {
   }
 
   @Test
+  void hitsLandWithTransportCasualtiesRestricted() {
+    // Flames and Steel turns this option on; the casualty selector then counts the hits passed
+    // in rather than the dice, so the air phase must pass them (they were lost before)
+    gameData.getProperties().set(Constants.TRANSPORT_CASUALTIES_RESTRICTED, true);
+    addTo(front, bomber.create(3, germans)); // 3 x 4 = 12: two hits
+    addTo(karelia, infantry(gameData).create(3, russians(gameData)));
+
+    strike(germans, new TargetAssignment(front, bomber, 3, land(karelia)));
+
+    assertThat(count(karelia, russians(gameData)), is(1));
+    gameData.getProperties().set(Constants.TRANSPORT_CASUALTIES_RESTRICTED, false);
+  }
+
+  @Test
   void aaFiresBeforeTheBombers() {
     addTo(front, bomber.create(1, germans));
     addTo(karelia, infantry(gameData).create(3, russians(gameData)));

@@ -329,7 +329,9 @@ public class AirCombat {
             dice,
             view.getId(),
             false,
-            0,
+            // with "Transport Casualties Restricted" the selector counts these hits, not the dice;
+            // transports are never among air targets
+            roll.hits(),
             true);
     final List<Unit> killed = new ArrayList<>(details.getKilled());
     final List<Unit> damaged = new ArrayList<>(details.getDamaged());
