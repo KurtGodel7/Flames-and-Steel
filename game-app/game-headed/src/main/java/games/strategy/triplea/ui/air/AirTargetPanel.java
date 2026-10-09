@@ -213,18 +213,6 @@ public final class AirTargetPanel extends ActionPanel {
     Territory territory = clicked;
     final AirMapMode mode = frame.getAirMapMode();
     if (mode != null) {
-      final Optional<AirMapMode.ArrowHit> arrow = mode.arrowHit(md.getMapPoint());
-      if (arrow.isPresent() && isActive() && listening) {
-        // an arrow beside any of the nation's stacks: pick in that zone
-        if (!arrow.get().zone().equals(selectedZone)) {
-          selected.clear();
-          selectedZone = arrow.get().zone();
-        }
-        AirSelection.applyArrow(
-            selected, available(getCurrentPlayer(), selectedZone), arrow.get(), md);
-        selectionChanged();
-        return;
-      }
       final Optional<AirMapMode.Hit> hit = mode.hit(md.getMapPoint());
       if (hit.isPresent()) {
         units = hit.get().units();
@@ -561,15 +549,6 @@ public final class AirTargetPanel extends ActionPanel {
           .computeIfAbsent(getCurrentPlayer(), k -> new IntegerMap<>())
           .add(a.unitType(), a.count());
     }
-    // picked bombers leave their stack and follow the mouse, as in a stock move
-    if (selectedZone != null) {
-      for (final UnitType type : selected.keySet()) {
-        leaving
-            .computeIfAbsent(selectedZone, k -> new HashMap<>())
-            .computeIfAbsent(getCurrentPlayer(), k -> new IntegerMap<>())
-            .add(type, selected.getInt(type));
-      }
-    }
     mode.setPending(leaving, Map.of());
   }
 
@@ -590,7 +569,7 @@ public final class AirTargetPanel extends ActionPanel {
     actionLabel.setToolTipText(
         AirSelection.wrap(
             AirSelection.HELP
-                + " Or use the arrows here, or beside the stack on the air map. The targets"
+                + " Or use the counters here. The targets"
                 + " all picked bombers can reach light up on the map and are listed here;"
                 + " click one to attack it."));
     add(leftAligned(actionLabel));

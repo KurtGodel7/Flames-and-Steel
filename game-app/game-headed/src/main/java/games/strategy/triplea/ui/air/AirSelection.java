@@ -1,7 +1,6 @@
 package games.strategy.triplea.ui.air;
 
 import games.strategy.engine.data.GamePlayer;
-import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.UnitType;
 import games.strategy.triplea.image.UnitImageFactory;
@@ -17,11 +16,9 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.Point;
-import java.awt.Rectangle;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.Optional;
 import java.util.function.Predicate;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -76,30 +73,6 @@ final class AirSelection {
       selected.add(type, added);
     }
     return added;
-  }
-
-  /**
-   * An arrow button beside a stack on the map: one more or one fewer; with Ctrl or Shift, all or
-   * none.
-   */
-  static void applyArrow(
-      final IntegerMap<UnitType> selected,
-      final IntegerMap<UnitType> available,
-      final AirMapMode.ArrowHit arrow,
-      final MouseDetails md) {
-    final UnitType type = arrow.type();
-    final int max = available.getInt(type);
-    final boolean all = md.isControlDown() || md.isShiftDown();
-    final int current = selected.getInt(type);
-    final int next =
-        arrow.delta() > 0
-            ? (all ? max : Math.min(max, current + 1))
-            : (all ? 0 : Math.max(0, current - 1));
-    if (next > 0) {
-      selected.put(type, next);
-    } else {
-      selected.removeKey(type);
-    }
   }
 
   /**

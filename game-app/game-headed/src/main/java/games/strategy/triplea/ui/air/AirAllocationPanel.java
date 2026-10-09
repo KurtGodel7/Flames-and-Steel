@@ -201,18 +201,6 @@ public final class AirAllocationPanel extends ActionPanel {
     Territory territory = clicked;
     final AirMapMode mode = frame.getAirMapMode();
     if (mode != null) {
-      final Optional<AirMapMode.ArrowHit> arrow = mode.arrowHit(md.getMapPoint());
-      if (arrow.isPresent() && isActive() && listening) {
-        // an arrow beside any of the nation's stacks: pick in that zone
-        if (!arrow.get().zone().equals(selectedZone)) {
-          selected.clear();
-          selectedZone = arrow.get().zone();
-        }
-        AirSelection.applyArrow(
-            selected, available(getCurrentPlayer(), selectedZone), arrow.get(), md);
-        selectionChanged();
-        return;
-      }
       final Optional<AirMapMode.Hit> hit = mode.hit(md.getMapPoint());
       if (hit.isPresent() && hit.get().moved() && !md.isRightButton()) {
         frame.setStatusErrorMessage(
@@ -473,15 +461,6 @@ public final class AirAllocationPanel extends ActionPanel {
                       .computeIfAbsent(owner, k -> new IntegerMap<>())
                       .add(m.unitType(), m.count());
                 }));
-    // picked aircraft leave their stack and follow the mouse, as in a stock move
-    if (selectedZone != null) {
-      for (final UnitType type : selected.keySet()) {
-        leaving
-            .computeIfAbsent(selectedZone, k -> new HashMap<>())
-            .computeIfAbsent(getCurrentPlayer(), k -> new IntegerMap<>())
-            .add(type, selected.getInt(type));
-      }
-    }
     mode.setPending(leaving, arriving);
   }
 
@@ -507,7 +486,7 @@ public final class AirAllocationPanel extends ActionPanel {
     actionLabel.setToolTipText(
         AirSelection.wrap(
             AirSelection.HELP
-                + " Or use the arrows here, or beside the stack on the air map."
+                + " Or use the counters here."
                 + " Then click the zone to send them to: they move there at once, as in any"
                 + " move, and Undo puts them back.<br>Enemies see these moves only at the"
                 + " reveal"
