@@ -211,6 +211,34 @@ final class AirDraw {
     g.drawString(text, tx, ty);
   }
 
+  /**
+   * The route line of a move in progress, as in a stock TripleA move: straight from the units to
+   * the mouse, with an arrow head.
+   */
+  static void routeLine(final Graphics2D g, final Point from, final Point to, final Color color) {
+    final Stroke old = g.getStroke();
+    g.setColor(new Color(0, 0, 0, 160));
+    g.setStroke(new BasicStroke(7f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+    g.drawLine(from.x, from.y, to.x, to.y);
+    g.setColor(color);
+    g.setStroke(new BasicStroke(4f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+    g.drawLine(from.x, from.y, to.x, to.y);
+    g.setStroke(old);
+    final double angle = Math.atan2(to.y - from.y, to.x - from.x);
+    final Polygon tip = new Polygon();
+    tip.addPoint(to.x, to.y);
+    tip.addPoint(
+        (int) Math.round(to.x - 18 * Math.cos(angle - 0.45)),
+        (int) Math.round(to.y - 18 * Math.sin(angle - 0.45)));
+    tip.addPoint(
+        (int) Math.round(to.x - 18 * Math.cos(angle + 0.45)),
+        (int) Math.round(to.y - 18 * Math.sin(angle + 0.45)));
+    g.setColor(color);
+    g.fillPolygon(tip);
+    g.setColor(Color.BLACK);
+    g.drawPolygon(tip);
+  }
+
   /** A small label on a dark rounded background, centred on (x, y). */
   static void tag(
       final Graphics2D g, final String text, final int x, final int y, final Color color) {

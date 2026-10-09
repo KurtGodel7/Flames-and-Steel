@@ -747,7 +747,7 @@ public final class AirTargetPanel extends ActionPanel {
         draw.outlineBox(g, selectedZone, AirDraw.ORIGIN_LINE, 5f);
         final AirMapMode mode = frame.getAirMapMode();
         if (mode != null) {
-          AirSelection.paintPicked(g, mode, selectedZone, player, selected);
+          AirSelection.paintPicked(g, frame.getUiContext(), mode, selectedZone, player, selected);
         }
       }
       if (selectedZone != null && !selected.isEmpty() && mousePoint != null) {
@@ -771,38 +771,23 @@ public final class AirTargetPanel extends ActionPanel {
    */
   private void paintPreview(final Graphics2D g, final GamePlayer player) {
     final Point from = draw.center(selectedZone);
+    if (mousePoint.distance(from) < 20) {
+      return;
+    }
     final Territory place = hoverPlace;
+    Color color = Color.WHITE;
     if (place != null) {
-      final List<String> parts = new ArrayList<>();
-      targets.forEach(
-          (target, legal) -> {
-            if (legal && target.territory().equals(place)) {
-              parts.add(describe(player, target));
-            }
-          });
-      if (!parts.isEmpty()) {
-        AirDraw.arrow(
-            g,
-            from,
-            draw.middle(place),
-            AirDraw.LEGAL_LINE,
-            5f,
-            false,
-            selectionText() + " \u2192 " + String.join(" | ", parts),
-            6);
-        AirSelection.paintShadow(g, frame.getUiContext(), player, selected, draw.middle(place));
-        return;
-      }
-      final String why = whyNotTarget(player, place);
-      if (!why.isEmpty()) {
-        AirDraw.arrow(g, from, draw.middle(place), PREVIEW_BLOCKED, 4f, true, "\u2717 " + why, 6);
-        return;
+      final boolean inReach =
+          targets.entrySet().stream()
+              .anyMatch(e -> e.getValue() && e.getKey().territory().equals(place));
+      if (inReach) {
+        color = AirDraw.LEGAL_LINE;
+      } else if (!whyNotTarget(player, place).isEmpty()) {
+        color = PREVIEW_BLOCKED;
       }
     }
-    if (mousePoint.distance(from) > 20) {
-      AirDraw.arrow(g, from, mousePoint, Color.WHITE, 2.5f, true, "", 0);
-      AirSelection.paintShadow(g, frame.getUiContext(), player, selected, mousePoint);
-    }
+    AirDraw.routeLine(g, from, mousePoint, color);
+    AirSelection.paintShadow(g, frame.getUiContext(), player, selected, mousePoint);
   }
 
   private void fill(final Graphics2D g, final Territory t, final Color color) {

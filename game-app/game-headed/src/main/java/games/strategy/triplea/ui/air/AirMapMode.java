@@ -721,7 +721,8 @@ public final class AirMapMode implements MapOverlay {
           boxHitRects.add(rect);
           boxHits.add(new Hit(zone, item.units(), item.moved(), greyed(zone, item)));
         }
-        boxStackRect.putIfAbsent(stackKey(zone, item.owner(), item.type()), rect);
+        boxStackRect.putIfAbsent(
+            stackKey(zone, item.owner(), item.type()), new Rectangle(x, y, w, h));
         if (isSelectable(zone, item) && arrowsDrawn.add(item.type())) {
           paintArrows(g, zone, item.type(), x + w + 17, y, h, true);
         }
@@ -791,7 +792,7 @@ public final class AirMapMode implements MapOverlay {
             new Rectangle(x, y, cell, h),
             new Hit(zone, item.units(), item.moved(), greyed(zone, item)));
         stackRect.putIfAbsent(
-            stackKey(zone, item.owner(), item.type()), new Rectangle(x, y, w + 16, h));
+            stackKey(zone, item.owner(), item.type()), new Rectangle(x + 5, y, w, h));
         if (isSelectable(zone, item) && arrowsDrawn.add(item.type())) {
           paintArrows(g, zone, item.type(), x + w + 17, y, h, false);
         }

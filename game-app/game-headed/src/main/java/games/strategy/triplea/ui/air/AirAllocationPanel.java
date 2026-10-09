@@ -6,10 +6,8 @@ import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.UnitType;
 import games.strategy.triplea.attachments.AirZoneAttachment;
-import games.strategy.triplea.attachments.AirZoneAttachment.ZoneType;
 import games.strategy.triplea.delegate.air.AirAllocation;
 import games.strategy.triplea.delegate.air.AirAllocation.AirMove;
-import games.strategy.triplea.delegate.air.AirAllocation.CarrierLoad;
 import games.strategy.triplea.delegate.air.AirAllocation.Stage;
 import games.strategy.triplea.image.UnitImageFactory.ImageKey;
 import games.strategy.triplea.ui.ActionPanel;
@@ -617,7 +615,8 @@ public final class AirAllocationPanel extends ActionPanel {
         draw.outlineBox(g, selectedZone, AirDraw.ORIGIN_LINE, 5f);
         final AirMapMode mode = frame.getAirMapMode();
         if (mode != null) {
-          AirSelection.paintPicked(g, mode, selectedZone, getCurrentPlayer(), selected);
+          AirSelection.paintPicked(
+              g, frame.getUiContext(), mode, selectedZone, getCurrentPlayer(), selected);
         }
       }
       // revealed bomber moves (fighter step): thin dashed grey arrows, arrivals labelled
@@ -653,34 +652,18 @@ public final class AirAllocationPanel extends ActionPanel {
    * aircraft follow the mouse.
    */
   private void paintPreview(final Graphics2D g, final GameData data) {
-    final GamePlayer player = getCurrentPlayer();
     final Point from = draw.center(selectedZone);
-    final Territory to = hoverZone;
-    if (to != null && !to.equals(selectedZone) && destinations.containsKey(to)) {
-      final Optional<String> problem = destinations.get(to);
-      if (problem.isEmpty()) {
-        Point arrival = draw.center(to);
-        final List<AirMove> after = new ArrayList<>(staged);
-        for (final UnitType type : selected.keySet()) {
-          arrival =
-              draw.ghostStack(
-                  g, data, to, player, type, selected.getInt(type), AirDraw.LEGAL_LINE, false);
-          after.add(new AirMove(selectedZone, to, type, selected.getInt(type)));
-        }
-        String label = selectionText() + " \u2192 " + AirAllocation.zoneName(to);
-        final ZoneType type = AirZoneAttachment.get(to).orElseThrow().getZoneType();
-        if (type == ZoneType.OCEAN || type == ZoneType.COASTAL) {
-          final CarrierLoad load = AirAllocation.carrierLoadAfter(player, stage, after, to);
-          label += "  (carriers " + load.cost() + "/" + load.capacity() + ")";
-        }
-        AirDraw.arrow(g, from, arrival, AirDraw.LEGAL_LINE, 5f, false, label, 20);
-      } else {
-        AirDraw.arrow(
-            g, from, draw.center(to), PREVIEW_BLOCKED, 4f, true, "\u2717 " + problem.get(), 0);
-      }
-    } else if (mousePoint.distance(from) > 20) {
-      AirDraw.arrow(g, from, mousePoint, Color.WHITE, 2.5f, true, "", 0);
-      AirSelection.paintShadow(g, frame.getUiContext(), player, selected, mousePoint);
+    if (mousePoint.distance(from) < 20) {
+      return;
     }
+    final Territory to = hoverZone;
+    final Color color;
+    if (to == null || to.equals(selectedZone) || !destinations.containsKey(to)) {
+      color = Color.WHITE;
+    } else {
+      color = destinations.get(to).isEmpty() ? AirDraw.LEGAL_LINE : PREVIEW_BLOCKED;
+    }
+    AirDraw.routeLine(g, from, mousePoint, color);
+    AirSelection.paintShadow(g, frame.getUiContext(), getCurrentPlayer(), selected, mousePoint);
   }
 }

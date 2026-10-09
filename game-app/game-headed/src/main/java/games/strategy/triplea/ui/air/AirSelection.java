@@ -11,8 +11,6 @@ import games.strategy.triplea.ui.UiContext;
 import games.strategy.triplea.ui.research.ResearchView;
 import games.strategy.ui.ScrollableTextField;
 import java.awt.AlphaComposite;
-import java.awt.BasicStroke;
-import java.awt.Color;
 import java.awt.Composite;
 import java.awt.Graphics2D;
 import java.awt.GridBagConstraints;
@@ -214,31 +212,28 @@ final class AirSelection {
     }
   }
 
-  /** Marks the selected stacks in air map mode: an orange frame and the number picked. */
+  /**
+   * Marks the picked stacks the way a stock move marks selected units: the unit image's own
+   * highlight drawn over the stack (in a redrawn box or on the air map).
+   */
   static void paintPicked(
       final Graphics2D g,
+      final UiContext uiContext,
       final AirMapMode mode,
       final Territory zone,
       final GamePlayer owner,
       final IntegerMap<UnitType> selected) {
     for (final UnitType type : selected.keySet()) {
       final Optional<Rectangle> r = mode.stackRect(zone, owner, type);
-      if (r.isEmpty()) {
-        continue;
+      if (r.isPresent()) {
+        g.drawImage(
+            uiContext
+                .getUnitImageFactory()
+                .getHighlightImage(ImageKey.builder().player(owner).type(type).build()),
+            r.get().x,
+            r.get().y,
+            null);
       }
-      final Rectangle s = r.get();
-      g.setColor(AirDraw.ORIGIN_LINE);
-      g.setStroke(new BasicStroke(3f));
-      g.drawRoundRect(s.x - 2, s.y - 2, s.width + 4, s.height + 4, 6, 6);
-      // the number picked, as an orange badge on the stack's corner
-      final String n = String.valueOf(selected.getInt(type));
-      g.setFont(g.getFont().deriveFont(java.awt.Font.BOLD, 12f));
-      final int bw = Math.max(16, g.getFontMetrics().stringWidth(n) + 8);
-      g.setColor(Color.ORANGE);
-      g.fillOval(s.x - 6, s.y - 6, bw, 16);
-      g.setColor(Color.BLACK);
-      g.drawOval(s.x - 6, s.y - 6, bw, 16);
-      g.drawString(n, s.x - 6 + (bw - g.getFontMetrics().stringWidth(n)) / 2, s.y + 6);
     }
   }
 }
