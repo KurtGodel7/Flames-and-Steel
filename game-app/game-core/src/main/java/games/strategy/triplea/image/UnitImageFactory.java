@@ -460,6 +460,41 @@ public class UnitImageFactory {
     return icon;
   }
 
+  /**
+   * Flames and Steel: the red "hits/hit points" badge of a damaged unit, its top right corner at
+   * (right, top).
+   */
+  public static void paintHitBadge(
+      final Graphics2D g, final int hits, final int hitPoints, final int right, final int top) {
+    final String s = hits + "/" + hitPoints;
+    g.setRenderingHint(
+        java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+    g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 11));
+    final var fm = g.getFontMetrics();
+    final int w = fm.stringWidth(s) + 6;
+    final int h = fm.getAscent() + 2;
+    final int x = right - w;
+    g.setColor(new Color(150, 0, 0));
+    g.fillRoundRect(x, top, w - 1, h, 6, 6);
+    g.setColor(Color.WHITE);
+    g.drawRoundRect(x, top, w - 1, h, 6, 6);
+    g.drawString(s, x + 3, top + fm.getAscent());
+  }
+
+  /** The icon with the damage badge in its top right corner, or the icon itself if undamaged. */
+  public static ImageIcon withHitBadge(final ImageIcon icon, final int hits, final int hitPoints) {
+    if (hits <= 0 || icon.getIconWidth() <= 0) {
+      return icon;
+    }
+    final BufferedImage image =
+        new BufferedImage(icon.getIconWidth(), icon.getIconHeight(), BufferedImage.TYPE_INT_ARGB);
+    final Graphics2D g = image.createGraphics();
+    g.drawImage(icon.getImage(), 0, 0, null);
+    paintHitBadge(g, hits, hitPoints, image.getWidth(), 0);
+    g.dispose();
+    return new ImageIcon(image);
+  }
+
   public Dimension getImageDimensions(final ImageKey imageKey) {
     final Image image = getImage(imageKey);
     final int width = (int) (image.getWidth(null) * scaleFactor);

@@ -11,7 +11,6 @@ import games.strategy.engine.data.events.GameDataChangeListener;
 import games.strategy.engine.delegate.IDelegate;
 import games.strategy.triplea.attachments.AirZoneAttachment;
 import games.strategy.triplea.attachments.AirZoneAttachment.ZoneType;
-import games.strategy.triplea.attachments.ApcAttachment;
 import games.strategy.triplea.delegate.AirAllocationDelegate;
 import games.strategy.triplea.delegate.AirCombatDelegate;
 import games.strategy.triplea.delegate.Matches;
@@ -82,6 +81,9 @@ public final class AirMapMode implements MapOverlay {
   private static final Color PANEL_BACK = new Color(20, 24, 30, 215);
   private static final Color DOGFIGHT = new Color(255, 70, 50);
   private static final int ICONS_PER_ROW = 5;
+  private static final Color CARRIER_ONLY = new Color(0xFF, 0xD0, 0x00);
+  private static final Color UNASSIGNED = new Color(0xFF, 0x8C, 0x00);
+  private static final int FLAG_WIDTH = 18;
 
   /** A drawn aircraft stack (or a zone's name label) that can be clicked. */
   public record Hit(Territory zone, List<Unit> units, boolean moved, @Nullable String greyed) {}
@@ -139,6 +141,9 @@ public final class AirMapMode implements MapOverlay {
   private BiPredicate<Territory, Unit> selectable = (zone, unit) -> false;
   private BiFunction<Territory, Unit, String> greyReason = (zone, unit) -> "";
   private final Map<ImageKey, Image> greyImages = new HashMap<>();
+  // the nation filter (null: all nations) and the target step's "unassigned" marker
+  private volatile @Nullable GamePlayer filter;
+  private volatile boolean markUnassigned;
 
   public AirMapMode(
       final UiContext uiContext,
@@ -334,6 +339,22 @@ public final class AirMapMode implements MapOverlay {
     repaint();
   }
 
+  /** Shows only this nation's aircraft (others faded), or all when null. */
+  public void setFilter(final @Nullable GamePlayer nation) {
+    filter = nation;
+    repaint();
+  }
+
+  public @Nullable GamePlayer getFilter() {
+    return filter;
+  }
+
+  /** In the target step, the acting nation's bombers without a target carry a marker. */
+  public void setMarkUnassigned(final boolean mark) {
+    markUnassigned = mark;
+    repaint();
+  }
+
   /** Where a nation's stack of one aircraft type is drawn in a zone's panel, while painting. */
   public Optional<Rectangle> stackRect(
       final Territory zone, final GamePlayer owner, final UnitType type) {
@@ -452,6 +473,12 @@ public final class AirMapMode implements MapOverlay {
             g.setColor(zoneColor.get(zone).darker());
             g.setStroke(new BasicStroke(4f));
             area.draw(g);
+            if (AirZoneAttachment.get(zone).orElseThrow().getZoneType() == ZoneType.OCEAN) {
+              // carrier-only fronts are edged in yellow, as on their box
+              g.setColor(CARRIER_ONLY);
+              g.setStroke(new BasicStroke(2.5f));
+              area.draw(g);
+            }
           });
       // bomb zones: dashed, in the bombing side's colour
       bombArea.forEach(
@@ -604,6 +631,37 @@ public final class AirMapMode implements MapOverlay {
     return greyReason.apply(zone, item.units().get(0));
   }
 
+  /** Faded by the nation filter. */
+  private boolean faded(final Item item) {
+    final GamePlayer only = filter;
+    return only != null && !item.owner().equals(only);
+  }
+
+  /** The target step's marker on bombers that have no target yet: an orange outline. */
+  private boolean paintUnassigned(
+      final Graphics2D g,
+      final Territory zone,
+      final Item item,
+      final int x,
+      final int y,
+      final int w) {
+    if (!markUnassigned || !isSelectable(zone, item)) {
+      return false;
+    }
+    final int h = uiContext.getUnitImageFactory().getUnitImageHeight();
+    g.setColor(UNASSIGNED);
+    g.setStroke(new BasicStroke(2.5f));
+    g.drawRoundRect(x - 2, y - 1, w + 4, h + 2, 8, 8);
+    return true;
+  }
+
+  private void paintFlag(final Graphics2D g, final GamePlayer owner, final int x, final int y) {
+    final Image flag = uiContext.getFlagImageFactory().getSmallFlag(owner);
+    if (flag != null) {
+      g.drawImage(flag, x, y, 14, 10, null);
+    }
+  }
+
   /** A unit image in faded grey, for aircraft that cannot be picked in this step. */
   private Image greyImage(final ImageKey key) {
     return greyImages.computeIfAbsent(
@@ -681,7 +739,14 @@ public final class AirMapMode implements MapOverlay {
         if (y + h > box.y + box.height) {
           return;
         }
+        final java.awt.Composite oldComposite = g.getComposite();
+        if (faded(item)) {
+          g.setComposite(
+              java.awt.AlphaComposite.getInstance(java.awt.AlphaComposite.SRC_OVER, 0.25f));
+        }
         g.drawImage(imageOf(zone, item), x, y, null);
+        g.setComposite(oldComposite);
+        paintUnassigned(g, zone, item, x, y, w);
         AirDraw.countLabel(g, String.valueOf(item.count()), x + w + 14, y + h);
         AirDraw.hitBadge(g, item.units(), x + w, y);
         final Rectangle rect = new Rectangle(x, y, w + 16, h);
@@ -721,7 +786,7 @@ public final class AirMapMode implements MapOverlay {
       maxPerRow = Math.max(maxPerRow, Math.min(n, ICONS_PER_ROW));
     }
     final int cell = w + 16;
-    final int width = Math.max(fm.stringWidth(title) + 12, 14 + maxPerRow * cell);
+    final int width = Math.max(fm.stringWidth(title) + 12, 14 + FLAG_WIDTH + maxPerRow * cell);
     final int height = titleHeight + rows * (h + 4) + 6;
     final Rectangle r = new Rectangle(at.x - width / 2, at.y - height / 2, width, height);
     panelRect.put(zone, r);
@@ -740,17 +805,26 @@ public final class AirMapMode implements MapOverlay {
     g.drawString(title, r.x + 6, r.y + fm.getAscent() + 2);
     record(new Rectangle(r.x, r.y, r.width, titleHeight), new Hit(zone, List.of(), false, null));
     int y = r.y + titleHeight;
+    boolean unassigned = false;
     for (final List<Item> group : groups) {
       int col = 0;
+      paintFlag(g, group.get(0).owner(), r.x + 4, y + h / 2 - 5);
       for (final Item item : group) {
         if (col == ICONS_PER_ROW) {
           col = 0;
           y += h + 4;
         }
-        final int x = r.x + 6 + col * cell;
+        final int x = r.x + 6 + FLAG_WIDTH + col * cell;
+        final java.awt.Composite oldComposite = g.getComposite();
+        if (faded(item)) {
+          g.setComposite(
+              java.awt.AlphaComposite.getInstance(java.awt.AlphaComposite.SRC_OVER, 0.25f));
+        }
         g.setColor(mapData.getPlayerColor(item.owner().getName()));
         g.fillRect(x, y + 2, 4, h - 4);
         g.drawImage(imageOf(zone, item), x + 5, y, null);
+        g.setComposite(oldComposite);
+        unassigned |= paintUnassigned(g, zone, item, x + 5, y, w);
         AirDraw.countLabel(g, String.valueOf(item.count()), x + w + 14, y + h);
         AirDraw.hitBadge(g, item.units(), x + 5 + w, y);
         record(
@@ -765,6 +839,9 @@ public final class AirMapMode implements MapOverlay {
     pendingSpot.put(zone, new Point(r.x + 6, r.y + r.height + 6));
     if (contested) {
       AirDraw.tag(g, "Dogfight", r.x + r.width / 2, r.y - 10, DOGFIGHT);
+    }
+    if (unassigned) {
+      AirDraw.tag(g, "No target", r.x + r.width / 2, r.y - (contested ? 28 : 10), UNASSIGNED);
     }
     final ZoneType type = AirZoneAttachment.get(zone).orElseThrow().getZoneType();
     if (type == ZoneType.OCEAN) {
@@ -794,16 +871,11 @@ public final class AirMapMode implements MapOverlay {
     return false;
   }
 
+  /** A bombing zone's colour: the attacked nation's. */
   private static Color bombColor(
       final GameData paintData, final MapData mapData, final Territory zone) {
-    final AirZoneAttachment a = AirZoneAttachment.get(zone).orElseThrow();
-    final GamePlayer bombed = a.getBombedPlayer();
-    for (final GamePlayer p : a.getPlayers()) {
-      if (bombed == null || paintData.getRelationshipTracker().isAtWar(p, bombed)) {
-        return mapData.getPlayerColor(p.getName());
-      }
-    }
-    return Color.RED;
+    final GamePlayer bombed = AirZoneAttachment.get(zone).orElseThrow().getBombedPlayer();
+    return bombed == null ? Color.RED : mapData.getPlayerColor(bombed.getName());
   }
 
   private static BasicStroke dashed(final float width) {
@@ -904,15 +976,9 @@ public final class AirMapMode implements MapOverlay {
     for (final Territory zone : AirZoneAttachment.getAirZones(d.getMap())) {
       final AirZoneAttachment a = AirZoneAttachment.get(zone).orElseThrow();
       if (a.getZoneType() == ZoneType.BOMB && a.getBombedPlayer() != null) {
-        // the strategic targets: the bombed nation's factory and APC territories
-        final List<Territory> land = new ArrayList<>();
-        for (final Territory t : d.getMap().getTerritoriesOwnedBy(a.getBombedPlayer())) {
-          if (!t.isWater()
-              && t.anyUnitsMatch(
-                  Matches.unitCanProduceUnits().or(u -> ApcAttachment.isApc(u.getType())))) {
-            land.add(t);
-          }
-        }
+        // the home region the zone covers
+        final List<Territory> land =
+            a.getCoveredTerritories().stream().filter(t -> !t.isWater()).toList();
         if (!land.isEmpty()) {
           bombs.put(zone, ZoneShape.of(land, mapData));
           bombAnchors.put(zone, bombPanelSpot(d, mapData, a.getBombedPlayer(), land));
@@ -973,14 +1039,9 @@ public final class AirMapMode implements MapOverlay {
   /** Bomb zones whose targets include this territory (the bombed nation's factory or APC). */
   private List<Territory> bombZonesOver(final Territory t) {
     final List<Territory> result = new ArrayList<>();
-    if (t.isWater()
-        || !t.anyUnitsMatch(
-            Matches.unitCanProduceUnits().or(u -> ApcAttachment.isApc(u.getType())))) {
-      return result;
-    }
     for (final Territory zone : AirZoneAttachment.getAirZones(t.getData().getMap())) {
       final AirZoneAttachment a = AirZoneAttachment.get(zone).orElseThrow();
-      if (a.getZoneType() == ZoneType.BOMB && t.getOwner().equals(a.getBombedPlayer())) {
+      if (a.getZoneType() == ZoneType.BOMB && a.getCoveredTerritories().contains(t)) {
         result.add(zone);
       }
     }

@@ -136,12 +136,18 @@ public final class AirTargetPanel extends ActionPanel {
                     (zone, unit) ->
                         unit.isOwnedBy(player)
                             && AirCombat.isBomber(unit)
-                            && !AirCombat.getBombers(player, zone).isEmpty(),
+                            && !AirCombat.getBombers(player, zone).isEmpty()
+                            && !AirCombat.getTargets(player, zone).isEmpty(),
                     (zone, unit) ->
                         AirZoneAttachment.get(zone).orElseThrow().getZoneType() == ZoneType.RESERVE
                             ? "Aircraft in the reserve do not fight."
-                            : ResearchView.displayName(unit.getType().getName())
-                                + ": fighters do not strike targets.");
+                            : !AirCombat.isBomber(unit)
+                                ? ResearchView.displayName(unit.getType().getName())
+                                    + ": fighters do not strike targets."
+                                : "No targets within reach of "
+                                    + AirAllocation.zoneName(zone)
+                                    + ".");
+            frame.getAirMapMode().setMarkUnassigned(true);
           }
           if (!listening) {
             listening = true;
@@ -169,6 +175,7 @@ public final class AirTargetPanel extends ActionPanel {
       getMap().setUnitHighlight(List.of());
       if (frame.getAirMapMode() != null) {
         frame.getAirMapMode().setBusy(false);
+        frame.getAirMapMode().setMarkUnassigned(false);
         frame.getAirMapMode().setPending(Map.of(), Map.of());
         frame.getAirMapMode().setActing(null, (zone, unit) -> false, (zone, unit) -> "");
       }
@@ -178,12 +185,14 @@ public final class AirTargetPanel extends ActionPanel {
 
   @Override
   public void performDone() {
-    final boolean anyLeft = zonesWithBombersLeft() > 0;
-    if (anyLeft && staged.isEmpty()) {
+    final List<String> left = bombersLeft();
+    if (!left.isEmpty()) {
       final int answer =
           JOptionPane.showConfirmDialog(
               JOptionPane.getFrameForComponent(this),
-              "Your bombers have not been given targets. End without attacking?",
+              "Still without a target:\n  "
+                  + String.join("\n  ", left)
+                  + "\nThey will not attack this round. End anyway?",
               "Bomber targets",
               JOptionPane.YES_NO_OPTION);
       if (answer != JOptionPane.YES_OPTION) {
@@ -194,14 +203,33 @@ public final class AirTargetPanel extends ActionPanel {
     release();
   }
 
-  private long zonesWithBombersLeft() {
+  /**
+   * "3 Dive bomber (Eastern Front)" for each type and zone whose bombers could attack but have no
+   * target.
+   */
+  private List<String> bombersLeft() {
     final GamePlayer player = getCurrentPlayer();
+    final List<String> result = new ArrayList<>();
+    final List<Territory> zones;
     try (GameData.Unlocker ignored = getData().acquireReadLock()) {
-      return AirZoneAttachment.getAirZones(getData().getMap()).stream()
-          .filter(
-              z -> !available(player, z).isEmpty() && !AirCombat.getTargets(player, z).isEmpty())
-          .count();
+      zones =
+          AirZoneAttachment.getAirZones(getData().getMap()).stream()
+              .filter(z -> !AirCombat.getTargets(player, z).isEmpty())
+              .toList();
     }
+    for (final Territory zone : zones) {
+      final IntegerMap<UnitType> left = available(player, zone);
+      for (final UnitType type : left.keySet()) {
+        result.add(
+            left.getInt(type)
+                + " "
+                + ResearchView.displayName(type.getName())
+                + " ("
+                + AirAllocation.zoneName(zone)
+                + ")");
+      }
+    }
+    return result;
   }
 
   // ---- selecting bombers and targets
@@ -259,7 +287,7 @@ public final class AirTargetPanel extends ActionPanel {
       final int choice =
           JOptionPane.showOptionDialog(
               JOptionPane.getFrameForComponent(this),
-              "Attack which ships in " + territory.getName() + "?",
+              "Attack what in " + territory.getName() + "?",
               "Bomber target",
               JOptionPane.DEFAULT_OPTION,
               JOptionPane.QUESTION_MESSAGE,

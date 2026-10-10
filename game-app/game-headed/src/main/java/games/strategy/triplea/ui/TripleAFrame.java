@@ -139,7 +139,9 @@ import javax.swing.AbstractAction;
 import javax.swing.Action;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
+import javax.swing.ButtonGroup;
 import javax.swing.ButtonModel;
+import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
@@ -439,7 +441,30 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
       airMapToggle.addActionListener(e -> airMapMode.toggle());
       airMapMode.addModeListener(
           on -> SwingUtilities.invokeLater(() -> airMapToggle.setSelected(on)));
-      bottomBar.addStepControl(airMapToggle);
+      // the nation filter: shown with the air map
+      final JPanel airControls = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
+      airControls.add(airMapToggle);
+      final JPanel nationFilter = new JPanel(new FlowLayout(FlowLayout.LEFT, 1, 0));
+      final ButtonGroup filterGroup = new ButtonGroup();
+      final JToggleButton allNations = new JToggleButton("All", true);
+      allNations.setFocusable(false);
+      allNations.setToolTipText("Show every nation's aircraft");
+      allNations.addActionListener(e -> airMapMode.setFilter(null));
+      filterGroup.add(allNations);
+      nationFilter.add(allNations);
+      for (final GamePlayer nation : data.getPlayerList().getPlayers()) {
+        final JToggleButton button =
+            new JToggleButton(new ImageIcon(uiContext.getFlagImageFactory().getSmallFlag(nation)));
+        button.setFocusable(false);
+        button.setToolTipText("Show only " + nation.getName() + " aircraft (others faded)");
+        button.addActionListener(e -> airMapMode.setFilter(nation));
+        filterGroup.add(button);
+        nationFilter.add(button);
+      }
+      airControls.add(nationFilter);
+      airMapMode.addModeListener(
+          on -> SwingUtilities.invokeLater(() -> nationFilter.setVisible(on)));
+      bottomBar.addStepControl(airControls);
       SwingKeyBinding.addKeyBindingWithMetaAndCtrlMasks(this, KeyCode.I, airMapMode::toggle);
       airPanel = new AirPanel(data, mapPanel, airZoneOverlay::setSelectedZone);
       data.addGameDataEventListener(GameDataEvent.GAME_STEP_CHANGED, airPanel::followTurn);
@@ -608,7 +633,7 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
       tabsPanel.addTab("Research", null, researchPanel, "Research centres and stars");
     }
     if (airPanel != null) {
-      tabsPanel.addTab("Air", null, airPanel, "Aircraft by type and air zone");
+      tabsPanel.addTab("Air", null, airPanel, "Aircraft per air box and nation");
     }
     addTab("Resources", economyPanel, KeyCode.R);
     if (objectivePanel != null) {

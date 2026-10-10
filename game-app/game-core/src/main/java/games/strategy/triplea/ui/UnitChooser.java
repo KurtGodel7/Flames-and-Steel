@@ -618,6 +618,15 @@ public final class UnitChooser extends JPanel {
         final Image image = getMainImage();
         g.drawImage(image, 0, 0, this);
 
+        // Flames and Steel: the damage the unit already has
+        if (category.getDamaged() > 0) {
+          UnitImageFactory.paintHitBadge(
+              (Graphics2D) g,
+              category.getDamaged(),
+              category.getHitPoints(),
+              image.getWidth(null),
+              0);
+        }
         int x = image.getWidth(null);
         for (final UnitOwner holder : category.getDependents()) {
           final Image dependentImage = NonWithdrawableFactory.getImage(ImageKey.of(holder), false);

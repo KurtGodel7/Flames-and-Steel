@@ -152,7 +152,13 @@ final class BattleModel extends DefaultTableModel {
         if (shift[i] > 0) {
           columns
               .get(i)
-              .add(new TableData(UnitImageFactory.ImageKey.of(category), shift[i], uiContext));
+              .add(
+                  new TableData(
+                      UnitImageFactory.ImageKey.of(category),
+                      shift[i],
+                      uiContext,
+                      category.getDamaged(),
+                      category.getHitPoints()));
         }
       }
       // TODO Kev determine if we need to identify if the unit is hit/disabled
@@ -193,11 +199,18 @@ final class BattleModel extends DefaultTableModel {
     private TableData() {}
 
     TableData(
-        final UnitImageFactory.ImageKey imageKey, final int count, final UiContext uiContext) {
+        final UnitImageFactory.ImageKey imageKey,
+        final int count,
+        final UiContext uiContext,
+        final int hits,
+        final int hitPoints) {
       this.player = imageKey.getPlayer();
       this.count = count;
       this.unitType = imageKey.getType();
-      this.icon = uiContext.getUnitImageFactory().getIcon(imageKey);
+      // Flames and Steel: damaged units carry their "hits/hit points" badge
+      this.icon =
+          UnitImageFactory.withHitBadge(
+              uiContext.getUnitImageFactory().getIcon(imageKey), hits, hitPoints);
       this.uiContext = uiContext;
     }
 
