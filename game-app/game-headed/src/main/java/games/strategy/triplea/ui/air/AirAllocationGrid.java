@@ -57,6 +57,7 @@ import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.SwingConstants;
@@ -89,6 +90,7 @@ final class AirAllocationGrid extends JDialog {
   private static final Color FLASH = new Color(0xFF, 0xCD, 0xD2);
   private static final Color DIM = new Color(0xF0, 0xF0, 0xF0, 170);
   private static final Color REASON = new Color(0x55, 0x55, 0x55);
+  private static final Color AMBER = new Color(0xA0, 0x6A, 0x00);
 
   /** What the grid needs from the allocation step. */
   interface Host {
@@ -358,10 +360,7 @@ final class AirAllocationGrid extends JDialog {
             host.stage() == Stage.BOMBERS ? fighterCarrierCost(host.player(), zone) : 0;
         text.append("<br><font size=-2>carriers ");
         if (fighters > 0) {
-          text.append(load.cost() - fighters)
-              .append(" bombers<br>+ ")
-              .append(fighters)
-              .append(" fighters");
+          text.append(load.cost()).append(" bombers<br>+ ").append(fighters).append(" fighters");
         } else {
           text.append(load.cost());
         }
@@ -370,6 +369,19 @@ final class AirAllocationGrid extends JDialog {
           text.append(", jets ").append(load.jetCost()).append('/').append(load.fleetCapacity());
         }
         text.append("</font>");
+        // over capacity: in the bomber step the fighters will have to move off; in the fighter
+        // step they must
+        final int over =
+            host.stage() == Stage.BOMBERS
+                ? AirAllocation.carrierOverload(host.player(), staged, zone)
+                : Math.max(0, load.cost() - load.capacity());
+        if (over > 0) {
+          text.append("<br><font size=-2 color='#b71c1c'><b>")
+              .append(over)
+              .append(over == 1 ? " fighter" : " fighters")
+              .append(host.stage() == Stage.BOMBERS ? " must<br>leave in step 2" : " must leave")
+              .append("</b></font>");
+        }
       }
     }
     final JLabel l = new JLabel(text.append("</center></html>").toString(), SwingConstants.CENTER);
@@ -523,6 +535,12 @@ final class AirAllocationGrid extends JDialog {
       t.setForeground(new Color(0xB7, 0x1C, 0x1C));
       t.setToolTipText(carrierDetail(column, staged, carrier.get()));
       middle.add(t, BorderLayout.SOUTH);
+    } else if (targets != null && targets == 0) {
+      final JLabel t = new JLabel("no targets", SwingConstants.CENTER);
+      t.setFont(t.getFont().deriveFont(Font.BOLD, 10f));
+      t.setForeground(AMBER);
+      t.setToolTipText(noTargetsText(row, column));
+      middle.add(t, BorderLayout.SOUTH);
     } else if (targets != null) {
       final JLabel t =
           new JLabel(targets + (targets == 1 ? " target" : " targets"), SwingConstants.CENTER);
@@ -549,8 +567,10 @@ final class AirAllocationGrid extends JDialog {
         refuse(cell, carrierDetail(column, staged, problem.get()));
         return;
       }
-      sent(row, column);
-      change(adjust(staged, row, column, 1));
+      if (change(adjust(staged, row, column, 1))) {
+        sent(row, column);
+        noteNoTargets(row, column);
+      }
       return;
     }
     final Optional<Territory> source = pullSource(row, staged, column);
@@ -568,12 +588,14 @@ final class AirAllocationGrid extends JDialog {
       refuse(cell, carrierDetail(column, taken, problem.get()));
       return;
     }
-    final Deque<Territory> order = sentOrder.get(row);
-    if (order != null) {
-      order.removeLastOccurrence(source.get());
+    if (change(adjust(taken, row, column, 1))) {
+      final Deque<Territory> order = sentOrder.get(row);
+      if (order != null) {
+        order.removeLastOccurrence(source.get());
+      }
+      sent(row, column);
+      noteNoTargets(row, column);
     }
-    sent(row, column);
-    change(adjust(taken, row, column, 1));
   }
 
   /** "Philippine Sea: 8/8 used" for a full carrier front; other reasons as they are. */
@@ -631,8 +653,10 @@ final class AirAllocationGrid extends JDialog {
                         : "No front they can reach has room for one more.");
             return;
           }
-          sent(row, to.get());
-          change(adjust(host.staged(), row, to.get(), 1));
+          if (change(adjust(host.staged(), row, to.get(), 1))) {
+            sent(row, to.get());
+            noteNoTargets(row, to.get());
+          }
         });
     final JButton plus = small("+");
     plus.setName("plus|" + rowName(row) + "|" + column.getName());
@@ -763,6 +787,9 @@ final class AirAllocationGrid extends JDialog {
     }
     if (reason.startsWith("No landing spot")) {
       return "No landing spot";
+    }
+    if (reason.startsWith("No carriers")) {
+      return "No carriers";
     }
     if (reason.startsWith("No enemy") || reason.startsWith("No targets")) {
       return "No targets";
@@ -1050,10 +1077,86 @@ final class AirAllocationGrid extends JDialog {
 
   // ---- changes
 
-  private void change(final List<AirMove> moves) {
+  /** Makes the moves (asking first if they overload carriers); false if the player said no. */
+  private boolean change(final List<AirMove> moves) {
+    final Optional<String> overload = newOverload(host.staged(), moves);
+    if (overload.isPresent() && !confirm.test(overload.get())) {
+      return false;
+    }
     undo.push(List.copyOf(host.staged()));
     host.setStaged(moves);
     refresh();
+    return true;
+  }
+
+  /**
+   * Asks the player to confirm a carrier overload (package-private so tests can answer it). Returns
+   * true to go ahead.
+   */
+  java.util.function.Predicate<String> confirm =
+      message ->
+          JOptionPane.showConfirmDialog(
+                  this,
+                  message,
+                  "Carriers overloaded",
+                  JOptionPane.YES_NO_OPTION,
+                  JOptionPane.WARNING_MESSAGE)
+              == JOptionPane.YES_OPTION;
+
+  /**
+   * In the bomber step: the question to ask if these moves put more aircraft on a front's carriers
+   * than before and more than they hold, counting the fighters already there.
+   */
+  private Optional<String> newOverload(final List<AirMove> before, final List<AirMove> after) {
+    if (host.stage() != Stage.BOMBERS) {
+      return Optional.empty();
+    }
+    try (GameData.Unlocker ignored = host.data().acquireReadLock()) {
+      for (final Territory zone : columns) {
+        final int was = AirAllocation.carrierOverload(host.player(), before, zone);
+        final int now = AirAllocation.carrierOverload(host.player(), after, zone);
+        if (now > was) {
+          final CarrierLoad load =
+              AirAllocation.carrierLoadAfter(host.player(), host.stage(), after, zone);
+          final int fighters = fighterCarrierCost(host.player(), zone);
+          return Optional.of(
+              "<html>"
+                  + zoneName(zone)
+                  + ": your carriers hold "
+                  + load.capacity()
+                  + ".<br>This puts "
+                  + load.cost()
+                  + " bombers there beside "
+                  + fighters
+                  + " fighters.<br><br><b>In fighter allocation you will have to move "
+                  + now
+                  + (now == 1 ? " fighter" : " fighters")
+                  + " off "
+                  + zoneName(zone)
+                  + ".</b><br><br>Make this move?</html>");
+        }
+      }
+    }
+    return Optional.empty();
+  }
+
+  /** The gentle note after moving aircraft into a front where they have nothing to attack. */
+  private void noteNoTargets(final Row row, final Territory column) {
+    final Integer targets = targetCount.get(key(row.type(), column));
+    if (targets != null && targets == 0) {
+      status.setText(
+          "<html><div style='width:320px'><font color='#8a5a00'>"
+              + noTargetsText(row, column)
+              + "</font></div></html>");
+    }
+  }
+
+  private String noTargetsText(final Row row, final Territory column) {
+    return "There is nothing in "
+        + zoneName(column)
+        + " for your "
+        + plural(row.type(), 2)
+        + " to attack this round. They can still stop there on the way somewhere else.";
   }
 
   private static List<AirMove> adjust(

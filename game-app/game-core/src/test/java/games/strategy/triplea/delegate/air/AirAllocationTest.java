@@ -117,12 +117,37 @@ class AirAllocationTest {
   }
 
   @Test
-  void bombersNeedATargetFightersDoNot() {
+  void bombersMayPassThroughAFrontWithNothingToAttack() {
     removeFrom(
         unitedKingdom, unitedKingdom.getUnitCollection().getMatches(u -> u.isOwnedBy(germans)));
 
-    assertThat(valid(Stage.BOMBERS, new AirMove(frontA, frontB, bomber, 1)), is(false));
+    assertThat(valid(Stage.BOMBERS, new AirMove(frontA, frontB, bomber, 1)), is(true));
     assertThat(valid(Stage.FIGHTERS, new AirMove(frontA, frontB, fighter, 1)), is(true));
+  }
+
+  @Test
+  void bomberStepMayOverloadCarriersThatFightersThenLeave() {
+    link(frontA, ocean);
+    set(bomber.getUnitAttachment(), "carrierCost", "1");
+    addTo(oceanSeaZone, carrier(gameData).create(1, british));
+    final int capacity = carrier(gameData).getUnitAttachment().getCarrierCapacity();
+    addTo(ocean, fighter.create(capacity, british));
+    addTo(frontA, bomber.create(capacity, british));
+
+    // bombers alone fit: allowed though the fighters there make it too many
+    assertThat(valid(Stage.BOMBERS, new AirMove(frontA, ocean, bomber, capacity)), is(true));
+    assertThat(
+        AirAllocation.carrierOverload(
+            british, List.of(new AirMove(frontA, ocean, bomber, capacity)), ocean),
+        is(capacity));
+    // bombers alone do not fit: refused
+    assertThat(valid(Stage.BOMBERS, new AirMove(frontA, ocean, bomber, capacity + 1)), is(false));
+
+    // once the bombers are there, the fighter step must move the extra fighters off
+    removeFrom(frontA, frontA.getUnitCollection().getMatches(u -> u.getType().equals(bomber)));
+    addTo(ocean, bomber.create(capacity, british));
+    assertThat(valid(Stage.FIGHTERS), is(false));
+    assertThat(valid(Stage.FIGHTERS, new AirMove(ocean, frontA, fighter, capacity)), is(true));
   }
 
   @Test

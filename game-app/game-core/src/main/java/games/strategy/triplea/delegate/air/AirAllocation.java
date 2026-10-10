@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -88,8 +89,8 @@ public class AirAllocation {
    * Why this nation's aircraft of this type may not be in the box, apart from distance and carrier
    * space, or empty if it may: the box must admit the nation; a front needs one of the nation's
    * landing spots; in a bombing zone the attackers bring only aircraft with a strategic bombing
-   * value and the defenders only fighters; and an aircraft that strikes (not a fighter) needs at
-   * least one target it can reach there.
+   * value, and need a target there, and the defenders only fighters. A front with nothing to attack
+   * is allowed: aircraft may pass through it on the way somewhere else.
    */
   public static Optional<String> entryProblem(
       final GamePlayer player, final UnitType type, final Territory zone) {
@@ -118,11 +119,10 @@ public class AirAllocation {
     if (!AirRange.hasLandingSpot(player, zone)) {
       return Optional.of("No landing spot in this front.");
     }
-    if (!fighter && AirCombat.countTargets(player, zone, type) == 0) {
-      return Optional.of(
-          attachment.getZoneType() == ZoneType.OCEAN
-              ? "No enemy ships within reach."
-              : "No targets within reach.");
+    // a carrier-only front: islands give no room, so without carriers nothing can stay there
+    if (attachment.getZoneType() == ZoneType.OCEAN
+        && carrierLoad(player, zone, List.of()).capacity() == 0) {
+      return Optional.of("No carriers of yours in this front.");
     }
     return Optional.empty();
   }
@@ -235,13 +235,25 @@ public class AirAllocation {
                 + ".");
       }
     }
-    return checkCarrierCapacity(player, stage, moves);
+    return checkCarrierCapacity(player, stage, moves, map);
   }
 
-  /** Carrier capacity applies only in carrier-only (ocean) fronts. */
+  /**
+   * Carrier capacity applies only in carrier-only (ocean) fronts: in the bomber step to the fronts
+   * bombers move to (bombers only), in the fighter step to every such front where the nation has
+   * aircraft, since fighters left on carriers the bombers overloaded must move off.
+   */
   private static Optional<String> checkCarrierCapacity(
-      final GamePlayer player, final Stage stage, final List<AirMove> moves) {
-    final Set<Territory> destinations = new HashSet<>();
+      final GamePlayer player, final Stage stage, final List<AirMove> moves, final GameMap map) {
+    final Set<Territory> destinations = new LinkedHashSet<>();
+    if (stage == Stage.FIGHTERS) {
+      for (final Territory zone : AirZoneAttachment.getAirZones(map)) {
+        if (AirZoneAttachment.get(zone).orElseThrow().getZoneType() == ZoneType.OCEAN
+            && zone.anyUnitsMatch(u -> u.isOwnedBy(player) && Matches.unitIsAir().test(u))) {
+          destinations.add(zone);
+        }
+      }
+    }
     for (final AirMove move : moves) {
       if (AirZoneAttachment.get(move.to()).orElseThrow().getZoneType() == ZoneType.OCEAN) {
         destinations.add(move.to());
@@ -331,15 +343,32 @@ public class AirAllocation {
   }
 
   /**
-   * Types of the player's aircraft in the zone once the moves are made. In the bomber step the
-   * fighters there count too: they have not moved yet, so the bombers must leave them carrier room.
+   * Carrier spaces by which the nation's aircraft in a carrier-only front, fighters included,
+   * exceed its carriers once these bomber moves are made (0 if they fit). In the bomber step the
+   * bombers only have to fit on their own; going over because of the fighters already there is
+   * allowed, and those fighters then have to move off in the fighter step.
    */
+  public static int carrierOverload(
+      final GamePlayer player, final List<AirMove> bomberMoves, final Territory zone) {
+    if (AirZoneAttachment.get(zone).orElseThrow().getZoneType() != ZoneType.OCEAN) {
+      return 0;
+    }
+    final CarrierLoad load =
+        carrierLoad(player, zone, aircraftAfterMoves(player, Stage.FIGHTERS, bomberMoves, zone));
+    return Math.max(0, load.cost() - load.capacity());
+  }
+
+  /** Types of the player's aircraft in the zone once the moves are made (bomber stage: bombers). */
   private static List<UnitType> aircraftAfterMoves(
       final GamePlayer player, final Stage stage, final List<AirMove> moves, final Territory zone) {
     final List<UnitType> result = new ArrayList<>();
     for (final Unit unit :
         zone.getUnitCollection()
-            .getMatches(u -> u.isOwnedBy(player) && Matches.unitIsAir().test(u))) {
+            .getMatches(
+                u ->
+                    u.isOwnedBy(player)
+                        && Matches.unitIsAir().test(u)
+                        && (stage == Stage.FIGHTERS || isInStage(u, stage)))) {
       result.add(unit.getType());
     }
     for (final AirMove move : moves) {
