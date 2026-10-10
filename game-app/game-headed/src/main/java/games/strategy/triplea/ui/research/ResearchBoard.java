@@ -176,8 +176,10 @@ public final class ResearchBoard extends JPanel implements Scrollable {
       final MouseAdapter mouse =
           new MouseAdapter() {
             @Override
-            public void mouseClicked(final MouseEvent e) {
-              listener.categoryClicked(category.name());
+            public void mouseReleased(final MouseEvent e) {
+              if (contains(e.getPoint())) {
+                listener.categoryClicked(category.name());
+              }
             }
 
             @Override

@@ -154,6 +154,11 @@ public final class ResearchScreen extends JDialog {
     top.add(titleRow);
     focusBar.setLayout(new FlowLayout(FlowLayout.LEFT, 8, 2));
     top.add(focusBar);
+    // what the last click did, or why it could not, on its own line
+    final JPanel statusRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+    statusLabel.setFont(statusLabel.getFont().deriveFont(Font.BOLD));
+    statusRow.add(statusLabel);
+    top.add(statusRow);
     top.add(legend());
 
     final JScrollPane scroll = new JScrollPane(board);
@@ -163,8 +168,7 @@ public final class ResearchScreen extends JDialog {
     resultsPanel.setLayout(new BoxLayout(resultsPanel, BoxLayout.Y_AXIS));
     resultsPanel.setBorder(BorderFactory.createEmptyBorder(4, 12, 4, 12));
     final JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 6));
-    statusLabel.setForeground(new Color(0xB0, 0x30, 0x00));
-    buttons.add(statusLabel);
+    statusLabel.setForeground(new Color(0x15, 0x65, 0xC0));
     actionButton.setFont(actionButton.getFont().deriveFont(Font.BOLD, 14f));
     actionButton.addActionListener(e -> onAction());
     buttons.add(actionButton);
@@ -237,7 +241,7 @@ public final class ResearchScreen extends JDialog {
     fillNations(nation);
     showView(nation);
     if (activeSlot < 0) {
-      activeSlot = nextSlot(-1);
+      activeSlot = nextEmptySlot(-1);
       showView(nation);
     }
     open();
@@ -359,6 +363,16 @@ public final class ResearchScreen extends JDialog {
     return -1;
   }
 
+  /** The next usable slot after this one that has no category yet, or -1. */
+  private int nextEmptySlot(final int after) {
+    for (int s = after + 1; s < slotCount(); s++) {
+      if (slotUsable(s) && slotValue(s).isEmpty()) {
+        return s;
+      }
+    }
+    return -1;
+  }
+
   private String slotValue(final int slot) {
     final List<String> list = slot % 2 == 0 ? primaries : secondaries;
     return slot / 2 < list.size() ? list.get(slot / 2) : "";
@@ -401,16 +415,14 @@ public final class ResearchScreen extends JDialog {
     return tags;
   }
 
-  /** While choosing a slot: categories taken by another slot can't be chosen. */
+  /**
+   * While choosing a slot: complete categories can't be chosen. A category another slot holds stays
+   * clickable: choosing it swaps the two slots.
+   */
   private Set<String> greyed() {
     final Set<String> greyed = new HashSet<>();
     if (!editing() || activeSlot < 0) {
       return greyed;
-    }
-    for (int s = 0; s < slotCount(); s++) {
-      if (s != activeSlot && slotUsable(s)) {
-        greyed.add(slotValue(s));
-      }
     }
     view.categories().stream().filter(Category::isComplete).forEach(c -> greyed.add(c.name()));
     return greyed;
@@ -425,19 +437,25 @@ public final class ResearchScreen extends JDialog {
         return Optional.of(category + " is complete.");
       }
     }
+    return Optional.empty();
+  }
+
+  /** The other usable slot that holds this category, or -1. */
+  private int slotHolding(final String category) {
     for (int s = 0; s < slotCount(); s++) {
       if (s != activeSlot && slotUsable(s) && slotValue(s).equals(category)) {
-        return Optional.of(category + " is already the focus of " + slotName(s) + ".");
+        return s;
       }
     }
-    return Optional.empty();
+    return -1;
   }
 
   private static String slotName(final int slot) {
     return "centre " + (slot / 2 + 1) + (slot % 2 == 0 ? " (primary)" : " (secondary)");
   }
 
-  private void onCategoryClicked(final String category) {
+  // package-private for the preview test
+  void onCategoryClicked(final String category) {
     if (!editing() || activeSlot < 0) {
       return;
     }
@@ -446,21 +464,53 @@ public final class ResearchScreen extends JDialog {
       statusLabel.setText(reason.get());
       return;
     }
+    // a category another slot holds: the two slots swap
+    final int other = slotHolding(category);
+    final String old = slotValue(activeSlot);
     setSlotValue(activeSlot, category);
-    activeSlot = nextSlot(activeSlot);
-    statusLabel.setText(" ");
+    final String done;
+    if (other >= 0) {
+      setSlotValue(other, old);
+      done =
+          "Swapped: "
+              + slotName(activeSlot)
+              + " is now "
+              + category
+              + ", "
+              + slotName(other)
+              + " is now "
+              + (old.isEmpty() ? "(none)" : old)
+              + ".";
+    } else {
+      done = slotName(activeSlot) + " is now " + category + ".";
+    }
+    // only a first-time setup moves on to the next empty slot
+    activeSlot = nextEmptySlot(activeSlot);
     showView(acting);
+    statusLabel.setText(done);
   }
 
   private void onCategoryHovered(final @Nullable String category) {
     if (!editing() || activeSlot < 0) {
       return;
     }
+    final int other = category == null ? -1 : slotHolding(category);
     statusLabel.setText(
         category == null
             ? " "
             : whyNot(category)
-                .orElse("Click to make " + category + " the focus of " + slotName(activeSlot)));
+                .orElse(
+                    other >= 0
+                        ? "Click to swap: "
+                            + slotName(activeSlot)
+                            + " takes "
+                            + category
+                            + ", "
+                            + slotName(other)
+                            + " takes "
+                            + slotValue(activeSlot)
+                            + "."
+                        : "Click to make " + category + " the focus of " + slotName(activeSlot)));
   }
 
   private void buildFocusBar() {
@@ -491,6 +541,7 @@ public final class ResearchScreen extends JDialog {
         final boolean working = workingCenter(center);
         box.add(slotButton(2 * center, "P: ", working));
         if (hasSecondary()) {
+          box.add(swapButton(center, working));
           box.add(slotButton(2 * center + 1, "S: ", working));
         }
         if (view.capitalLost()) {
@@ -508,14 +559,43 @@ public final class ResearchScreen extends JDialog {
         focusBar.add(box);
       }
       focusBar.add(Box.createHorizontalStrut(8));
-      focusBar.add(
+      final JLabel instruction =
           new JLabel(
               activeSlot >= 0
-                  ? "Click a category for " + slotName(activeSlot) + "."
-                  : "Click a P or S button to change it."));
+                  ? "Now click a category on the board for " + slotName(activeSlot) + "."
+                  : "Click P or S, then a category. \u21c4 swaps a centre's P and S.");
+      instruction.setFont(instruction.getFont().deriveFont(Font.BOLD));
+      focusBar.add(instruction);
     }
     focusBar.revalidate();
     focusBar.repaint();
+  }
+
+  /** The swap button: the centre's primary and secondary change places. */
+  private JButton swapButton(final int center, final boolean working) {
+    final JButton button = new JButton("\u21c4");
+    button.setName("swap|" + center);
+    button.setMargin(new java.awt.Insets(1, 4, 1, 4));
+    button.setFocusable(false);
+    button.setEnabled(working);
+    button.setToolTipText("Swap centre " + (center + 1) + "'s primary and secondary");
+    button.addActionListener(
+        e -> {
+          final String primary = slotValue(2 * center);
+          setSlotValue(2 * center, slotValue(2 * center + 1));
+          setSlotValue(2 * center + 1, primary);
+          activeSlot = -1;
+          showView(acting);
+          statusLabel.setText(
+              "Centre "
+                  + (center + 1)
+                  + ": primary is now "
+                  + slotValue(2 * center)
+                  + ", secondary "
+                  + slotValue(2 * center + 1)
+                  + ".");
+        });
+    return button;
   }
 
   private JToggleButton slotButton(final int slot, final String prefix, final boolean working) {
