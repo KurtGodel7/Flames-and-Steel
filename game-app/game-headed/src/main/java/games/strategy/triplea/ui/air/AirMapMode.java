@@ -63,7 +63,7 @@ import org.triplea.java.collections.IntegerMap;
  * switch. Hovering any territory, in either view, reports which aircraft could strike it.
  */
 public final class AirMapMode implements MapOverlay {
-  private static final Color[] PALETTE = {
+  static final Color[] PALETTE = {
     new Color(0xE6, 0x9F, 0x00),
     new Color(0x56, 0xB4, 0xE9),
     new Color(0x00, 0x9E, 0x73),
@@ -904,6 +904,41 @@ public final class AirMapMode implements MapOverlay {
       areas.put(zone, ZoneShape.of(covered, mapData));
       anchors.put(zone, medoid(covered, mapData, width));
     }
+    final Map<Territory, Color> colors = frontColors(d, theatre, owner);
+    final List<Territory[]> pairs = new ArrayList<>();
+    for (final Territory zone : theatre) {
+      for (final Territory other : AirZoneAttachment.get(zone).orElseThrow().getAdjacentZones()) {
+        if (areas.containsKey(other) && theatre.indexOf(other) > theatre.indexOf(zone)) {
+          pairs.add(new Territory[] {zone, other});
+        }
+      }
+    }
+    zoneOf = owner;
+    zoneArea = areas;
+    anchor = anchors;
+    zoneColor = colors;
+    links = pairs;
+  }
+
+  /** Each front's colour as the air map shows it (the allocation grid's mini map uses it too). */
+  static Map<Territory, Color> frontColors(final GameData d) {
+    final Map<Territory, Territory> owner = new HashMap<>();
+    final List<Territory> theatre = new ArrayList<>();
+    for (final Territory zone : AirZoneAttachment.getAirZones(d.getMap())) {
+      final AirZoneAttachment a = AirZoneAttachment.get(zone).orElseThrow();
+      if (a.getZoneType() == ZoneType.BOMB || a.getZoneType() == ZoneType.RESERVE) {
+        continue;
+      }
+      theatre.add(zone);
+      for (final Territory t : a.getCoveredTerritories()) {
+        owner.put(t, zone);
+      }
+    }
+    return frontColors(d, theatre, owner);
+  }
+
+  private static Map<Territory, Color> frontColors(
+      final GameData d, final List<Territory> theatre, final Map<Territory, Territory> owner) {
     // neighbouring zones get different colours
     final Map<Territory, Set<Territory>> touching = new HashMap<>();
     for (final Map.Entry<Territory, Territory> e : owner.entrySet()) {
@@ -931,24 +966,11 @@ public final class AirMapMode implements MapOverlay {
       }
       colors.put(zone, pick);
     }
-    final List<Territory[]> pairs = new ArrayList<>();
-    for (final Territory zone : theatre) {
-      for (final Territory other : AirZoneAttachment.get(zone).orElseThrow().getAdjacentZones()) {
-        if (areas.containsKey(other) && theatre.indexOf(other) > theatre.indexOf(zone)) {
-          pairs.add(new Territory[] {zone, other});
-        }
-      }
-    }
-    zoneOf = owner;
-    zoneArea = areas;
-    anchor = anchors;
-    zoneColor = colors;
-    links = pairs;
+    return colors;
   }
 
   /** The covered territory whose centre is closest to all the others (across the date line). */
-  private static Point medoid(
-      final List<Territory> covered, final MapData mapData, final int width) {
+  static Point medoid(final List<Territory> covered, final MapData mapData, final int width) {
     Point best = null;
     long bestScore = Long.MAX_VALUE;
     for (final Territory a : covered) {

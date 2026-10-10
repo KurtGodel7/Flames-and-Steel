@@ -20,6 +20,8 @@ import games.strategy.triplea.ui.mapdata.MapData;
 import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Component;
+import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -31,12 +33,14 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.Point;
+import java.awt.Polygon;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.awt.image.BufferedImage;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -61,19 +65,25 @@ import org.triplea.java.collections.IntegerMap;
 
 /**
  * Flames and Steel allocation grid: one window per allocation step. Rows are the nation's aircraft
- * groups (type and current box); columns are the boxes it could use this round. A cell's + moves
- * one aircraft from the row's current box into that column and − moves it back, so every aircraft
- * is always somewhere. Cells where the type cannot go are greyed with the reason; usable cells of
- * aircraft that strike show their number of targets. Bottom rows show the nation's totals, allies'
- * moves so far and enemies' last revealed aircraft.
+ * groups (type and current front); columns are the fronts it could use this round. A cell's + moves
+ * one aircraft from the row's current front into that column and − moves it back, so every aircraft
+ * is always somewhere; the row's own cell ("Staying") has − and + too. Cells where the type cannot
+ * go are greyed with the reason; usable cells of aircraft that strike show their number of targets.
+ * Bottom rows show the nation's totals, allies' moves so far and enemies' last revealed aircraft. A
+ * small map of the fronts shows where the selected row can go.
  */
 final class AirAllocationGrid extends JDialog {
   private static final long serialVersionUID = 1L;
+  private static final Color TEXT = new Color(0x1A, 0x1A, 0x1A);
+  private static final Color LINES = new Color(0xC4, 0xCA, 0xD0);
   private static final Color CURRENT = new Color(0xFF, 0xF1, 0xC4);
-  private static final Color GREY = new Color(0xDD, 0xDD, 0xDD);
-  private static final Color GREY_TEXT = new Color(0x88, 0x88, 0x88);
+  private static final Color GREY = new Color(0xE2, 0xE2, 0xE2);
+  private static final Color GREY_TEXT = new Color(0x90, 0x90, 0x90);
   private static final Color USABLE = Color.WHITE;
   private static final Color MOVED = new Color(0xD8, 0xF5, 0xDC);
+  private static final Color HEADER = new Color(0xE6, 0xEC, 0xF2);
+  private static final Color SELECTED = new Color(0xD6, 0xE8, 0xFF);
+  private static final Color FOOTER = new Color(0xF7, 0xF7, 0xF7);
   private static final Color OCEAN = new Color(0xE0, 0xA8, 0x00);
 
   /** What the grid needs from the allocation step. */
@@ -97,7 +107,7 @@ final class AirAllocationGrid extends JDialog {
     void hoverZone(@Nullable Territory zone);
   }
 
-  /** One row: the nation's aircraft of a type in a box. */
+  /** One row: the nation's aircraft of a type in a front. */
   private record Row(Territory from, UnitType type, int count) {}
 
   private final Host host;
@@ -108,11 +118,16 @@ final class AirAllocationGrid extends JDialog {
   private final Map<String, Optional<String>> entry = new HashMap<>();
   private final Map<String, Integer> targetCount = new HashMap<>();
   private final Deque<List<AirMove>> undo = new ArrayDeque<>();
+  // per row: the columns it sent aircraft to, most recent last (the Staying cell's + pulls back)
+  private final Map<Row, Deque<Territory>> sentOrder = new HashMap<>();
   private final JLabel header = new JLabel();
   private final JLabel status = new JLabel();
   private final JPanel grid = new JPanel(new GridBagLayout());
   private final JButton undoButton = new JButton("Undo");
-  private final AdjacencyDiagram diagram;
+  private final MiniMap miniMap;
+  private @Nullable Row selectedRow;
+  private @Nullable Row hoverRow;
+  private @Nullable Territory hoverColumn;
 
   AirAllocationGrid(final Frame owner, final UiContext uiContext, final Host host) {
     super(owner, host.player().getName() + " air allocation", false);
@@ -127,11 +142,14 @@ final class AirAllocationGrid extends JDialog {
             setVisible(false);
           }
         });
-    diagram = new AdjacencyDiagram();
     computeLayout();
+    selectedRow = rows.isEmpty() ? null : rows.get(0);
+    miniMap = new MiniMap();
 
     header.setFont(header.getFont().deriveFont(Font.BOLD, 15f));
+    header.setForeground(TEXT);
     status.setFont(status.getFont().deriveFont(Font.PLAIN, 13f));
+    status.setForeground(TEXT);
     final JPanel top = new JPanel(new BorderLayout());
     final JPanel titles = new JPanel(new GridBagLayout());
     final GridBagConstraints c = new GridBagConstraints();
@@ -141,11 +159,15 @@ final class AirAllocationGrid extends JDialog {
     c.gridy = 1;
     titles.add(status, c);
     top.add(titles, BorderLayout.CENTER);
-    top.add(diagram, BorderLayout.EAST);
+    top.add(miniMap, BorderLayout.EAST);
     top.setBorder(BorderFactory.createEmptyBorder(6, 10, 6, 10));
 
     final JButton reset = new JButton("Reset");
-    reset.addActionListener(e -> change(List.of()));
+    reset.addActionListener(
+        e -> {
+          sentOrder.clear();
+          change(List.of());
+        });
     undoButton.addActionListener(
         e -> {
           if (!undo.isEmpty()) {
@@ -161,10 +183,14 @@ final class AirAllocationGrid extends JDialog {
     buttons.add(reset);
     buttons.add(done);
 
+    grid.setOpaque(true);
+    grid.setBackground(LINES);
+    final JPanel gridHolder = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+    gridHolder.add(grid);
     getContentPane().setLayout(new BorderLayout());
     getContentPane().add(top, BorderLayout.NORTH);
-    final JScrollPane scroll = new JScrollPane(grid);
-    scroll.setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 6));
+    final JScrollPane scroll = new JScrollPane(gridHolder);
+    scroll.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
     getContentPane().add(scroll, BorderLayout.CENTER);
     getContentPane().add(buttons, BorderLayout.SOUTH);
     refresh();
@@ -202,7 +228,7 @@ final class AirAllocationGrid extends JDialog {
           }
         }
       }
-      // the nation's current boxes, then every box next to one that some row may use
+      // the nation's current fronts, then every front next to one that some row may use
       for (final Territory zone : zones) {
         final boolean usable =
             rows.stream()
@@ -217,6 +243,10 @@ final class AirAllocationGrid extends JDialog {
     }
   }
 
+  private String aircraftWord() {
+    return host.stage() == Stage.BOMBERS ? "bombers" : "fighters";
+  }
+
   private void refresh() {
     final GamePlayer player = host.player();
     final List<AirMove> staged = host.staged();
@@ -228,17 +258,20 @@ final class AirAllocationGrid extends JDialog {
             + "  ·  step "
             + (host.stage() == Stage.BOMBERS ? "1 of 2: bombers" : "2 of 2: fighters"));
     final int total = rows.stream().mapToInt(Row::count).sum();
+    // wraps rather than being cut off beside the mini map
     status.setText(
-        total == 0
-            ? "No " + (host.stage() == Stage.BOMBERS ? "bombers" : "fighters") + " to allocate."
-            : moving == 0
-                ? "All " + total + " aircraft stay where they are. Use + to move them."
-                : moving + " of " + total + " aircraft moving; the rest stay.");
+        "<html><div style='width:320px'>"
+            + (total == 0
+                ? "No " + aircraftWord() + " to allocate."
+                : moving == 0
+                    ? "All " + total + " aircraft stay where they are. Use + to move them."
+                    : moving + " moving, " + (total - moving) + " staying.")
+            + "</div></html>");
     undoButton.setEnabled(!undo.isEmpty());
     grid.removeAll();
     final GridBagConstraints c = new GridBagConstraints();
     c.fill = GridBagConstraints.BOTH;
-    c.insets = new Insets(1, 1, 1, 1);
+    c.insets = new Insets(1, 1, 0, 0);
     c.gridy = 0;
     // column headers
     c.gridx = 0;
@@ -254,39 +287,51 @@ final class AirAllocationGrid extends JDialog {
       grid.add(rowHeader(row), c);
       for (int i = 0; i < columns.size(); i++) {
         c.gridx = i + 1;
-        grid.add(cell(row, columns.get(i), staged), c);
+        final JComponent cell = cell(row, columns.get(i), staged);
+        track(cell, row, columns.get(i));
+        grid.add(cell, c);
       }
     }
     // totals and other nations
     c.gridy++;
     c.gridx = 0;
-    grid.add(footerLabel("Your aircraft after moves"), c);
+    grid.add(footerLabel("Your " + aircraftWord() + " after moves"), c);
     for (int i = 0; i < columns.size(); i++) {
       c.gridx = i + 1;
-      grid.add(footerCell(String.valueOf(totalAfter(player, columns.get(i), staged))), c);
+      grid.add(footerCell(String.valueOf(totalAfter(player, columns.get(i), staged)), true), c);
     }
     c.gridy++;
     c.gridx = 0;
     grid.add(footerLabel("Allies (moves so far)"), c);
     for (int i = 0; i < columns.size(); i++) {
       c.gridx = i + 1;
-      grid.add(footerCell(othersText(columns.get(i), true)), c);
+      grid.add(footerCell(othersText(columns.get(i), true), false), c);
     }
     c.gridy++;
     c.gridx = 0;
+    c.insets = new Insets(1, 1, 1, 0);
     grid.add(footerLabel("Enemies (last revealed)"), c);
     for (int i = 0; i < columns.size(); i++) {
       c.gridx = i + 1;
-      grid.add(footerCell(othersText(columns.get(i), false)), c);
+      grid.add(footerCell(othersText(columns.get(i), false), false), c);
     }
+    // a 1-pixel line on the right edge
+    c.gridx = columns.size() + 1;
+    c.gridy = 0;
+    c.gridheight = GridBagConstraints.REMAINDER;
+    c.insets = new Insets(0, 1, 0, 0);
+    grid.add(new JLabel(), c);
     grid.revalidate();
     grid.repaint();
-    diagram.repaint();
+    miniMap.repaint();
   }
 
   private JComponent headerCell(final String text) {
     final JLabel l = new JLabel(text, SwingConstants.CENTER);
     l.setFont(l.getFont().deriveFont(Font.BOLD));
+    l.setForeground(TEXT);
+    l.setOpaque(true);
+    l.setBackground(HEADER);
     l.setBorder(BorderFactory.createEmptyBorder(4, 6, 4, 6));
     return l;
   }
@@ -312,28 +357,33 @@ final class AirAllocationGrid extends JDialog {
       }
     }
     final JLabel l = new JLabel(text.append("</center></html>").toString(), SwingConstants.CENTER);
-    l.setOpaque(true);
-    l.setBackground(new Color(0xEC, 0xEF, 0xF1));
-    l.setBorder(
+    l.setForeground(TEXT);
+    final JButton all = small("All here");
+    all.setName("allHere|" + zone.getName());
+    final List<AirMove> allHere = allHere(staged, zone);
+    all.setEnabled(!allHere.equals(staged));
+    all.setToolTipText(
+        all.isEnabled()
+            ? "Send every " + aircraftWord().replaceFirst("s$", "") + " that can go here"
+            : "Everything that can go here is already here");
+    all.addActionListener(e -> change(allHere(host.staged(), zone)));
+    final JPanel p = new JPanel(new BorderLayout(0, 3));
+    p.setOpaque(true);
+    p.setBackground(HEADER);
+    p.add(l, BorderLayout.CENTER);
+    final JPanel south = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
+    south.setOpaque(false);
+    south.add(all);
+    p.add(south, BorderLayout.SOUTH);
+    p.setBorder(
         a.getZoneType() == ZoneType.OCEAN
-            ? BorderFactory.createMatteBorder(0, 0, 3, 0, OCEAN)
-            : BorderFactory.createEmptyBorder(4, 6, 4, 6));
+            ? BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(0, 0, 3, 0, OCEAN),
+                BorderFactory.createEmptyBorder(4, 6, 2, 6))
+            : BorderFactory.createEmptyBorder(4, 6, 5, 6));
     l.setToolTipText("Point here to see " + AirAllocation.zoneName(zone) + " on the map");
-    l.addMouseListener(
-        new MouseAdapter() {
-          @Override
-          public void mouseEntered(final MouseEvent e) {
-            host.hoverZone(zone);
-            diagram.highlight(zone);
-          }
-
-          @Override
-          public void mouseExited(final MouseEvent e) {
-            host.hoverZone(null);
-            diagram.highlight(null);
-          }
-        });
-    return l;
+    track(p, null, zone);
+    return p;
   }
 
   private JComponent rowHeader(final Row row) {
@@ -350,7 +400,20 @@ final class AirAllocationGrid extends JDialog {
                 .getUnitImageFactory()
                 .getIcon(ImageKey.builder().player(host.player()).type(row.type()).build()),
             SwingConstants.LEFT);
+    l.setForeground(TEXT);
+    l.setOpaque(true);
+    l.setBackground(row.equals(selectedRow) ? SELECTED : USABLE);
     l.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 8));
+    l.setToolTipText("Click to show where these aircraft can go on the small map");
+    l.addMouseListener(
+        new MouseAdapter() {
+          @Override
+          public void mouseClicked(final MouseEvent e) {
+            selectedRow = row;
+            refresh();
+          }
+        });
+    track(l, row, null);
     return l;
   }
 
@@ -360,12 +423,7 @@ final class AirAllocationGrid extends JDialog {
     final JPanel p = new JPanel(new BorderLayout(2, 0));
     p.setBorder(BorderFactory.createEmptyBorder(3, 4, 3, 4));
     if (column.equals(row.from())) {
-      p.setBackground(CURRENT);
-      final JLabel l = new JLabel(String.valueOf(left), SwingConstants.CENTER);
-      l.setFont(l.getFont().deriveFont(Font.BOLD, 14f));
-      l.setToolTipText("Stay in " + AirAllocation.zoneName(column));
-      p.add(l, BorderLayout.CENTER);
-      return p;
+      return homeCell(p, row, column, staged, left);
     }
     final Optional<String> problem = problem(row, column);
     if (problem.isPresent()) {
@@ -379,15 +437,23 @@ final class AirAllocationGrid extends JDialog {
     }
     p.setBackground(moved > 0 ? MOVED : USABLE);
     final JButton minus = small("−");
+    minus.setName("minus|" + rowName(row) + "|" + column.getName());
     minus.setEnabled(moved > 0);
-    minus.addActionListener(e -> change(adjust(staged, row, column, -1)));
+    minus.setToolTipText(moved > 0 ? "Send one back to " + zoneName(row.from()) : null);
+    minus.addActionListener(e -> change(adjust(host.staged(), row, column, -1)));
     final JButton plus = small("+");
+    plus.setName("plus|" + rowName(row) + "|" + column.getName());
     final Optional<String> plusProblem = plusProblem(row, column, staged, left);
     plus.setEnabled(plusProblem.isEmpty());
     plus.setToolTipText(plusProblem.orElse("Move one more " + AirAllocation.typeName(row.type())));
-    plus.addActionListener(e -> change(adjust(staged, row, column, 1)));
+    plus.addActionListener(
+        e -> {
+          sent(row, column);
+          change(adjust(host.staged(), row, column, 1));
+        });
     final JLabel count = new JLabel(String.valueOf(moved), SwingConstants.CENTER);
     count.setFont(count.getFont().deriveFont(Font.BOLD, 14f));
+    count.setForeground(TEXT);
     final JPanel middle = new JPanel(new BorderLayout());
     middle.setOpaque(false);
     middle.add(count, BorderLayout.CENTER);
@@ -396,12 +462,143 @@ final class AirAllocationGrid extends JDialog {
       final JLabel t =
           new JLabel(targets + (targets == 1 ? " target" : " targets"), SwingConstants.CENTER);
       t.setFont(t.getFont().deriveFont(10f));
+      t.setForeground(TEXT);
       middle.add(t, BorderLayout.SOUTH);
     }
     p.add(minus, BorderLayout.WEST);
     p.add(middle, BorderLayout.CENTER);
     p.add(plus, BorderLayout.EAST);
     return p;
+  }
+
+  /**
+   * The row's own front: "Staying: 5". − sends one to the column it last went to (or the first
+   * column that can take it); + pulls one back from the column it last went to.
+   */
+  private JComponent homeCell(
+      final JPanel p,
+      final Row row,
+      final Territory column,
+      final List<AirMove> staged,
+      final int left) {
+    p.setBackground(CURRENT);
+    final JLabel l = new JLabel("Staying: " + left, SwingConstants.CENTER);
+    l.setFont(l.getFont().deriveFont(Font.BOLD, 13f));
+    l.setForeground(TEXT);
+    l.setToolTipText("Aircraft that stay in " + zoneName(column));
+    final JButton minus = small("−");
+    minus.setName("minus|" + rowName(row) + "|" + column.getName());
+    final Optional<Territory> sendTo = sendTarget(row, staged, left);
+    minus.setEnabled(sendTo.isPresent());
+    minus.setToolTipText(
+        sendTo
+            .map(t -> "Send one to " + zoneName(t))
+            .orElse(left <= 0 ? "None left here." : "No front can take one more."));
+    minus.addActionListener(
+        e ->
+            sendTarget(row, host.staged(), row.count() - movedOut(row, host.staged()))
+                .ifPresent(
+                    t -> {
+                      sent(row, t);
+                      change(adjust(host.staged(), row, t, 1));
+                    }));
+    final JButton plus = small("+");
+    plus.setName("plus|" + rowName(row) + "|" + column.getName());
+    final Optional<Territory> pullFrom = pullSource(row, staged);
+    plus.setEnabled(pullFrom.isPresent());
+    plus.setToolTipText(
+        pullFrom.map(t -> "Bring one back from " + zoneName(t)).orElse("None of them is moving."));
+    plus.addActionListener(
+        e ->
+            pullSource(row, host.staged())
+                .ifPresent(
+                    t -> {
+                      final Deque<Territory> order = sentOrder.get(row);
+                      if (order != null) {
+                        order.removeLastOccurrence(t);
+                      }
+                      change(adjust(host.staged(), row, t, -1));
+                    }));
+    p.add(minus, BorderLayout.WEST);
+    p.add(l, BorderLayout.CENTER);
+    p.add(plus, BorderLayout.EAST);
+    return p;
+  }
+
+  private void sent(final Row row, final Territory column) {
+    sentOrder.computeIfAbsent(row, k -> new ArrayDeque<>()).addLast(column);
+  }
+
+  /** Where the Staying cell's − sends one: the column last sent to, else the first that can. */
+  private Optional<Territory> sendTarget(
+      final Row row, final List<AirMove> staged, final int left) {
+    if (left <= 0) {
+      return Optional.empty();
+    }
+    final List<Territory> order = new ArrayList<>();
+    final Deque<Territory> recent = sentOrder.get(row);
+    if (recent != null) {
+      recent.descendingIterator().forEachRemaining(order::add);
+    }
+    order.addAll(columns);
+    for (final Territory column : order) {
+      if (!column.equals(row.from())
+          && problem(row, column).isEmpty()
+          && plusProblem(row, column, staged, left).isEmpty()) {
+        return Optional.of(column);
+      }
+    }
+    return Optional.empty();
+  }
+
+  /** Where the Staying cell's + brings one back from: the column most recently sent to. */
+  private Optional<Territory> pullSource(final Row row, final List<AirMove> staged) {
+    final Deque<Territory> recent = sentOrder.get(row);
+    if (recent != null) {
+      for (final var it = recent.descendingIterator(); it.hasNext(); ) {
+        final Territory t = it.next();
+        if (movedTo(row, t, staged) > 0) {
+          return Optional.of(t);
+        }
+      }
+    }
+    for (int i = columns.size() - 1; i >= 0; i--) {
+      if (movedTo(row, columns.get(i), staged) > 0) {
+        return Optional.of(columns.get(i));
+      }
+    }
+    return Optional.empty();
+  }
+
+  /** Every row's aircraft that can go to the column, moved there (as many as fit on carriers). */
+  private List<AirMove> allHere(final List<AirMove> staged, final Territory column) {
+    List<AirMove> result = new ArrayList<>(staged);
+    for (final Row row : rows) {
+      if (!column.equals(row.from()) && problem(row, column).isPresent()) {
+        continue;
+      }
+      // take the row's moves back, then send them all here
+      final List<AirMove> without = new ArrayList<>();
+      for (final AirMove m : result) {
+        if (!(m.from().equals(row.from()) && m.unitType().equals(row.type()))) {
+          without.add(m);
+        }
+      }
+      if (column.equals(row.from())) {
+        result = without;
+        continue;
+      }
+      List<AirMove> moved = without;
+      for (int i = 0; i < row.count(); i++) {
+        if (plusProblem(row, column, moved, row.count() - i).isPresent()) {
+          break;
+        }
+        moved = adjust(moved, row, column, 1);
+      }
+      // a carrier front may take none of this row: then keep its moves as they were
+      result = movedTo(row, column, moved) > 0 ? moved : result;
+    }
+    return result;
   }
 
   private static JButton small(final String text) {
@@ -413,7 +610,7 @@ final class AirAllocationGrid extends JDialog {
 
   private Optional<String> problem(final Row row, final Territory column) {
     if (!AirAllocation.canMove(row.from(), column)) {
-      return Optional.of("Two boxes away: needs two rounds.");
+      return Optional.of("Two fronts away: needs two rounds.");
     }
     return entry.get(key(row.type(), column));
   }
@@ -434,19 +631,53 @@ final class AirAllocationGrid extends JDialog {
 
   private JComponent footerLabel(final String text) {
     final JLabel l = new JLabel(text);
-    l.setFont(l.getFont().deriveFont(Font.ITALIC, 12f));
+    l.setFont(l.getFont().deriveFont(Font.BOLD, 12f));
+    l.setForeground(TEXT);
+    l.setOpaque(true);
+    l.setBackground(FOOTER);
     l.setBorder(BorderFactory.createEmptyBorder(3, 4, 3, 8));
     return l;
   }
 
-  private JComponent footerCell(final String text) {
+  private JComponent footerCell(final String text, final boolean bold) {
     final JLabel l =
         new JLabel("<html><center>" + text + "</center></html>", SwingConstants.CENTER);
-    l.setFont(l.getFont().deriveFont(11f));
+    l.setFont(l.getFont().deriveFont(bold ? Font.BOLD : Font.PLAIN, 12f));
+    l.setForeground(TEXT);
     l.setOpaque(true);
-    l.setBackground(new Color(0xF4, 0xF4, 0xF4));
+    l.setBackground(FOOTER);
     l.setBorder(BorderFactory.createEmptyBorder(3, 4, 3, 4));
     return l;
+  }
+
+  // ---- hover and selection: drive the small map and the main map
+
+  /** Hovering the component (or anything in it) shows its row and column on the maps. */
+  private void track(
+      final Component component, final @Nullable Row row, final @Nullable Territory column) {
+    component.addMouseListener(
+        new MouseAdapter() {
+          @Override
+          public void mouseEntered(final MouseEvent e) {
+            hoverRow = row;
+            hoverColumn = column;
+            host.hoverZone(column);
+            miniMap.repaint();
+          }
+
+          @Override
+          public void mouseExited(final MouseEvent e) {
+            hoverRow = null;
+            hoverColumn = null;
+            host.hoverZone(null);
+            miniMap.repaint();
+          }
+        });
+    if (component instanceof Container container) {
+      for (final Component child : container.getComponents()) {
+        track(child, row, column);
+      }
+    }
   }
 
   // ---- counting
@@ -469,14 +700,12 @@ final class AirAllocationGrid extends JDialog {
         .sum();
   }
 
-  /** All the nation's aircraft in the box once its moves are made (both stages). */
+  /** The nation's aircraft of this step (bombers or fighters) in the front once moves are made. */
   private int totalAfter(
       final GamePlayer player, final Territory zone, final List<AirMove> staged) {
     int count;
     try (GameData.Unlocker ignored = host.data().acquireReadLock()) {
-      count =
-          zone.getUnitCollection()
-              .countMatches(u -> u.isOwnedBy(player) && Matches.unitIsAir().test(u));
+      count = AirAllocation.getAircraft(player, zone, host.stage()).size();
     }
     for (final AirMove m : staged) {
       if (m.from().equals(zone)) {
@@ -490,8 +719,9 @@ final class AirAllocationGrid extends JDialog {
   }
 
   /**
-   * Allies: their aircraft in the box once their staged moves are made. Enemies: their aircraft as
-   * last revealed (where the map shows them). "ITA 2F/1B".
+   * Allies: their aircraft in the front once their staged moves are made. Enemies: their aircraft
+   * as last revealed (where the map shows them). "Italy<br>
+   * 1 fighter, 1 bomber".
    */
   private String othersText(final Territory zone, final boolean allies) {
     final GamePlayer player = host.player();
@@ -528,7 +758,15 @@ final class AirAllocationGrid extends JDialog {
           }
         }
         if (fighters > 0 || bombers > 0) {
-          parts.add(AirZoneOverlay.shortName(other) + " " + fighters + "F/" + bombers + "B");
+          final List<String> units = new ArrayList<>();
+          if (fighters > 0) {
+            units.add(fighters + (fighters == 1 ? " fighter" : " fighters"));
+          }
+          if (bombers > 0) {
+            units.add(bombers + (bombers == 1 ? " bomber" : " bombers"));
+          }
+          parts.add(
+              "<b>" + AirZoneOverlay.nationName(other) + "</b><br>" + String.join(", ", units));
         }
       }
     }
@@ -541,6 +779,14 @@ final class AirAllocationGrid extends JDialog {
 
   private static String key(final UnitType type, final Territory zone) {
     return type.getName() + "|" + zone.getName();
+  }
+
+  private static String rowName(final Row row) {
+    return row.type().getName() + "@" + row.from().getName();
+  }
+
+  private static String zoneName(final Territory zone) {
+    return AirAllocation.zoneName(zone);
   }
 
   // ---- changes
@@ -582,143 +828,274 @@ final class AirAllocationGrid extends JDialog {
     refresh();
   }
 
-  // ---- the small map of boxes
+  // ---- the mini map of the fronts
 
-  /** A small diagram of the air boxes and their links, laid out roughly as on the map. */
-  private final class AdjacencyDiagram extends JComponent {
+  /**
+   * A small world map drawn from the real territories. The selected row's current front is in its
+   * colour with a bright outline ("(here)"); the fronts it can reach this round (the grid's usable
+   * columns for that row) in their colours, labelled; bombing zones it can reach as a dashed
+   * outline of the home region; everything else flat grey. A hovered column is outlined in white.
+   */
+  private final class MiniMap extends JComponent {
     private static final long serialVersionUID = 1L;
-    private final Map<Territory, Point> position = new LinkedHashMap<>();
-    private @Nullable Territory highlighted;
+    private static final int MAP_WIDTH = 440;
+    private static final int MAP_HEIGHT = 230;
+    private static final int TITLE = 22;
+    private static final int OX = 6;
+    private static final Color BACK = new Color(0x2B, 0x30, 0x37);
+    private static final Color SEA = new Color(0x45, 0x4A, 0x52);
+    private static final Color LAND = new Color(0x6B, 0x70, 0x78);
+    private static final Color HERE = new Color(0xFF, 0xF5, 0x9D);
+    private final Map<Territory, ZoneShape> shapes = new LinkedHashMap<>();
+    private final Map<Territory, Rectangle> shapeBounds = new HashMap<>();
+    private final Map<Territory, Point> labelAt = new HashMap<>();
+    private final Map<Territory, Color> colors;
+    private final Set<Territory> bombZones = new LinkedHashSet<>();
+    private final List<Polygon> land = new ArrayList<>();
+    private final Rectangle world;
+    // the land drawn for the last view, kept while the view stays the same
+    private @Nullable Rectangle baseView;
+    private @Nullable BufferedImage base;
 
-    AdjacencyDiagram() {
-      setPreferredSize(new Dimension(360, 200));
-      setToolTipText("Air boxes and their links (reference)");
-      layoutNodes();
-    }
-
-    void highlight(final @Nullable Territory zone) {
-      highlighted = zone;
-      repaint();
-    }
-
-    private void layoutNodes() {
+    MiniMap() {
       final MapData mapData = uiContext.getMapData();
       final GameData data = host.data();
-      final Map<Territory, Point> raw = new LinkedHashMap<>();
+      Rectangle box = null;
       try (GameData.Unlocker ignored = data.acquireReadLock()) {
-        final int width = mapData.getMapDimensions().width;
-        for (final Territory zone : AirZoneAttachment.getAirZones(data.getMap())) {
-          final List<Territory> covered =
-              new ArrayList<>(AirZoneAttachment.get(zone).orElseThrow().getCoveredTerritories());
-          if (covered.isEmpty()) {
+        colors = AirMapMode.frontColors(data);
+        for (final Territory t : data.getMap().getTerritories()) {
+          if (AirZoneAttachment.isAirZone(t)) {
             continue;
           }
-          Point best = null;
-          long bestScore = Long.MAX_VALUE;
-          for (final Territory a : covered) {
-            final Point pa = mapData.getCenter(a);
-            long score = 0;
-            for (final Territory b : covered) {
-              final Point pb = mapData.getCenter(b);
-              final int dx = Math.abs(pa.x - pb.x);
-              final long wx = Math.min(dx, width - dx);
-              final long dy = pa.y - pb.y;
-              score += (long) Math.sqrt((double) (wx * wx + dy * dy));
-            }
-            if (score < bestScore) {
-              bestScore = score;
-              best = pa;
+          for (final Polygon p : mapData.getPolygons(t)) {
+            box = box == null ? p.getBounds() : box.union(p.getBounds());
+            if (!t.isWater()) {
+              land.add(p);
             }
           }
-          final boolean bomb =
-              AirZoneAttachment.get(zone).orElseThrow().getZoneType() == ZoneType.BOMB;
-          raw.put(zone, new Point(best.x, best.y));
+        }
+        final int width = mapData.getMapDimensions().width;
+        for (final Territory zone : AirZoneAttachment.getAirZones(data.getMap())) {
+          final AirZoneAttachment a = AirZoneAttachment.get(zone).orElseThrow();
+          final List<Territory> covered = new ArrayList<>(a.getCoveredTerritories());
+          if (covered.isEmpty() || a.getZoneType() == ZoneType.RESERVE) {
+            continue;
+          }
+          shapes.put(zone, ZoneShape.of(covered, mapData));
+          Rectangle r = null;
+          for (final Territory t : covered) {
+            for (final Polygon p : mapData.getPolygons(t)) {
+              r = r == null ? p.getBounds() : r.union(p.getBounds());
+            }
+          }
+          if (r != null) {
+            shapeBounds.put(zone, r);
+          }
+          labelAt.put(zone, AirMapMode.medoid(covered, mapData, width));
+          if (a.getZoneType() == ZoneType.BOMB) {
+            bombZones.add(zone);
+          }
         }
       }
-      if (raw.isEmpty()) {
-        return;
-      }
-      final int minX = raw.values().stream().mapToInt(p -> p.x).min().orElse(0);
-      final int maxX = raw.values().stream().mapToInt(p -> p.x).max().orElse(1);
-      final int minY = raw.values().stream().mapToInt(p -> p.y).min().orElse(0);
-      final int maxY = raw.values().stream().mapToInt(p -> p.y).max().orElse(1);
-      raw.forEach(
-          (zone, p) ->
-              position.put(
-                  zone,
-                  new Point(
-                      24 + (int) ((p.x - minX) * 312.0 / Math.max(1, maxX - minX)) + nudge(zone),
-                      14 + (int) ((p.y - minY) * 160.0 / Math.max(1, maxY - minY)) + nudge(zone))));
+      world = box == null ? new Rectangle(0, 0, 1, 1) : box;
+      setPreferredSize(new Dimension(MAP_WIDTH + 2 * OX, MAP_HEIGHT + TITLE + 6));
     }
 
-    /** Bombing zones sit a little below and right of their front, so both can be seen. */
-    private int nudge(final Territory zone) {
-      return AirZoneAttachment.get(zone).orElseThrow().getZoneType() == ZoneType.BOMB ? 12 : 0;
+    /**
+     * The part of the world to show: the row's fronts with a margin, widened to the panel's shape,
+     * at least a quarter of the world wide, kept inside the world where it fits.
+     */
+    private Rectangle view(final List<Territory> zones) {
+      Rectangle r = null;
+      for (final Territory zone : zones) {
+        final Rectangle b = shapeBounds.get(zone);
+        if (b != null) {
+          r = r == null ? new Rectangle(b) : r.union(b);
+        }
+      }
+      if (r == null) {
+        r = new Rectangle(world);
+      }
+      double w = Math.max(r.width * 1.3, world.width / 4.0);
+      double h = Math.max(r.height * 1.3, w * MAP_HEIGHT / MAP_WIDTH);
+      w = Math.max(w, h * MAP_WIDTH / MAP_HEIGHT);
+      if (w > world.width) {
+        w = world.width;
+        h = w * MAP_HEIGHT / MAP_WIDTH;
+      }
+      double x = r.getCenterX() - w / 2;
+      double y = r.getCenterY() - h / 2;
+      x = Math.max(world.x, Math.min(world.x + world.width - w, x));
+      y =
+          h >= world.height
+              ? world.y - (h - world.height) / 2
+              : Math.max(world.y, Math.min(world.y + world.height - h, y));
+      return new Rectangle((int) x, (int) y, (int) Math.ceil(w), (int) Math.ceil(h));
+    }
+
+    private BufferedImage base(final Rectangle view) {
+      if (base == null || !view.equals(baseView)) {
+        final BufferedImage img =
+            new BufferedImage(MAP_WIDTH, MAP_HEIGHT, BufferedImage.TYPE_INT_RGB);
+        final Graphics2D g = img.createGraphics();
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g.setColor(SEA);
+        g.fillRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
+        final double scale = MAP_WIDTH / (double) view.width;
+        g.scale(scale, scale);
+        g.translate(-view.x, -view.y);
+        g.setColor(LAND);
+        for (final Polygon p : land) {
+          if (p.getBounds().intersects(view)) {
+            g.fillPolygon(p);
+          }
+        }
+        g.dispose();
+        base = img;
+        baseView = view;
+      }
+      return base;
     }
 
     @Override
     protected void paintComponent(final Graphics graphics) {
       final Graphics2D g = (Graphics2D) graphics.create();
       g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-      g.setColor(new Color(0x22, 0x2A, 0x33));
+      g.setRenderingHint(
+          RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+      g.setColor(BACK);
       g.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 10, 10);
-      final Set<Territory> current = new LinkedHashSet<>();
-      rows.forEach(r -> current.add(r.from()));
-      g.setStroke(new BasicStroke(1f));
-      g.setColor(new Color(0x9A, 0xA5, 0xB1));
-      position.forEach(
-          (zone, p) -> {
-            for (final Territory other :
-                AirZoneAttachment.get(zone).orElseThrow().getAdjacentZones()) {
-              final Point q = position.get(other);
-              if (q != null && zone.getName().compareTo(other.getName()) < 0) {
-                g.drawLine(p.x, p.y, q.x, q.y);
-              }
-            }
-          });
-      g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 9));
+      final Row row = hoverRow != null ? hoverRow : selectedRow;
+      g.setColor(Color.WHITE);
+      g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
+      g.drawString(title(row), 8, 16);
+      final int oy = TITLE;
+      final List<Territory> reach = new ArrayList<>();
+      if (row != null) {
+        for (final Territory column : columns) {
+          if (!column.equals(row.from()) && problem(row, column).isEmpty()) {
+            reach.add(column);
+          }
+        }
+        reach.add(row.from());
+      }
+      final Rectangle view = view(reach);
+      final double scale = MAP_WIDTH / (double) view.width;
+      g.drawImage(base(view), OX, oy, null);
+      if (row == null) {
+        g.dispose();
+        return;
+      }
+      final Graphics2D m = (Graphics2D) g.create();
+      m.clipRect(OX, oy, MAP_WIDTH, MAP_HEIGHT);
+      m.translate(OX, oy);
+      m.scale(scale, scale);
+      m.translate(-view.x, -view.y);
+      final float px = (float) (1 / scale);
+      // fronts in their colours (the air map's, unless another front shown here has it already),
+      // then outlines on top
+      final Set<Color> used = new LinkedHashSet<>();
+      final List<Territory> homeFirst = new ArrayList<>(reach);
+      homeFirst.remove(row.from());
+      homeFirst.add(0, row.from());
+      for (final Territory zone : homeFirst) {
+        final ZoneShape shape = shapes.get(zone);
+        if (shape != null && colors.containsKey(zone)) {
+          Color color = colors.get(zone);
+          for (int i = 0; used.contains(color) && i < AirMapMode.PALETTE.length; i++) {
+            color = AirMapMode.PALETTE[i];
+          }
+          used.add(color);
+          m.setColor(color);
+          shape.fill(m);
+          m.setColor(color.darker());
+          m.setStroke(new BasicStroke(px));
+          shape.draw(m);
+        }
+      }
+      for (final Territory zone : reach) {
+        final ZoneShape shape = shapes.get(zone);
+        if (shape != null && bombZones.contains(zone)) {
+          m.setColor(Color.BLACK);
+          m.setStroke(new BasicStroke(4 * px));
+          shape.draw(m);
+          m.setColor(Color.WHITE);
+          m.setStroke(
+              new BasicStroke(
+                  2.5f * px,
+                  BasicStroke.CAP_BUTT,
+                  BasicStroke.JOIN_ROUND,
+                  10f,
+                  new float[] {6 * px, 4 * px},
+                  0f));
+          shape.draw(m);
+        }
+      }
+      final ZoneShape home = shapes.get(row.from());
+      if (home != null) {
+        m.setColor(Color.BLACK);
+        m.setStroke(new BasicStroke(4.5f * px));
+        home.draw(m);
+        m.setColor(HERE);
+        m.setStroke(new BasicStroke(2.5f * px));
+        home.draw(m);
+      }
+      if (hoverColumn != null && shapes.containsKey(hoverColumn)) {
+        m.setColor(Color.WHITE);
+        m.setStroke(new BasicStroke(3.5f * px));
+        shapes.get(hoverColumn).draw(m);
+      }
+      m.dispose();
+      // labels, the current front's first; a label that would cover another moves down
+      g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 11));
       final FontMetrics fm = g.getFontMetrics();
-      position.forEach(
-          (zone, p) -> {
-            final ZoneType type = AirZoneAttachment.get(zone).orElseThrow().getZoneType();
-            final boolean mine = current.contains(zone);
-            final boolean usable = columns.contains(zone);
-            g.setColor(
-                zone.equals(highlighted)
-                    ? Color.ORANGE
-                    : mine
-                        ? new Color(0xFF, 0xD5, 0x4F)
-                        : usable ? new Color(0x81, 0xC7, 0x84) : new Color(0x60, 0x6B, 0x75));
-            if (type == ZoneType.BOMB) {
-              g.fillRect(p.x - 4, p.y - 4, 8, 8);
-            } else {
-              g.fillOval(p.x - 5, p.y - 5, 10, 10);
-            }
-            if (type == ZoneType.OCEAN) {
-              g.setColor(OCEAN);
-              g.drawOval(p.x - 7, p.y - 7, 14, 14);
-            }
-            g.setColor(Color.WHITE);
-            final String label = shortLabel(zone);
-            g.drawString(label, p.x - fm.stringWidth(label) / 2, p.y + 15);
-          });
+      final List<Rectangle> placed = new ArrayList<>();
+      final List<Territory> order = new ArrayList<>(reach);
+      order.remove(row.from());
+      order.add(0, row.from());
+      for (final Territory zone : order) {
+        final Point at = labelAt.get(zone);
+        if (at == null) {
+          continue;
+        }
+        final boolean here = zone.equals(row.from());
+        final String text = zoneName(zone) + (here ? " (here)" : "");
+        final int w = fm.stringWidth(text) + 6;
+        final int x =
+            Math.max(
+                OX, Math.min(OX + MAP_WIDTH - w, OX + (int) ((at.x - view.x) * scale) - w / 2));
+        int y =
+            Math.max(oy, Math.min(oy + MAP_HEIGHT - 15, oy + (int) ((at.y - view.y) * scale) - 7));
+        Rectangle box = new Rectangle(x, y, w, 15);
+        for (int tries = 0; tries < 8 && overlaps(box, placed); tries++) {
+          y = y + 16 > oy + MAP_HEIGHT - 15 ? oy : y + 16;
+          box = new Rectangle(x, y, w, 15);
+        }
+        placed.add(box);
+        g.setColor(
+            zone.equals(hoverColumn) ? new Color(0, 0, 0, 235) : new Color(0x1E, 0x22, 0x28, 215));
+        g.fillRect(x, y, w, 15);
+        g.setColor(here ? HERE : Color.WHITE);
+        g.drawString(text, x + 3, y + 12);
+      }
       g.dispose();
     }
 
-    /**
-     * "B·Ger" for Bomb Germany, "N Atlantic" for North Atlantic and Arctic, else the first word.
-     */
-    private String shortLabel(final Territory zone) {
-      final String[] words = AirAllocation.zoneName(zone).split(" ");
-      if (words.length > 1 && words[0].equals("Bomb")) {
-        return "B·" + words[1].substring(0, Math.min(3, words[1].length()));
+    private boolean overlaps(final Rectangle box, final List<Rectangle> placed) {
+      return placed.stream().anyMatch(box::intersects);
+    }
+
+    private String title(final @Nullable Row row) {
+      if (row == null) {
+        return "No " + aircraftWord() + " to move this round";
       }
-      if (words.length > 1
-          && List.of("North", "South", "East", "West", "Western", "Eastern", "Middle")
-              .contains(words[0])) {
-        return words[0].charAt(0) + " " + words[1];
-      }
-      return words[0];
+      final String plural = AirAllocation.typeName(row.type()).toLowerCase() + "s";
+      final boolean sameTypeElsewhere =
+          rows.stream().anyMatch(r -> r.type().equals(row.type()) && !r.equals(row));
+      return "Where your "
+          + plural
+          + (sameTypeElsewhere ? " in " + zoneName(row.from()) : "")
+          + " can go this round";
     }
   }
 }

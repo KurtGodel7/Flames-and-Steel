@@ -282,6 +282,20 @@ public final class AirZoneOverlay implements MapOverlay {
     return lines;
   }
 
+  /** The nation spelled out: "Italy", "United States"; other nations by their player name. */
+  static String nationName(final GamePlayer player) {
+    return switch (player.getName()) {
+      case "Americans" -> "United States";
+      case "British" -> "United Kingdom";
+      case "Russians" -> "Soviet Union";
+      case "Germans" -> "Germany";
+      case "Italians" -> "Italy";
+      case "Japanese" -> "Japan";
+      case "Chinese" -> "China";
+      default -> player.getName();
+    };
+  }
+
   /** "US", "UK", "USSR" and so on; other nations by their first three letters. */
   static String shortName(final GamePlayer player) {
     return switch (player.getName()) {
