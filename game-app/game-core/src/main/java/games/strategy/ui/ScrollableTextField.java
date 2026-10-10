@@ -133,6 +133,15 @@ public class ScrollableTextField extends JPanel {
     imagesLoaded = true;
   }
 
+  /**
+   * Never smaller than the field with its arrows: squeezed (as in a purchase tile that came out a
+   * little narrower than its contents), the arrows would wrap onto a hidden second line.
+   */
+  @Override
+  public java.awt.Dimension getMinimumSize() {
+    return getPreferredSize();
+  }
+
   public void setMax(final int max) {
     text.setMax(max);
     setWidgetActivation();
