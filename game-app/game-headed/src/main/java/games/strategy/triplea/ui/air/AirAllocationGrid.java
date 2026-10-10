@@ -53,6 +53,8 @@ import java.util.Optional;
 import java.util.Set;
 import javax.annotation.Nullable;
 import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
@@ -60,6 +62,7 @@ import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JToolTip;
 import javax.swing.SwingConstants;
 import javax.swing.Timer;
 import javax.swing.WindowConstants;
@@ -82,13 +85,12 @@ final class AirAllocationGrid extends JDialog {
   private static final Color GREY = new Color(0xE2, 0xE2, 0xE2);
   private static final Color GREY_TEXT = new Color(0x90, 0x90, 0x90);
   private static final Color USABLE = Color.WHITE;
-  private static final Color MOVED = new Color(0xD8, 0xF5, 0xDC);
   private static final Color HEADER = new Color(0xE6, 0xEC, 0xF2);
-  private static final Color SELECTED = new Color(0xD6, 0xE8, 0xFF);
   private static final Color FOOTER = new Color(0xF7, 0xF7, 0xF7);
   private static final Color OCEAN = new Color(0xE0, 0xA8, 0x00);
   private static final Color FLASH = new Color(0xFF, 0xCD, 0xD2);
-  private static final Color DIM = new Color(0xF0, 0xF0, 0xF0, 170);
+  private static final Color HATCH = new Color(0xC8, 0xC8, 0xC8);
+  private static final Color SELECTION_BAR = new Color(0x1E, 0x6F, 0xD9);
   private static final Color REASON = new Color(0x55, 0x55, 0x55);
   private static final Color AMBER = new Color(0xA0, 0x6A, 0x00);
 
@@ -193,11 +195,14 @@ final class AirAllocationGrid extends JDialog {
     grid.setBackground(LINES);
     final JPanel gridHolder = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
     gridHolder.add(grid);
+    final JPanel middle = new JPanel(new BorderLayout());
     getContentPane().setLayout(new BorderLayout());
     getContentPane().add(top, BorderLayout.NORTH);
     final JScrollPane scroll = new JScrollPane(gridHolder);
     scroll.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
-    getContentPane().add(scroll, BorderLayout.CENTER);
+    middle.add(key(), BorderLayout.NORTH);
+    middle.add(scroll, BorderLayout.CENTER);
+    getContentPane().add(middle, BorderLayout.CENTER);
     getContentPane().add(buttons, BorderLayout.SOUTH);
     refresh();
     pack();
@@ -304,18 +309,14 @@ final class AirAllocationGrid extends JDialog {
     grid.add(footerLabel("Your " + aircraftWord() + " after moves"), c);
     for (int i = 0; i < columns.size(); i++) {
       c.gridx = i + 1;
-      grid.add(
-          inColumn(
-              columns.get(i),
-              footerCell(String.valueOf(totalAfter(player, columns.get(i), staged)), true)),
-          c);
+      grid.add(footerCell(String.valueOf(totalAfter(player, columns.get(i), staged)), true), c);
     }
     c.gridy++;
     c.gridx = 0;
     grid.add(footerLabel("Allies (moves so far)"), c);
     for (int i = 0; i < columns.size(); i++) {
       c.gridx = i + 1;
-      grid.add(inColumn(columns.get(i), footerCell(othersText(columns.get(i), true), false)), c);
+      grid.add(footerCell(othersText(columns.get(i), true), false), c);
     }
     c.gridy++;
     c.gridx = 0;
@@ -323,7 +324,7 @@ final class AirAllocationGrid extends JDialog {
     grid.add(footerLabel("Enemies (last revealed)"), c);
     for (int i = 0; i < columns.size(); i++) {
       c.gridx = i + 1;
-      grid.add(inColumn(columns.get(i), footerCell(othersText(columns.get(i), false), false)), c);
+      grid.add(footerCell(othersText(columns.get(i), false), false), c);
     }
     // a 1-pixel line on the right edge
     c.gridx = columns.size() + 1;
@@ -384,46 +385,26 @@ final class AirAllocationGrid extends JDialog {
         }
       }
     }
-    final JLabel l = new JLabel(text.append("</center></html>").toString(), SwingConstants.CENTER);
+    final JLabel l =
+        new TipLabel(text.append("</center></html>").toString(), SwingConstants.CENTER);
     l.setForeground(TEXT);
-    final JButton all = small("All here");
-    all.setName("allHere|" + zone.getName());
-    final ColumnCell p = new ColumnCell(zone, new BorderLayout(0, 3));
-    all.setToolTipText("Send every " + aircraftWord().replaceFirst("s$", "") + " that can go here");
-    all.addActionListener(
-        e -> {
-          final List<AirMove> moves = allHere(host.staged(), zone);
-          if (moves.equals(host.staged())) {
-            refuse(
-                p,
-                rows.stream().anyMatch(r -> r.from().equals(zone) || problem(r, zone).isEmpty())
-                    ? "Everything that can go to " + zoneName(zone) + " is already there."
-                    : "None of your " + aircraftWord() + " can go to " + zoneName(zone) + ".");
-            return;
-          }
-          change(moves);
-        });
-    p.setOpaque(true);
+    l.setToolTipText("Point here to see " + AirAllocation.zoneName(zone) + " on the map");
+    final Cell p = new Cell(null, new BorderLayout());
     p.setBackground(HEADER);
     p.add(l, BorderLayout.CENTER);
-    final JPanel south = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
-    south.setOpaque(false);
-    south.add(all);
-    p.add(south, BorderLayout.SOUTH);
     p.setBorder(
         a.getZoneType() == ZoneType.OCEAN
             ? BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, 0, 3, 0, OCEAN),
                 BorderFactory.createEmptyBorder(4, 6, 2, 6))
             : BorderFactory.createEmptyBorder(4, 6, 5, 6));
-    l.setToolTipText("Point here to see " + AirAllocation.zoneName(zone) + " on the map");
     track(p, null, zone);
     return p;
   }
 
   private JComponent rowHeader(final Row row) {
     final JLabel l =
-        new JLabel(
+        new TipLabel(
             "<html><b>"
                 + AirAllocation.typeName(row.type())
                 + " × "
@@ -437,60 +418,53 @@ final class AirAllocationGrid extends JDialog {
                         + String.join(
                             ", ", reach(row).stream().map(AirAllocationGrid::zoneName).toList()))
                 + "</font></div></html>",
-            uiContext
-                .getUnitImageFactory()
-                .getIcon(ImageKey.builder().player(host.player()).type(row.type()).build()),
             SwingConstants.LEFT);
+    l.setIcon(
+        uiContext
+            .getUnitImageFactory()
+            .getIcon(ImageKey.builder().player(host.player()).type(row.type()).build()));
     l.setForeground(TEXT);
-    l.setOpaque(true);
-    l.setBackground(row.equals(selectedRow) ? SELECTED : USABLE);
-    l.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 8));
-    l.setToolTipText("Click to show where these aircraft can go on the small map");
-    l.addMouseListener(
+    l.setToolTipText("Click to select this row: the small map shows where it can go");
+    final Cell p = new Cell(row, new BorderLayout());
+    p.setBackground(USABLE);
+    p.add(l, BorderLayout.CENTER);
+    // the selected row has a coloured bar on its left edge
+    p.setBorder(
+        BorderFactory.createCompoundBorder(
+            row.equals(selectedRow)
+                ? BorderFactory.createMatteBorder(0, 5, 0, 0, SELECTION_BAR)
+                : BorderFactory.createEmptyBorder(0, 5, 0, 0),
+            BorderFactory.createEmptyBorder(2, 4, 2, 8)));
+    final MouseAdapter select =
         new MouseAdapter() {
           @Override
           public void mouseClicked(final MouseEvent e) {
             selectedRow = row;
             refresh();
           }
-        });
-    track(l, row, null);
-    return l;
+        };
+    p.addMouseListener(select);
+    l.addMouseListener(select);
+    l.setName("row|" + rowName(row));
+    track(p, row, null);
+    return p;
   }
 
   private JComponent cell(final Row row, final Territory column, final List<AirMove> staged) {
     final int moved = movedTo(row, column, staged);
     final int left = row.count() - movedOut(row, staged);
-    final ColumnCell p = new ColumnCell(column, new BorderLayout(2, 0));
+    final Cell p = new Cell(row, new BorderLayout(2, 0));
     p.setBorder(BorderFactory.createEmptyBorder(3, 4, 3, 4));
     if (column.equals(row.from())) {
       return homeCell(p, row, column, staged, left);
     }
-    final Optional<String> problem = problem(row, column);
+    // a full carrier front with none of this group in it is as closed as any other
+    final Optional<String> problem =
+        problem(row, column).or(() -> moved > 0 ? Optional.empty() : carrierFull(row, column));
     if (problem.isPresent()) {
-      // blocked: the reason in the cell, the full reason on hover and on a click
-      p.setBackground(GREY);
-      final JLabel l =
-          new JLabel(
-              "<html><center>" + shortReason(problem.get()) + "</center></html>",
-              SwingConstants.CENTER);
-      l.setFont(l.getFont().deriveFont(Font.PLAIN, 11f));
-      l.setForeground(REASON);
-      l.setToolTipText(problem.get());
-      p.setToolTipText(problem.get());
-      p.add(l, BorderLayout.CENTER);
-      final MouseAdapter click =
-          new MouseAdapter() {
-            @Override
-            public void mouseClicked(final MouseEvent e) {
-              refuse(p, AirAllocation.typeName(row.type()) + ": " + problem.get());
-            }
-          };
-      p.addMouseListener(click);
-      l.addMouseListener(click);
-      return p;
+      return blockedCell(p, row, column, problem.get());
     }
-    p.setBackground(moved > 0 ? MOVED : USABLE);
+    p.setBackground(USABLE);
     final JButton minus = small("−");
     minus.setName("minus|" + rowName(row) + "|" + column.getName());
     minus.setToolTipText(
@@ -520,38 +494,119 @@ final class AirAllocationGrid extends JDialog {
             ? "Move one " + plural(row.type(), 1) + " here from " + zoneName(row.from())
             : "Move one here from where they went last");
     plus.addActionListener(e -> plus(p, row, column));
-    final JLabel count = new JLabel(String.valueOf(moved), SwingConstants.CENTER);
+    final JLabel count = new TipLabel(String.valueOf(moved), SwingConstants.CENTER);
     count.setFont(count.getFont().deriveFont(Font.BOLD, 14f));
     count.setForeground(TEXT);
-    final JPanel middle = new JPanel(new BorderLayout());
+    count.setAlignmentX(CENTER_ALIGNMENT);
+    final JPanel middle = new JPanel();
+    middle.setLayout(new BoxLayout(middle, BoxLayout.Y_AXIS));
     middle.setOpaque(false);
-    middle.add(count, BorderLayout.CENTER);
+    middle.add(count);
     // a full carrier front says so in the cell; otherwise the number of targets
-    final Optional<String> carrier = plusProblem(row, column, staged, 1);
+    final Optional<String> carrier = carrierFull(row, column);
     final Integer targets = targetCount.get(key(row.type(), column));
+    final JLabel note;
     if (carrier.isPresent()) {
-      final JLabel t = new JLabel(shortReason(carrier.get()), SwingConstants.CENTER);
-      t.setFont(t.getFont().deriveFont(Font.BOLD, 10f));
-      t.setForeground(new Color(0xB7, 0x1C, 0x1C));
-      t.setToolTipText(carrierDetail(column, staged, carrier.get()));
-      middle.add(t, BorderLayout.SOUTH);
+      note = new TipLabel(shortReason(carrier.get()), SwingConstants.CENTER);
+      note.setFont(note.getFont().deriveFont(Font.BOLD, 10f));
+      note.setForeground(new Color(0xB7, 0x1C, 0x1C));
+      note.setToolTipText(carrierDetail(column, staged, carrier.get()));
     } else if (targets != null && targets == 0) {
-      final JLabel t = new JLabel("no targets", SwingConstants.CENTER);
-      t.setFont(t.getFont().deriveFont(Font.BOLD, 10f));
-      t.setForeground(AMBER);
-      t.setToolTipText(noTargetsText(row, column));
-      middle.add(t, BorderLayout.SOUTH);
+      note = new TipLabel("<html><center>no targets<br>this round</center></html>");
+      note.setFont(note.getFont().deriveFont(Font.BOLD, 10f));
+      note.setForeground(AMBER);
+      note.setToolTipText(noTargetsText(row, column));
     } else if (targets != null) {
-      final JLabel t =
-          new JLabel(targets + (targets == 1 ? " target" : " targets"), SwingConstants.CENTER);
-      t.setFont(t.getFont().deriveFont(10f));
-      t.setForeground(TEXT);
-      middle.add(t, BorderLayout.SOUTH);
+      note = new TipLabel(targets + (targets == 1 ? " target" : " targets"));
+      note.setFont(note.getFont().deriveFont(10f));
+      note.setForeground(TEXT);
+    } else {
+      note = null;
     }
+    if (note != null) {
+      note.setAlignmentX(CENTER_ALIGNMENT);
+      middle.add(note);
+    }
+    final JButton all = allHereButton(p, row, column);
+    all.setAlignmentX(CENTER_ALIGNMENT);
+    middle.add(Box.createVerticalStrut(2));
+    middle.add(all);
     p.add(minus, BorderLayout.WEST);
     p.add(middle, BorderLayout.CENTER);
     p.add(plus, BorderLayout.EAST);
     return p;
+  }
+
+  /** Grey, hatched, no buttons: the reason in the cell, the full reason on hover and on a click. */
+  private JComponent blockedCell(
+      final Cell p, final Row row, final Territory column, final String reason) {
+    p.setBackground(GREY);
+    p.setHatched(true);
+    final JLabel l =
+        new TipLabel(
+            "<html><center>" + shortReason(reason) + "</center></html>", SwingConstants.CENTER);
+    l.setFont(l.getFont().deriveFont(Font.PLAIN, 11f));
+    l.setForeground(REASON);
+    final String full = carrierDetail(column, host.staged(), reason);
+    l.setToolTipText(full);
+    p.setToolTipText(full);
+    p.add(l, BorderLayout.CENTER);
+    final MouseAdapter click =
+        new MouseAdapter() {
+          @Override
+          public void mouseClicked(final MouseEvent e) {
+            refuse(p, AirAllocation.typeName(row.type()) + ": " + full);
+          }
+        };
+    p.addMouseListener(click);
+    l.addMouseListener(click);
+    return p;
+  }
+
+  /** Why not even one more of the row could go to a carrier front (empty if one could). */
+  private Optional<String> carrierFull(final Row row, final Territory column) {
+    return plusProblem(row, column, host.staged(), 1);
+  }
+
+  /** "All here": the whole group into this column (or, in its own front, all of it back). */
+  private JButton allHereButton(final JComponent cell, final Row row, final Territory column) {
+    final JButton all = small("All here");
+    all.setFont(all.getFont().deriveFont(10f));
+    all.setName("allHere|" + rowName(row) + "|" + column.getName());
+    all.setToolTipText(
+        column.equals(row.from())
+            ? "Keep all " + plural(row.type(), 2) + " in " + zoneName(column)
+            : "Send all " + plural(row.type(), 2) + " here (as many as fit)");
+    all.addActionListener(
+        e -> {
+          final List<AirMove> moves = allHere(host.staged(), row, column);
+          if (moves.equals(host.staged())) {
+            final Optional<String> full = carrierFull(row, column);
+            refuse(
+                cell,
+                full.isPresent() && !column.equals(row.from())
+                    ? carrierDetail(column, host.staged(), full.get())
+                    : row.count() == 1
+                        ? "Your 1 " + plural(row.type(), 1) + " is already here."
+                        : "All "
+                            + row.count()
+                            + " "
+                            + plural(row.type(), 2)
+                            + " are already here.");
+            return;
+          }
+          if (change(moves)) {
+            final Deque<Territory> order = sentOrder.get(row);
+            if (order != null) {
+              order.clear();
+            }
+            if (!column.equals(row.from())) {
+              sent(row, column);
+              noteNoTargets(row, column);
+            }
+          }
+        });
+    return all;
   }
 
   /**
@@ -619,19 +674,21 @@ final class AirAllocationGrid extends JDialog {
 
   /**
    * The row's own front: "Staying: 5". − sends one to the column it last went to (or the first
-   * column that can take it); + pulls one back from the column it last went to.
+   * column that can take it); + pulls one back from the column it last went to; "All here" keeps
+   * them all.
    */
   private JComponent homeCell(
-      final JPanel p,
+      final Cell p,
       final Row row,
       final Territory column,
       final List<AirMove> staged,
       final int left) {
     p.setBackground(CURRENT);
-    final JLabel l = new JLabel("Staying: " + left, SwingConstants.CENTER);
+    final JLabel l = new TipLabel("Staying: " + left, SwingConstants.CENTER);
     l.setFont(l.getFont().deriveFont(Font.BOLD, 13f));
     l.setForeground(TEXT);
     l.setToolTipText("Aircraft that stay in " + zoneName(column));
+    l.setAlignmentX(CENTER_ALIGNMENT);
     final JButton minus = small("−");
     minus.setName("minus|" + rowName(row) + "|" + column.getName());
     final Optional<Territory> sendTo = sendTarget(row, staged, left);
@@ -680,8 +737,18 @@ final class AirAllocationGrid extends JDialog {
           }
           change(adjust(host.staged(), row, from.get(), -1));
         });
+    final JPanel middle = new JPanel();
+    middle.setLayout(new BoxLayout(middle, BoxLayout.Y_AXIS));
+    middle.setOpaque(false);
+    middle.add(Box.createVerticalGlue());
+    middle.add(l);
+    final JButton all = allHereButton(p, row, column);
+    all.setAlignmentX(CENTER_ALIGNMENT);
+    middle.add(Box.createVerticalStrut(2));
+    middle.add(all);
+    middle.add(Box.createVerticalGlue());
     p.add(minus, BorderLayout.WEST);
-    p.add(l, BorderLayout.CENTER);
+    p.add(middle, BorderLayout.CENTER);
     p.add(plus, BorderLayout.EAST);
     return p;
   }
@@ -736,35 +803,33 @@ final class AirAllocationGrid extends JDialog {
     return Optional.empty();
   }
 
-  /** Every row's aircraft that can go to the column, moved there (as many as fit on carriers). */
-  private List<AirMove> allHere(final List<AirMove> staged, final Territory column) {
-    List<AirMove> result = new ArrayList<>(staged);
-    for (final Row row : rows) {
-      if (!column.equals(row.from()) && problem(row, column).isPresent()) {
-        continue;
+  /**
+   * The row's whole group moved to the column (as many as fit on carriers), or, in its own front,
+   * all of it kept there. Other rows are untouched.
+   */
+  private List<AirMove> allHere(final List<AirMove> staged, final Row row, final Territory column) {
+    // take the row's moves back, then send them all here
+    final List<AirMove> without = new ArrayList<>();
+    for (final AirMove m : staged) {
+      if (!(m.from().equals(row.from()) && m.unitType().equals(row.type()))) {
+        without.add(m);
       }
-      // take the row's moves back, then send them all here
-      final List<AirMove> without = new ArrayList<>();
-      for (final AirMove m : result) {
-        if (!(m.from().equals(row.from()) && m.unitType().equals(row.type()))) {
-          without.add(m);
-        }
-      }
-      if (column.equals(row.from())) {
-        result = without;
-        continue;
-      }
-      List<AirMove> moved = without;
-      for (int i = 0; i < row.count(); i++) {
-        if (plusProblem(row, column, moved, row.count() - i).isPresent()) {
-          break;
-        }
-        moved = adjust(moved, row, column, 1);
-      }
-      // a carrier front may take none of this row: then keep its moves as they were
-      result = movedTo(row, column, moved) > 0 ? moved : result;
     }
-    return result;
+    if (column.equals(row.from())) {
+      return without;
+    }
+    if (problem(row, column).isPresent()) {
+      return staged;
+    }
+    List<AirMove> moved = without;
+    for (int i = 0; i < row.count(); i++) {
+      if (plusProblem(row, column, moved, row.count() - i).isPresent()) {
+        break;
+      }
+      moved = adjust(moved, row, column, 1);
+    }
+    // a carrier front may take none of this row: then keep its moves as they were
+    return movedTo(row, column, moved) > movedTo(row, column, staged) ? moved : staged;
   }
 
   // ---- clicks that cannot do anything say why
@@ -825,36 +890,145 @@ final class AirAllocationGrid extends JDialog {
   }
 
   /**
-   * A grid cell that belongs to a column: it is dimmed while the selected (or pointed-at) row
-   * cannot use that column. Children paint through it, so the dimming stays on top.
+   * A grid cell. Its look never depends on the mouse except for a light tint while its row is
+   * pointed at; a blocked cell is grey with a light diagonal hatch. Tooltips open above it.
    */
-  private final class ColumnCell extends JPanel {
+  private final class Cell extends JPanel {
     private static final long serialVersionUID = 1L;
-    private final Territory column;
+    private final @Nullable Row row;
+    private boolean hatched;
 
-    ColumnCell(final Territory column, final java.awt.LayoutManager layout) {
+    Cell(final @Nullable Row row, final java.awt.LayoutManager layout) {
       super(layout);
-      this.column = column;
+      this.row = row;
+      setOpaque(true);
+    }
+
+    void setHatched(final boolean hatched) {
+      this.hatched = hatched;
     }
 
     @Override
-    public boolean isOptimizedDrawingEnabled() {
-      return false;
-    }
-
-    @Override
-    public void paint(final Graphics g) {
-      super.paint(g);
-      if (dimmed(column)) {
-        g.setColor(DIM);
-        g.fillRect(0, 0, getWidth(), getHeight());
+    protected void paintComponent(final Graphics graphics) {
+      final Graphics2D g = (Graphics2D) graphics.create();
+      final Color back = getBackground();
+      g.setColor(row != null && row.equals(hoverRow) ? tint(back) : back);
+      g.fillRect(0, 0, getWidth(), getHeight());
+      if (hatched) {
+        paintHatch(g, getWidth(), getHeight());
       }
+      g.dispose();
+    }
+
+    @Override
+    public Point getToolTipLocation(final MouseEvent e) {
+      return above(this);
     }
   }
 
-  private boolean dimmed(final Territory column) {
-    final Row row = hoverRow != null ? hoverRow : selectedRow;
-    return row != null && !column.equals(row.from()) && problem(row, column).isPresent();
+  private static void paintHatch(final Graphics2D g, final int width, final int height) {
+    g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+    g.setColor(HATCH);
+    g.setStroke(new BasicStroke(1f));
+    for (int x = -height; x < width; x += 8) {
+      g.drawLine(x, height, x + height, 0);
+    }
+  }
+
+  /** The hovered row's light tint over a cell's own colour. */
+  private static Color tint(final Color c) {
+    return new Color(
+        (c.getRed() * 3 + 0xD6) / 4, (c.getGreen() * 3 + 0xE8) / 4, (c.getBlue() * 3 + 0xFF) / 4);
+  }
+
+  /** Where a component's tooltip opens: just above it, so it never covers the buttons. */
+  private static Point above(final JComponent c) {
+    final String text = c.getToolTipText();
+    final JToolTip tip = c.createToolTip();
+    tip.setTipText(text == null ? "" : text);
+    return new Point(0, -tip.getPreferredSize().height - 2);
+  }
+
+  /** A label whose tooltip opens above it. */
+  private static final class TipLabel extends JLabel {
+    private static final long serialVersionUID = 1L;
+
+    TipLabel(final String text) {
+      super(text, SwingConstants.CENTER);
+    }
+
+    TipLabel(final String text, final int alignment) {
+      super(text, alignment);
+    }
+
+    @Override
+    public Point getToolTipLocation(final MouseEvent e) {
+      return above(this);
+    }
+  }
+
+  /** A button whose tooltip opens above it. */
+  private static final class TipButton extends JButton {
+    private static final long serialVersionUID = 1L;
+
+    TipButton(final String text) {
+      super(text);
+    }
+
+    @Override
+    public Point getToolTipLocation(final MouseEvent e) {
+      return above(this);
+    }
+  }
+
+  /** The key above the grid: a swatch of each cell style. */
+  private JComponent key() {
+    final JPanel key = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
+    key.add(swatch(USABLE, false, null));
+    key.add(keyText("can move here"));
+    key.add(Box.createHorizontalStrut(10));
+    key.add(swatch(USABLE, false, AMBER));
+    key.add(keyText("can move here, no targets this round"));
+    key.add(Box.createHorizontalStrut(10));
+    key.add(swatch(GREY, true, null));
+    key.add(keyText("can't move here (reason shown)"));
+    key.setBorder(BorderFactory.createEmptyBorder(0, 6, 2, 6));
+    return key;
+  }
+
+  private static JLabel keyText(final String text) {
+    final JLabel l = new JLabel(text);
+    l.setFont(l.getFont().deriveFont(Font.PLAIN, 12f));
+    l.setForeground(TEXT);
+    l.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 6));
+    return l;
+  }
+
+  private static JComponent swatch(
+      final Color back, final boolean hatched, final @Nullable Color mark) {
+    final JComponent s =
+        new JComponent() {
+          private static final long serialVersionUID = 1L;
+
+          @Override
+          protected void paintComponent(final Graphics graphics) {
+            final Graphics2D g = (Graphics2D) graphics.create();
+            g.setColor(back);
+            g.fillRect(0, 0, getWidth(), getHeight());
+            if (hatched) {
+              paintHatch(g, getWidth(), getHeight());
+            }
+            if (mark != null) {
+              g.setColor(mark);
+              g.fillRect(5, getHeight() - 5, getWidth() - 10, 2);
+            }
+            g.setColor(LINES.darker());
+            g.drawRect(0, 0, getWidth() - 1, getHeight() - 1);
+            g.dispose();
+          }
+        };
+    s.setPreferredSize(new Dimension(26, 16));
+    return s;
   }
 
   /** The fronts this row can move to this round. */
@@ -869,7 +1043,7 @@ final class AirAllocationGrid extends JDialog {
   }
 
   private static JButton small(final String text) {
-    final JButton b = new JButton(text);
+    final JButton b = new TipButton(text);
     b.setMargin(new Insets(0, 5, 0, 5));
     b.setFocusable(false);
     return b;
@@ -894,13 +1068,6 @@ final class AirAllocationGrid extends JDialog {
       }
     }
     return Optional.empty();
-  }
-
-  private JComponent inColumn(final Territory column, final JComponent inner) {
-    final ColumnCell cell = new ColumnCell(column, new BorderLayout());
-    cell.setBackground(FOOTER);
-    cell.add(inner, BorderLayout.CENTER);
-    return cell;
   }
 
   /** Carrier spaces the nation's fighters take in the front (held for them in the bomber step). */
