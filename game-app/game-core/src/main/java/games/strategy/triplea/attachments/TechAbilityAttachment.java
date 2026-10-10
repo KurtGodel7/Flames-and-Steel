@@ -77,6 +77,8 @@ public class TechAbilityAttachment extends DefaultAttachment {
   private @Nullable IntegerMap<UnitType> hitPointBonus = null;
   // Flames and Steel: extra dogfight dice for the nation's units of a type
   private @Nullable IntegerMap<UnitType> dogfightRollsBonus = null;
+  // Flames and Steel: added to the unit type's dogfight value, e.g. "1:fighter"
+  private @Nullable IntegerMap<UnitType> dogfightBonus = null;
   // Flames and Steel (Yalta): territories that go to this tech's owner when an ally conquers them
   private @Nullable Set<Territory> alliedConquestTerritories = null;
   // Flames and Steel (Night Combat): pre-battle naval strike value by unit type, first round only
@@ -240,6 +242,21 @@ public class TechAbilityAttachment extends DefaultAttachment {
   /** Multiplier for ships firing back at aircraft (Naval Wasserfall: 2); 0 if not set. */
   public int getAirFireBackMultiplier() {
     return airFireBackMultiplier;
+  }
+
+  private void setDogfightBonus(final String value) throws GameParseException {
+    if (dogfightBonus == null) {
+      dogfightBonus = new IntegerMap<>();
+    }
+    applyCheckedValue("dogfightBonus", value, dogfightBonus::add);
+  }
+
+  private void setDogfightBonus(final IntegerMap<UnitType> value) {
+    dogfightBonus = value;
+  }
+
+  public IntegerMap<UnitType> getDogfightBonus() {
+    return getIntegerMapProperty(dogfightBonus);
   }
 
   private void setDogfightRollsBonus(final String value) throws GameParseException {
@@ -1013,6 +1030,13 @@ public class TechAbilityAttachment extends DefaultAttachment {
                   this::setAirFireBackMultiplier,
                   this::getAirFireBackMultiplier,
                   () -> airFireBackMultiplier = 0));
+      case "dogfightBonus" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setDogfightBonus,
+                  this::setDogfightBonus,
+                  this::getDogfightBonus,
+                  () -> dogfightBonus = null));
       case "dogfightRollsBonus" ->
           Optional.of(
               MutableProperty.of(

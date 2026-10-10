@@ -6,6 +6,7 @@ import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.GameState;
 import games.strategy.engine.data.MutableProperty;
+import games.strategy.engine.data.UnitType;
 import games.strategy.engine.data.gameparser.GameParseException;
 import games.strategy.triplea.Constants;
 import games.strategy.triplea.delegate.GenericTechAdvance;
@@ -53,6 +54,8 @@ public class TechAttachment extends DefaultAttachment {
   private @Nullable IntegerMap<String> researchStars = null;
   // Per-nation star counts that override the tech's own researchStarsRequired, by tech name.
   private @Nullable IntegerMap<String> researchStarsRequired = null;
+  // Flames and Steel: the nation's own dogfight bonus or penalty per unit type, e.g. "-1:fighter"
+  private @Nullable IntegerMap<UnitType> dogfightBonus = null;
   // Focus of each research centre, one entry per centre: "primary|secondary" (either may be "").
   private @Nullable List<String> researchFocus = null;
 
@@ -402,6 +405,26 @@ public class TechAttachment extends DefaultAttachment {
     researchStarsRequired = null;
   }
 
+  private void setDogfightBonus(final String value) throws GameParseException {
+    final String[] s = splitOnColon(value);
+    if (s.length != 2) {
+      throw new GameParseException(
+          "dogfightBonus must be a number and a unit type, e.g. -1:fighter" + thisErrorMsg());
+    }
+    if (dogfightBonus == null) {
+      dogfightBonus = new IntegerMap<>();
+    }
+    dogfightBonus.add(getUnitTypeOrThrow(s[1]), getInt(s[0]));
+  }
+
+  private void setDogfightBonus(final IntegerMap<UnitType> value) {
+    dogfightBonus = value;
+  }
+
+  public IntegerMap<UnitType> getDogfightBonus() {
+    return getIntegerMapProperty(dogfightBonus);
+  }
+
   private void setResearchFocus(final String value) {
     if (researchFocus == null) {
       researchFocus = new ArrayList<>();
@@ -542,6 +565,13 @@ public class TechAttachment extends DefaultAttachment {
                   this::setResearchStars,
                   this::getResearchStars,
                   this::resetResearchStars));
+      case "dogfightBonus" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setDogfightBonus,
+                  this::setDogfightBonus,
+                  this::getDogfightBonus,
+                  () -> dogfightBonus = null));
       case "researchStarsRequired" ->
           Optional.of(
               MutableProperty.of(

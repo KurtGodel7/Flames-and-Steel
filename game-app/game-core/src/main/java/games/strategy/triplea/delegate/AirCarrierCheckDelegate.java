@@ -10,7 +10,6 @@ import games.strategy.engine.message.IRemote;
 import games.strategy.triplea.attachments.AirUnitAttachment;
 import games.strategy.triplea.attachments.AirZoneAttachment;
 import games.strategy.triplea.attachments.AirZoneAttachment.ZoneType;
-import games.strategy.triplea.delegate.air.AirRange;
 import games.strategy.triplea.formatter.MyFormatter;
 import java.io.Serial;
 import java.io.Serializable;
@@ -25,11 +24,10 @@ import org.triplea.java.collections.IntegerMap;
 
 /**
  * Flames and Steel end-of-round carrier check. A step named "airCarrierSnapshot" (start of round)
- * records each carrier's air zone; a step named "airCarrierCheck" (end of round) compares. In each
- * open-ocean zone, and for carrier-dependent aircraft in coastal zones, a nation's aircraft beyond
- * its carriers' capacity there follow carriers that sailed to another air zone (up to those
- * carriers' capacity, jets only with fleet carriers); the rest are destroyed, cheapest first. A
- * sunk carrier takes nothing with it.
+ * records each carrier's air box; a step named "airCarrierCheck" (end of round) compares. In each
+ * carrier-only (ocean) front, a nation's aircraft beyond its carriers' capacity there follow
+ * carriers that sailed to another box (up to those carriers' capacity, jets only with fleet
+ * carriers); the rest are destroyed, cheapest first. A sunk carrier takes nothing with it.
  */
 public class AirCarrierCheckDelegate extends BaseTripleADelegate {
   private Map<Unit, Territory> carrierZoneAtStart = new HashMap<>();
@@ -46,52 +44,12 @@ public class AirCarrierCheckDelegate extends BaseTripleADelegate {
         }
       }
     } else if (step.startsWith("airCarrierCheck")) {
-      returnOutOfRangeAircraft();
       for (final GamePlayer player : getData().getPlayerList().getPlayers()) {
         for (final Territory zone : AirZoneAttachment.getAirZones(getData().getMap())) {
           checkZone(player, zone);
         }
       }
       carrierZoneAtStart = new HashMap<>();
-    }
-  }
-
-  /**
-   * Aircraft in a land front or Bomb zone they could no longer enter (landing spots lost during the
-   * round) return to the reserve; they are not destroyed.
-   */
-  private void returnOutOfRangeAircraft() {
-    final Optional<Territory> reserve = AirZoneAttachment.getReserve(getData().getMap());
-    if (reserve.isEmpty()) {
-      return;
-    }
-    final CompositeChange change = new CompositeChange();
-    final List<String> lines = new ArrayList<>();
-    for (final Territory zone : AirZoneAttachment.getAirZones(getData().getMap())) {
-      final ZoneType type = AirZoneAttachment.get(zone).orElseThrow().getZoneType();
-      if (type != ZoneType.LAND && type != ZoneType.BOMB) {
-        continue;
-      }
-      final List<Unit> outOfRange =
-          zone.getUnitCollection()
-              .getMatches(
-                  u ->
-                      Matches.unitIsAir().test(u)
-                          && !AirRange.canOperateIn(u.getOwner(), zone, u.getType()));
-      if (!outOfRange.isEmpty()) {
-        change.add(ChangeFactory.moveUnits(zone, reserve.get(), outOfRange));
-        lines.add(
-            MyFormatter.unitsToText(outOfRange)
-                + " out of range in "
-                + zone.getName()
-                + ", back to "
-                + reserve.get().getName());
-      }
-    }
-    if (!lines.isEmpty()) {
-      bridge.getHistoryWriter().startEvent("Aircraft out of range return to the reserve");
-      lines.forEach(line -> bridge.getHistoryWriter().addChildToEvent(line));
-      bridge.addChange(change);
     }
   }
 
@@ -102,7 +60,7 @@ public class AirCarrierCheckDelegate extends BaseTripleADelegate {
 
   private void checkZone(final GamePlayer player, final Territory zone) {
     final ZoneType type = AirZoneAttachment.get(zone).orElseThrow().getZoneType();
-    if (type != ZoneType.OCEAN && type != ZoneType.COASTAL) {
+    if (type != ZoneType.OCEAN) {
       return;
     }
     final List<Unit> dependent = carrierDependentAircraft(player, zone);
@@ -193,23 +151,11 @@ public class AirCarrierCheckDelegate extends BaseTripleADelegate {
     return notFitting;
   }
 
-  /**
-   * The nation's aircraft in the zone that need carriers: all in open ocean; in coastal zones those
-   * with no friendly land in range.
-   */
+  /** The nation's aircraft in a carrier-only front: all of them need carriers. */
   private static List<Unit> carrierDependentAircraft(
       final GamePlayer player, final Territory zone) {
-    final AirZoneAttachment attachment = AirZoneAttachment.get(zone).orElseThrow();
     return zone.getUnitCollection()
-        .getMatches(
-            u ->
-                u.isOwnedBy(player)
-                    && Matches.unitIsAir().test(u)
-                    && (attachment.getZoneType() == ZoneType.OCEAN
-                        || !AirRange.landWithinReach(
-                            player,
-                            attachment.getCoveredTerritories(),
-                            AirRange.range(u.getType(), player))));
+        .getMatches(u -> u.isOwnedBy(player) && Matches.unitIsAir().test(u));
   }
 
   /** Carriers (of the player, or of anyone if null) in the zone's sea zones. */

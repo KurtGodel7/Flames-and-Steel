@@ -91,14 +91,10 @@ public class AirCombat {
         // reserve aircraft do not fight
       }
       case BOMB -> {
-        final GamePlayer bombed = attachment.getBombedPlayer();
-        if (bombed != null && atWar(player, bombed)) {
-          for (final Territory t : player.getData().getMap().getTerritoriesOwnedBy(bombed)) {
-            // factories and APCs are strategic targets
-            if (t.anyUnitsMatch(
-                Matches.unitCanProduceUnits().or(u -> ApcAttachment.isApc(u.getType())))) {
-              targets.add(new Target(t, TargetKind.STRATEGIC));
-            }
+        // enemy factories and APCs in the zone's home region
+        for (final Territory t : attachment.getCoveredTerritories()) {
+          if (isStrategicTarget(player, t)) {
+            targets.add(new Target(t, TargetKind.STRATEGIC));
           }
         }
       }
@@ -111,13 +107,37 @@ public class AirCombat {
             if (t.anyUnitsMatch(enemyShip(player).and(Matches.unitCanEvade()))) {
               targets.add(new Target(t, TargetKind.SUBS));
             }
-          } else if (!getLandTargetUnits(player, t).isEmpty()) {
-            targets.add(new Target(t, TargetKind.LAND));
+          } else {
+            if (!getLandTargetUnits(player, t).isEmpty()) {
+              targets.add(new Target(t, TargetKind.LAND));
+            }
+            // factories outside every home region are bombed from their front
+            if (isStrategicTarget(player, t)
+                && !AirZoneAttachment.isInBombingZone(player.getData().getMap(), t)) {
+              targets.add(new Target(t, TargetKind.STRATEGIC));
+            }
           }
         }
       }
     }
     return targets;
+  }
+
+  /** An enemy-owned land territory with a factory or APC. */
+  private static boolean isStrategicTarget(final GamePlayer player, final Territory t) {
+    return !t.isWater()
+        && !t.getOwner().isNull()
+        && atWar(player, t.getOwner())
+        && t.anyUnitsMatch(Matches.unitCanProduceUnits().or(u -> ApcAttachment.isApc(u.getType())));
+  }
+
+  /** How many targets in the zone this nation's aircraft of this type could attack. */
+  public static int countTargets(
+      final GamePlayer player, final Territory zone, final UnitType type) {
+    return (int)
+        getTargets(player, zone).stream()
+            .filter(target -> mayAttack(player, zone, type, target))
+            .count();
   }
 
   /** Whether this aircraft type may attack that kind of target. */
@@ -132,23 +152,14 @@ public class AirCombat {
 
   /**
    * Whether this nation's aircraft of this type in the zone may attack the target: the type must
-   * suit the target and the target must be in range. In a Bomb zone every aircraft of the attacking
-   * side there flies at the shortest range among them (escorts limit the bombers).
+   * suit the target, and the target must be within half the aircraft's own range of a landing spot.
    */
   public static boolean mayAttack(
       final GamePlayer player, final Territory zone, final UnitType type, final Target target) {
     if (!mayAttack(type, target.kind())) {
       return false;
     }
-    final int range;
-    if (AirZoneAttachment.get(zone).orElseThrow().getZoneType() == ZoneType.BOMB) {
-      final List<Unit> side =
-          zone.getUnitCollection()
-              .getMatches(u -> Matches.unitIsAir().test(u) && !atWar(player, u.getOwner()));
-      range = AirRange.shortestRange(side);
-    } else {
-      range = AirRange.range(type, player);
-    }
+    final int range = AirRange.range(type, player);
     return AirRange.canReach(player, zone, type, range, target.territory());
   }
 
@@ -201,12 +212,16 @@ public class AirCombat {
     return a.getData().getRelationshipTracker().isAtWar(a, b);
   }
 
-  /** Firing power of an aircraft in a dogfight. */
+  /**
+   * Firing power of an aircraft in a dogfight: its dogfight value (the type's own, plus the owner's
+   * dogfightBonus and its techs', never below 1) times its dogfight rolls.
+   */
   public static int dogfightPower(final Unit unit) {
-    final int extraRolls =
-        unit.getData().getTechTracker().getDogfightRollsBonus(unit.getOwner(), unit.getType());
+    final var techs = unit.getData().getTechTracker();
+    final int extraRolls = techs.getDogfightRollsBonus(unit.getOwner(), unit.getType());
+    final int bonus = techs.getDogfightBonus(unit.getOwner(), unit.getType());
     return AirUnitAttachment.get(unit.getType())
-        .map(a -> a.getDogfight() * (a.getDogfightRolls() + extraRolls))
+        .map(a -> Math.max(1, a.getDogfight() + bonus) * (a.getDogfightRolls() + extraRolls))
         .orElse(0);
   }
 

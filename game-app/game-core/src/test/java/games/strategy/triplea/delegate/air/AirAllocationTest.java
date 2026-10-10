@@ -4,8 +4,10 @@ import static games.strategy.triplea.delegate.GameDataTestUtil.addTo;
 import static games.strategy.triplea.delegate.GameDataTestUtil.bomber;
 import static games.strategy.triplea.delegate.GameDataTestUtil.british;
 import static games.strategy.triplea.delegate.GameDataTestUtil.carrier;
+import static games.strategy.triplea.delegate.GameDataTestUtil.factory;
 import static games.strategy.triplea.delegate.GameDataTestUtil.fighter;
 import static games.strategy.triplea.delegate.GameDataTestUtil.germans;
+import static games.strategy.triplea.delegate.GameDataTestUtil.infantry;
 import static games.strategy.triplea.delegate.GameDataTestUtil.removeFrom;
 import static games.strategy.triplea.delegate.GameDataTestUtil.territory;
 import static games.strategy.triplea.delegate.MockDelegateBridge.advanceToStep;
@@ -24,8 +26,6 @@ import games.strategy.engine.delegate.IDelegateBridge;
 import games.strategy.triplea.attachments.AirUnitAttachment;
 import games.strategy.triplea.attachments.AirZoneAttachment;
 import games.strategy.triplea.delegate.AirAllocationDelegate;
-import games.strategy.triplea.delegate.AirCarrierCheckDelegate;
-import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.air.AirAllocation.AirMove;
 import games.strategy.triplea.delegate.air.AirAllocation.Stage;
 import games.strategy.triplea.xml.TestMapGameData;
@@ -35,45 +35,51 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * Flames and Steel air allocation. Sea zones of the test map stand in for zone boxes: a reserve,
- * two adjacent land fronts A and B, a land front C not next to A, and an open-ocean zone covering 6
- * Sea Zone.
+ * Flames and Steel air allocation with fronts. Sea zones of the test map stand in for the boxes:
+ * land fronts A, B (adjacent) and C (next to B only), all covering the United Kingdom (a British
+ * landing spot); a carrier-only front covering 6 Sea Zone; and a bombing zone over Western Europe.
  */
 class AirAllocationTest {
   private final GameData gameData = TestMapGameData.REVISED.getGameData();
   private final GamePlayer british = british(gameData);
-  private final Territory reserve = territory("1 Sea Zone", gameData);
+  private final GamePlayer germans = germans(gameData);
   private final Territory frontA = territory("2 Sea Zone", gameData);
   private final Territory frontB = territory("3 Sea Zone", gameData);
   private final Territory frontC = territory("4 Sea Zone", gameData);
   private final Territory ocean = territory("7 Sea Zone", gameData);
   private final Territory oceanSeaZone = territory("6 Sea Zone", gameData);
+  private final Territory bombZone = territory("8 Sea Zone", gameData);
+  private final Territory unitedKingdom = territory("United Kingdom", gameData);
+  private final Territory westernEurope = territory("Western Europe", gameData);
   private UnitType fighter;
   private UnitType bomber;
 
   @BeforeEach
   void setUp() {
-    for (final Territory t : List.of(reserve, frontA, frontB, frontC, ocean, oceanSeaZone)) {
+    for (final Territory t : List.of(frontA, frontB, frontC, ocean, oceanSeaZone, bombZone)) {
       removeFrom(t, t.getUnits());
     }
-    zone(reserve, "zoneType", "reserve");
     zone(frontA, "zoneType", "land");
     zone(frontB, "zoneType", "land");
     zone(frontC, "zoneType", "land");
     zone(ocean, "zoneType", "ocean");
-    // the fronts cover British land, so British aircraft are in range there
+    zone(bombZone, "zoneType", "bomb");
+    zone(bombZone, "bombedPlayer", germans.getName());
+    zone(bombZone, "coveredTerritories", westernEurope.getName());
     for (final Territory front : List.of(frontA, frontB, frontC)) {
-      zone(front, "coveredTerritories", "United Kingdom");
+      zone(front, "coveredTerritories", unitedKingdom.getName());
     }
-    zone(frontA, "adjacentZones", frontB.getName());
-    zone(frontB, "adjacentZones", frontA.getName());
     zone(ocean, "coveredTerritories", oceanSeaZone.getName());
+    link(frontA, frontB);
+    link(frontB, frontC);
     fighter = fighter(gameData);
     bomber = bomber(gameData);
     airUnit(fighter, "fighter", "true");
+    airUnit(bomber, "bombingDamage", "5");
     addTo(frontA, fighter.create(3, british));
     addTo(frontA, bomber.create(2, british));
-    addTo(reserve, bomber.create(1, british));
+    // an enemy to strike in the fronts
+    addTo(unitedKingdom, infantry(gameData).create(1, germans));
   }
 
   @Test
@@ -82,30 +88,46 @@ class AirAllocationTest {
   }
 
   @Test
-  void nonAdjacentMoveMustGoThroughTheReserve() {
+  void aircraftMoveOneBoxARound() {
     assertThat(valid(Stage.BOMBERS, new AirMove(frontA, frontC, bomber, 1)), is(false));
-    assertThat(valid(Stage.BOMBERS, new AirMove(frontA, reserve, bomber, 1)), is(true));
-    assertThat(valid(Stage.BOMBERS, new AirMove(reserve, frontC, bomber, 1)), is(true));
+    assertThat(
+        AirAllocation.destinationProblem(
+                british, Stage.BOMBERS, List.of(), frontA, bomber, 1, frontC)
+            .orElseThrow(),
+        is("Two boxes away: needs two rounds."));
   }
 
   @Test
-  void zoneNamingNationsRefusesOthers() {
-    zone(frontB, "players", germans(gameData).getName());
+  void boxNamingNationsRefusesOthers() {
+    zone(frontB, "players", germans.getName());
 
     assertThat(valid(Stage.BOMBERS, new AirMove(frontA, frontB, bomber, 1)), is(false));
     assertThat(
-        AirAllocation.getDestinations(british, frontA, gameData.getMap()).contains(frontB),
+        AirAllocation.getDestinations(british, frontA, bomber, gameData.getMap()).contains(frontB),
         is(false));
+  }
+
+  @Test
+  void frontNeedsALandingSpot() {
+    resetCovered(frontB, westernEurope);
+
+    assertThat(
+        AirAllocation.entryProblem(british, fighter, frontB).orElseThrow(),
+        is("No landing spot in this front."));
+  }
+
+  @Test
+  void bombersNeedATargetFightersDoNot() {
+    removeFrom(
+        unitedKingdom, unitedKingdom.getUnitCollection().getMatches(u -> u.isOwnedBy(germans)));
+
+    assertThat(valid(Stage.BOMBERS, new AirMove(frontA, frontB, bomber, 1)), is(false));
+    assertThat(valid(Stage.FIGHTERS, new AirMove(frontA, frontB, fighter, 1)), is(true));
   }
 
   @Test
   void cannotMoveMoreAircraftThanAreThere() {
-    assertThat(
-        valid(
-            Stage.BOMBERS,
-            new AirMove(frontA, frontB, bomber, 1),
-            new AirMove(frontA, reserve, bomber, 2)),
-        is(false));
+    assertThat(valid(Stage.BOMBERS, new AirMove(frontA, frontB, bomber, 3)), is(false));
   }
 
   @Test
@@ -116,34 +138,29 @@ class AirAllocationTest {
   }
 
   @Test
-  void openOceanNeedsOwnCarrierCapacity() {
-    zone(ocean, "adjacentZones", frontA.getName());
-    zone(frontA, "adjacentZones", ocean.getName());
+  void carrierOnlyFrontNeedsOwnCarrierCapacity() {
+    link(frontA, ocean);
 
-    // no carriers: nothing may go
+    // no carriers: no landing spot, nothing may go
     assertThat(valid(Stage.FIGHTERS, new AirMove(frontA, ocean, fighter, 1)), is(false));
 
     addTo(oceanSeaZone, carrier(gameData).create(1, british));
     final int capacity = carrier(gameData).getUnitAttachment().getCarrierCapacity();
     assertThat(valid(Stage.FIGHTERS, new AirMove(frontA, ocean, fighter, capacity)), is(true));
     assertThat(valid(Stage.FIGHTERS, new AirMove(frontA, ocean, fighter, capacity + 1)), is(false));
-    // bombers that cannot land on carriers may not go
-    assertThat(valid(Stage.BOMBERS, new AirMove(frontA, ocean, bomber, 1)), is(false));
   }
 
   @Test
   void enemyCarriersDoNotCount() {
-    zone(ocean, "adjacentZones", frontA.getName());
-    zone(frontA, "adjacentZones", ocean.getName());
-    addTo(oceanSeaZone, carrier(gameData).create(1, germans(gameData)));
+    link(frontA, ocean);
+    addTo(oceanSeaZone, carrier(gameData).create(1, germans));
 
     assertThat(valid(Stage.FIGHTERS, new AirMove(frontA, ocean, fighter, 1)), is(false));
   }
 
   @Test
   void jetsNeedFleetCarriers() {
-    zone(ocean, "adjacentZones", frontA.getName());
-    zone(frontA, "adjacentZones", ocean.getName());
+    link(frontA, ocean);
     airUnit(fighter, "fleetCarrierOnly", "true");
     addTo(oceanSeaZone, carrier(gameData).create(1, british));
 
@@ -154,108 +171,43 @@ class AirAllocationTest {
   }
 
   @Test
-  void landFrontOutOfRangeIsRefused() {
-    final Territory far = farFromBritishLand();
-    zone(frontC, "coveredTerritories", far.getName());
-    resetCovered(frontC, far);
+  void coastalFrontsHaveNoCarrierCap() {
+    zone(frontB, "zoneType", "coastal");
 
-    assertThat(valid(Stage.BOMBERS, new AirMove(reserve, frontC, bomber, 1)), is(false));
+    assertThat(valid(Stage.FIGHTERS, new AirMove(frontA, frontB, fighter, 3)), is(true));
   }
 
   @Test
-  void aircraftStayingInAZoneOutOfRangeBlockTheAllocation() {
-    // front A's only covered territory is now far away: its bombers must leave
-    resetCovered(frontA, farFromBritishLand());
+  void bombingZoneTakesBombersAttackingAndFightersDefending() {
+    link(frontA, bombZone);
+    addTo(westernEurope, factory(gameData).create(1, germans));
+    addTo(frontA, fighter.create(1, germans));
+    addTo(frontA, bomber.create(1, germans));
 
-    assertThat(valid(Stage.BOMBERS), is(false));
-    assertThat(valid(Stage.BOMBERS, new AirMove(frontA, reserve, bomber, 2)), is(true));
-  }
-
-  @Test
-  void bombZoneDefendersMayAlwaysEnterAttackersNeedATargetInRange() {
-    final Territory bombZone = territory("8 Sea Zone", gameData);
-    removeFrom(bombZone, bombZone.getUnits());
-    zone(bombZone, "zoneType", "bomb");
-    zone(bombZone, "bombedPlayer", british.getName());
-    final GamePlayer germans = germans(gameData);
-    addTo(reserve, bomber.create(1, germans));
-    // British land (with factories) is far beyond a range-2 German bomber's reach
-    final int savedMovement = bomber.getUnitAttachment().getMovement(germans);
-    setMovement(2);
-
-    assertThat(valid(Stage.BOMBERS, new AirMove(reserve, bombZone, bomber, 1)), is(true));
+    assertThat(valid(Stage.BOMBERS, new AirMove(frontA, bombZone, bomber, 1)), is(true));
+    airUnit(fighter, "bombingDamage", "0");
     assertThat(
-        AirAllocation.validate(
-                germans,
-                Stage.BOMBERS,
-                List.of(new AirMove(reserve, bombZone, bomber, 1)),
-                gameData.getMap())
-            .isPresent(),
-        is(true));
-    setMovement(savedMovement);
-  }
-
-  @Test
-  void aircraftOutOfRangeReturnToTheReserveAtTheEndOfTheRound() {
-    resetCovered(frontA, farFromBritishLand());
-    final AirCarrierCheckDelegate check = new AirCarrierCheckDelegate();
-    check.initialize("airCarrierCheck", "Carrier check");
-    gameData
-        .getSequence()
-        .addStep(new GameStep("airCarrierCheck", "check", null, check, gameData, new Properties()));
-    final IDelegateBridge bridge = newDelegateBridge(british);
-    advanceToStep(bridge, "airCarrierCheck");
-    check.setDelegateBridgeAndPlayer(bridge);
-
-    check.start();
-
-    assertThat(frontA.getUnitCollection().countMatches(Matches.unitIsAir()), is(0));
-    assertThat(AirAllocation.getAircraft(british, reserve, Stage.FIGHTERS).size(), is(3));
-  }
-
-  private Territory farFromBritishLand() {
-    final int range = AirRange.range(bomber, british);
-    return gameData.getMap().getTerritories().stream()
-        .filter(t -> !t.isWater())
-        .filter(t -> !AirRange.landWithinReach(british, List.of(t), range))
-        .findFirst()
-        .orElseThrow();
-  }
-
-  private void resetCovered(final Territory zone, final Territory only) {
-    try {
-      AirZoneAttachment.get(zone)
-          .orElseThrow()
-          .getPropertyOrThrow("coveredTerritories")
-          .resetValue();
-    } catch (final Exception e) {
-      throw new IllegalStateException(e);
-    }
-    zone(zone, "coveredTerritories", only.getName());
-  }
-
-  private void setMovement(final int movement) {
-    set(bomber.getUnitAttachment(), "movement", String.valueOf(movement));
+        AirAllocation.entryProblem(british, fighter, bombZone).orElseThrow(),
+        is("No strategic bombing value."));
+    assertThat(AirAllocation.entryProblem(germans, fighter, bombZone).isEmpty(), is(true));
+    assertThat(
+        AirAllocation.entryProblem(germans, bomber, bombZone).orElseThrow(),
+        is("Only fighters defend against strategic bombing."));
   }
 
   @Test
   void movesAreCarriedOut() {
     gameData.performChange(
         AirAllocation.toChange(
-            british,
-            Stage.BOMBERS,
-            List.of(
-                new AirMove(frontA, frontB, bomber, 1), new AirMove(frontA, reserve, bomber, 1))));
+            british, Stage.BOMBERS, List.of(new AirMove(frontA, frontB, bomber, 1))));
 
-    assertThat(AirAllocation.getAircraft(british, frontA, Stage.BOMBERS).size(), is(0));
+    assertThat(AirAllocation.getAircraft(british, frontA, Stage.BOMBERS).size(), is(1));
     assertThat(AirAllocation.getAircraft(british, frontB, Stage.BOMBERS).size(), is(1));
-    assertThat(AirAllocation.getAircraft(british, reserve, Stage.BOMBERS).size(), is(2));
     assertThat(AirAllocation.getAircraft(british, frontA, Stage.FIGHTERS).size(), is(3));
   }
 
   @Test
   void movesStayHiddenUntilTheRevealStep() {
-    final GamePlayer germans = germans(gameData);
     addTo(frontA, bomber.create(1, germans));
     final AirAllocationDelegate delegate = new AirAllocationDelegate();
     delegate.initialize("airAllocation", "Air allocation");
@@ -273,16 +225,14 @@ class AirAllocationTest {
     }
 
     runStep(delegate, "britishAirBombers", british, new AirMove(frontA, frontB, bomber, 2));
-    runStep(delegate, "germanAirBombers", germans, new AirMove(frontA, reserve, bomber, 1));
+    runStep(delegate, "germanAirBombers", germans);
 
     // nothing has moved yet
     assertThat(AirAllocation.getAircraft(british, frontA, Stage.BOMBERS).size(), is(2));
-    assertThat(AirAllocation.getAircraft(germans, frontA, Stage.BOMBERS).size(), is(1));
 
     runStep(delegate, "airRevealBombers", germans);
 
     assertThat(AirAllocation.getAircraft(british, frontB, Stage.BOMBERS).size(), is(2));
-    assertThat(AirAllocation.getAircraft(germans, reserve, Stage.BOMBERS).size(), is(1));
   }
 
   private void runStep(
@@ -302,6 +252,23 @@ class AirAllocationTest {
 
   private boolean valid(final Stage stage, final AirMove... moves) {
     return AirAllocation.validate(british, stage, List.of(moves), gameData.getMap()).isEmpty();
+  }
+
+  private void link(final Territory a, final Territory b) {
+    zone(a, "adjacentZones", b.getName());
+    zone(b, "adjacentZones", a.getName());
+  }
+
+  private void resetCovered(final Territory zone, final Territory only) {
+    try {
+      AirZoneAttachment.get(zone)
+          .orElseThrow()
+          .getPropertyOrThrow("coveredTerritories")
+          .resetValue();
+    } catch (final Exception e) {
+      throw new IllegalStateException(e);
+    }
+    zone(zone, "coveredTerritories", only.getName());
   }
 
   private void zone(final Territory territory, final String property, final String value) {

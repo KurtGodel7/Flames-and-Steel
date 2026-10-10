@@ -524,28 +524,13 @@ public final class AirTargetPanel extends ActionPanel {
     return "";
   }
 
-  /** The range a bomber of this type flies at from the selected zone (escorts limit Bomb zones). */
+  /** The range a bomber of this type flies at: its own (with the owner's techs). */
   private int rangeInForce(final GamePlayer player, final UnitType type) {
-    if (selectedZone != null
-        && AirZoneAttachment.get(selectedZone).orElseThrow().getZoneType() == ZoneType.BOMB) {
-      return bombZoneRange(player, selectedZone);
-    }
     return AirRange.range(type, player);
   }
 
   private int reach(final GamePlayer player, final UnitType type) {
-    if (selectedZone != null
-        && AirZoneAttachment.get(selectedZone).orElseThrow().getZoneType() == ZoneType.BOMB) {
-      return bombZoneRange(player, selectedZone) / 2;
-    }
-    return AirRange.range(type, player) / 2;
-  }
-
-  private static int bombZoneRange(final GamePlayer player, final Territory zone) {
-    return AirRange.shortestRange(
-        zone.getUnitCollection()
-            .getMatches(
-                u -> Matches.unitIsAir().test(u) && !AirCombat.atWar(player, u.getOwner())));
+    return rangeInForce(player, type) / 2;
   }
 
   private static String kindName(final TargetKind kind) {
@@ -737,7 +722,6 @@ public final class AirTargetPanel extends ActionPanel {
     }
     final GamePlayer player = getCurrentPlayer();
     try (GameData.Unlocker ignored = data.acquireReadLock()) {
-      paintRangeTags(g, data, player);
       if (selectedZone != null) {
         final AirZoneAttachment zone = AirZoneAttachment.get(selectedZone).orElseThrow();
         final Map<Territory, Boolean> legalPlaces = new HashMap<>();
@@ -807,34 +791,6 @@ public final class AirTargetPanel extends ActionPanel {
     g.setColor(color);
     for (final Polygon p : draw.mapData().getPolygons(t)) {
       g.fillPolygon(p);
-    }
-  }
-
-  /** On each Bomb box the player has aircraft in: the range the whole side flies at. */
-  private void paintRangeTags(final Graphics2D g, final GameData data, final GamePlayer player) {
-    for (final Territory zone : AirZoneAttachment.getAirZones(data.getMap())) {
-      if (AirZoneAttachment.get(zone).orElseThrow().getZoneType() != ZoneType.BOMB
-          || AirCombat.getBombers(player, zone).isEmpty()) {
-        continue;
-      }
-      final int range = bombZoneRange(player, zone);
-      final int bomberRange =
-          AirCombat.getBombers(player, zone).stream()
-              .mapToInt(u -> AirRange.range(u.getType(), player))
-              .min()
-              .orElse(range);
-      final Point c = draw.center(zone);
-      AirDraw.tag(
-          g,
-          "Range "
-              + range
-              + " (reach "
-              + range / 2
-              + ")"
-              + (range < bomberRange ? ": limited by escorts" : ""),
-          c.x,
-          c.y + 150,
-          Color.WHITE);
     }
   }
 }

@@ -19,7 +19,7 @@ import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.changefactory.ChangeFactory;
 import games.strategy.engine.data.gameparser.GameParseException;
-import games.strategy.triplea.delegate.AirReserve;
+import games.strategy.triplea.delegate.AirFronts;
 import games.strategy.triplea.delegate.AirThatCantLandUtilAccess;
 import games.strategy.triplea.delegate.battle.BattleDelegate;
 import games.strategy.triplea.delegate.battle.BattleTracker;
@@ -28,36 +28,40 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-/** Flames and Steel air zones. Two sea zones of the test map stand in for zone boxes. */
+/** Flames and Steel air boxes. Two sea zones of the test map stand in for front boxes. */
 class AirZoneAttachmentTest {
   private final GameData gameData = TestMapGameData.REVISED.getGameData();
-  private final Territory reserve = territory("1 Sea Zone", gameData);
+  private final Territory otherFront = territory("1 Sea Zone", gameData);
   private final Territory front = territory("2 Sea Zone", gameData);
 
   @BeforeEach
   void setUp() {
-    removeFrom(reserve, reserve.getUnits());
+    removeFrom(otherFront, otherFront.getUnits());
     removeFrom(front, front.getUnits());
-    makeZone(reserve, "reserve");
+    makeZone(otherFront, "ocean");
     makeZone(front, "land");
   }
 
   @Test
-  void findsZonesAndReserve() {
+  void findsZonesAndTheFrontOfATerritory() {
+    set(front, "coveredTerritories", "Germany");
     assertThat(AirZoneAttachment.isAirZone(front), is(true));
-    assertThat(AirZoneAttachment.getReserve(gameData.getMap()).orElseThrow(), is(reserve));
     assertThat(AirZoneAttachment.isAirZone(territory("Germany", gameData)), is(false));
+    assertThat(
+        AirZoneAttachment.getFrontOf(gameData.getMap(), territory("Germany", gameData))
+            .orElseThrow(),
+        is(front));
   }
 
   @Test
   void adjacencyMustGoBothWays() throws Exception {
-    set(front, "adjacentZones", reserve.getName());
+    set(front, "adjacentZones", otherFront.getName());
 
     assertThrows(
         GameParseException.class,
         () -> AirZoneAttachment.get(front).orElseThrow().validate(gameData));
 
-    set(reserve, "adjacentZones", front.getName());
+    set(otherFront, "adjacentZones", front.getName());
     AirZoneAttachment.get(front).orElseThrow().validate(gameData);
   }
 
@@ -83,7 +87,7 @@ class AirZoneAttachmentTest {
   }
 
   @Test
-  void aircraftOnTheMapGoToTheReserve() {
+  void aircraftOnTheMapGoToTheirFront() {
     final Territory germany = territory("Germany", gameData);
     final Territory seaZone = territory("5 Sea Zone", gameData);
     final List<Unit> placed = fighter(gameData).create(2, germans(gameData));
@@ -94,10 +98,13 @@ class AirZoneAttachmentTest {
     gameData.performChange(
         ChangeFactory.unitPropertyChange(onCarrier, carrierUnit, Unit.PropertyName.TRANSPORTED_BY));
 
-    AirReserve.sendAircraftToReserve(newDelegateBridge(germans(gameData)), germans(gameData));
+    set(front, "coveredTerritories", "Germany");
+    set(otherFront, "coveredTerritories", seaZone.getName());
 
-    assertThat(reserve.getUnits().containsAll(placed), is(true));
-    assertThat(reserve.getUnits().contains(onCarrier), is(true));
+    AirFronts.sendAircraftToFronts(newDelegateBridge(germans(gameData)), germans(gameData));
+
+    assertThat(front.getUnits().containsAll(placed), is(true));
+    assertThat(otherFront.getUnits().contains(onCarrier), is(true));
     assertThat(onCarrier.getTransportedBy() == null, is(true));
     assertThat(seaZone.getUnits().contains(carrierUnit), is(true));
     assertThat(germany.getUnits().stream().anyMatch(placed::contains), is(false));

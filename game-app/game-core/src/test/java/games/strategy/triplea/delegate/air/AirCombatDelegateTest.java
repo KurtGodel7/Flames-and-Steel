@@ -80,6 +80,7 @@ class AirCombatDelegateTest {
     zone(naval, "coveredTerritories", seaZone.getName());
     zone(bombGermany, "zoneType", "bomb");
     zone(bombGermany, "bombedPlayer", germans.getName());
+    zone(bombGermany, "coveredTerritories", germany.getName());
     fighter = fighter(gameData);
     bomber = bomber(gameData);
     air(fighter, "fighter", "true");

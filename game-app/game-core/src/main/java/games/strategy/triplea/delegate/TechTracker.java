@@ -69,6 +69,18 @@ public class TechTracker {
     return getCached(player, type, "getDogfightRollsBonus", getter);
   }
 
+  /**
+   * Flames and Steel: dogfight bonus for the nation's units of this type, from its own
+   * techAttachment and from the techs it has.
+   */
+  public int getDogfightBonus(GamePlayer player, UnitType type) {
+    final Supplier<Integer> getter =
+        () ->
+            getSumOfBonuses(TechAbilityAttachment::getDogfightBonus, type, player)
+                + player.getTechAttachment().getDogfightBonus().getInt(type);
+    return getCached(player, type, "getDogfightBonus", getter);
+  }
+
   /** Flames and Steel: extra hit points from the nation's techs for its units of this type. */
   public int getHitPointBonus(GamePlayer player, UnitType type) {
     final Supplier<Integer> getter =

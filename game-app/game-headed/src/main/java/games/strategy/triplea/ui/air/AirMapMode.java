@@ -765,7 +765,7 @@ public final class AirMapMode implements MapOverlay {
       AirDraw.tag(g, "Dogfight", r.x + r.width / 2, r.y - 10, DOGFIGHT);
     }
     final ZoneType type = AirZoneAttachment.get(zone).orElseThrow().getZoneType();
-    if (type == ZoneType.OCEAN || type == ZoneType.COASTAL) {
+    if (type == ZoneType.OCEAN) {
       int ly = r.y + r.height + 12;
       for (final String line : AirZoneOverlay.carrierLines(paintData, zone)) {
         AirDraw.tag(g, line, r.x + r.width / 2, ly, Color.WHITE);

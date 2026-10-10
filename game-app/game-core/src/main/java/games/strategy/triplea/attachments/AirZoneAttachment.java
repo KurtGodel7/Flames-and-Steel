@@ -50,8 +50,10 @@ public class AirZoneAttachment extends DefaultAttachment {
   @Getter private @Nullable GamePlayer bombedPlayer = null;
   // land territories and sea zones this zone covers (where its targets are)
   private @Nullable Set<Territory> coveredTerritories = null;
-  // air zones aircraft may move to directly, without a round in reserve
+  // air boxes aircraft may move to in one round
   private @Nullable Set<Territory> adjacentZones = null;
+  // fronts: "Western", "Soviet" or "China"; for display (players says who may enter)
+  @Getter private @Nullable String frontTag = null;
 
   public AirZoneAttachment(
       final String name, final Attachable attachable, final GameData gameData) {
@@ -75,6 +77,41 @@ public class AirZoneAttachment extends DefaultAttachment {
 
   public static List<Territory> getAirZones(final GameMap map) {
     return map.getTerritories().stream().filter(AirZoneAttachment::isAirZone).toList();
+  }
+
+  /** Whether the box is a front (not a strategic bombing zone or the old reserve). */
+  public boolean isFront() {
+    return getZoneType() != ZoneType.BOMB && getZoneType() != ZoneType.RESERVE;
+  }
+
+  /** The front whose coverage includes this territory or sea zone, if any. */
+  public static Optional<Territory> getFrontOf(final GameMap map, final Territory territory) {
+    return getAirZones(map).stream()
+        .filter(
+            zone -> {
+              final AirZoneAttachment a = get(zone).orElseThrow();
+              return a.isFront() && a.getCoveredTerritories().contains(territory);
+            })
+        .findFirst();
+  }
+
+  /** Whether some strategic bombing zone's home region includes this territory. */
+  public static boolean isInBombingZone(final GameMap map, final Territory territory) {
+    return getAirZones(map).stream()
+        .anyMatch(
+            zone -> {
+              final AirZoneAttachment a = get(zone).orElseThrow();
+              return a.getZoneType() == ZoneType.BOMB
+                  && a.getCoveredTerritories().contains(territory);
+            });
+  }
+
+  private void setFrontTag(final String value) {
+    frontTag = value;
+  }
+
+  private void resetFrontTag() {
+    frontTag = null;
   }
 
   private void setZoneType(final String value) throws GameParseException {
@@ -234,6 +271,10 @@ public class AirZoneAttachment extends DefaultAttachment {
                   this::setCoveredTerritories,
                   this::getCoveredTerritories,
                   this::resetCoveredTerritories));
+      case "frontTag" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setFrontTag, this::setFrontTag, this::getFrontTag, this::resetFrontTag));
       case "adjacentZones" ->
           Optional.of(
               MutableProperty.of(

@@ -132,7 +132,7 @@ public final class AirZoneOverlay implements MapOverlay {
         final Map<Territory, List<Label>> computed = new HashMap<>();
         for (final Territory zone : AirZoneAttachment.getAirZones(data.getMap())) {
           final ZoneType type = AirZoneAttachment.get(zone).orElseThrow().getZoneType();
-          if (type == ZoneType.OCEAN || type == ZoneType.COASTAL) {
+          if (type == ZoneType.OCEAN) {
             computed.put(zone, carrierLabels(mapData, data, zone));
           }
         }

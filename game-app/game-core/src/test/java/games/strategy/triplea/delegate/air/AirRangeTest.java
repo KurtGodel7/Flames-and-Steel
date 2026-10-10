@@ -72,21 +72,21 @@ class AirRangeTest {
   }
 
   @Test
-  void escortsLimitAStrategicRaidToTheShortestRange() {
+  void strategicTargetUsesTheBombersOwnRangeWhateverTheEscorts() {
     final Territory germany = territory("Germany", gameData);
     zone(boxA, "zoneType", "bomb");
     zone(boxA, "bombedPlayer", germans.getName());
+    zone(boxA, "coveredTerritories", germany.getName());
     final int d = distanceToLand(british, germany);
     movement(bomber, 2 * d);
     movement(fighter, 2 * d - 2);
     air(bomber, "bombingDamage", "5");
     addTo(boxA, bomber.create(2, british));
+    addTo(boxA, fighter.create(1, british));
     final Target raid = new Target(germany, TargetKind.STRATEGIC);
 
+    // a shorter-ranged escort no longer holds the bombers back
     assertThat(AirCombat.mayAttack(british, boxA, bomber, raid), is(true));
-
-    addTo(boxA, fighter.create(1, british));
-    assertThat(AirCombat.mayAttack(british, boxA, bomber, raid), is(false));
   }
 
   @Test
@@ -124,30 +124,6 @@ class AirRangeTest {
     // jets need fleet carriers
     air(fighter, "fleetCarrierOnly", "true");
     assertThat(AirRange.canReach(british, boxA, fighter, 4, seaZone), is(false));
-  }
-
-  @Test
-  void coastalZoneNeedsLandInRangeOrCarriers() {
-    final int range = AirRange.range(fighter, british);
-    final Territory near = territory("7 Sea Zone", gameData);
-    final Territory far =
-        gameData.getMap().getTerritories().stream()
-            .filter(t -> t.isWater() && !AirZoneAttachment.isAirZone(t))
-            .filter(t -> !AirRange.landWithinReach(british, List.of(t), range))
-            .findFirst()
-            .orElseThrow();
-    removeFrom(far, far.getUnits());
-    zone(boxA, "zoneType", "coastal");
-    zone(boxA, "coveredTerritories", near.getName());
-    zone(boxB, "zoneType", "coastal");
-    zone(boxB, "coveredTerritories", far.getName());
-    addTo(reserve, fighter.create(2, british));
-
-    assertThat(valid(new AirMove(reserve, boxA, fighter, 2)), is(true));
-    assertThat(valid(new AirMove(reserve, boxB, fighter, 2)), is(false));
-
-    addTo(far, carrier(gameData).create(1, british));
-    assertThat(valid(new AirMove(reserve, boxB, fighter, 2)), is(true));
   }
 
   @Test

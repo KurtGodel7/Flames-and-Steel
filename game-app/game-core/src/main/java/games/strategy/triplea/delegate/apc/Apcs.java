@@ -13,7 +13,7 @@ import games.strategy.triplea.attachments.AirZoneAttachment;
 import games.strategy.triplea.attachments.ApcAttachment;
 import games.strategy.triplea.attachments.PlayerAttachment;
 import games.strategy.triplea.attachments.TechAbilityAttachment;
-import games.strategy.triplea.delegate.AirReserve;
+import games.strategy.triplea.delegate.AirFronts;
 import games.strategy.triplea.delegate.TechAdvance;
 import games.strategy.triplea.delegate.TechTracker;
 import games.strategy.triplea.formatter.MyFormatter;
@@ -245,7 +245,7 @@ public class Apcs {
     bridge.addChange(change);
     produceBonuses(bridge, player);
     // aircraft built by APCs go straight to the aircraft reserve
-    AirReserve.sendAircraftToReserve(bridge, player);
+    AirFronts.sendAircraftToFronts(bridge, player);
   }
 
   /**
