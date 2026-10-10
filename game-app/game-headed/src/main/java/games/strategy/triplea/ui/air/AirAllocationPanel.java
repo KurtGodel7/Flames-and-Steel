@@ -141,12 +141,75 @@ public final class AirAllocationPanel extends ActionPanel {
           }
           if (!listening) {
             listening = true;
-            getMap().addUnitSelectionListener(unitListener);
-            getMap().addMapSelectionListener(hoverListener);
             getMap().addOverlay(overlay);
           }
           rebuild(player);
+          openGrid();
         });
+  }
+
+  /** The allocation grid for this step; opens over the map, reopened from the Actions tab. */
+  private @Nullable AirAllocationGrid grid;
+
+  private void openGrid() {
+    if (grid == null) {
+      grid = new AirAllocationGrid(frame, frame.getUiContext(), gridHost());
+    }
+    grid.setVisible(true);
+    grid.toFront();
+  }
+
+  private AirAllocationGrid.Host gridHost() {
+    return new AirAllocationGrid.Host() {
+      @Override
+      public GameData data() {
+        return getData();
+      }
+
+      @Override
+      public GamePlayer player() {
+        return getCurrentPlayer();
+      }
+
+      @Override
+      public Stage stage() {
+        return stage;
+      }
+
+      @Override
+      public int round() {
+        return getData().getSequence().getRound();
+      }
+
+      @Override
+      public List<AirMove> staged() {
+        return List.copyOf(staged);
+      }
+
+      @Override
+      public void setStaged(final List<AirMove> moves) {
+        staged.clear();
+        staged.addAll(moves);
+        movesChanged();
+      }
+
+      @Override
+      public Map<GamePlayer, List<AirMove>> allied() {
+        return allied;
+      }
+
+      @Override
+      public void done() {
+        performDone();
+      }
+
+      @Override
+      public void hoverZone(final @Nullable Territory zone) {
+        if (frame.getAirZoneOverlay() != null) {
+          frame.getAirZoneOverlay().setSelectedZone(zone);
+        }
+      }
+    };
   }
 
   /** Blocks until Done; returns the staged moves. */
@@ -157,6 +220,13 @@ public final class AirAllocationPanel extends ActionPanel {
   }
 
   private void stopListening() {
+    if (grid != null) {
+      grid.dispose();
+      grid = null;
+    }
+    if (frame.getAirZoneOverlay() != null) {
+      frame.getAirZoneOverlay().setSelectedZone(null);
+    }
     if (listening) {
       listening = false;
       getMap().removeUnitSelectionListener(unitListener);
@@ -186,6 +256,9 @@ public final class AirAllocationPanel extends ActionPanel {
     }
     if (error.isPresent()) {
       frame.setStatusErrorMessage(error.get());
+      if (grid != null) {
+        grid.showError(error.get());
+      }
       return;
     }
     clearSelection();
@@ -470,6 +543,9 @@ public final class AirAllocationPanel extends ActionPanel {
     storeExecutor.execute(() -> store.accept(snapshot));
     rebuild(getCurrentPlayer());
     getMap().repaint();
+    if (grid != null) {
+      grid.movesChangedElsewhere();
+    }
   }
 
   // ---- the side panel
@@ -493,21 +569,10 @@ public final class AirAllocationPanel extends ActionPanel {
                 + (stage == Stage.FIGHTERS ? "; the bombers' moves are already revealed." : ".")));
     add(leftAligned(actionLabel));
 
-    selectionPanel.removeAll();
-    if (selectedZone != null) {
-      selectionPanel.add(
-          leftAligned(new JLabel("Aircraft in " + AirAllocation.zoneName(selectedZone) + ":")));
-      selectionPanel.add(
-          leftAligned(
-              AirSelection.chooser(
-                  frame.getUiContext(),
-                  player,
-                  available(player, selectedZone),
-                  selected,
-                  () -> selectionChanged(false))));
-      selectionPanel.add(leftAligned(legalLabel));
-    }
-    add(selectionPanel);
+    final JButton showGrid = new JButton("Allocation window");
+    showGrid.setToolTipText("Reopen the allocation grid");
+    showGrid.addActionListener(e -> openGrid());
+    add(leftAligned(showGrid));
 
     movesPanel.removeAll();
     movesPanel.add(Box.createVerticalStrut(6));

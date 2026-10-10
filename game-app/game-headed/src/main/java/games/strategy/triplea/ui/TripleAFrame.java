@@ -199,7 +199,7 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
   private final TechnologyPanel technologyPanel;
   private final ResearchPanel researchPanel;
   private @Nullable ResearchScreen researchScreen;
-  private @Nullable AirZoneOverlay airZoneOverlay;
+  @Getter private @Nullable AirZoneOverlay airZoneOverlay;
   private @Nullable AirPanel airPanel;
   @Getter private @Nullable AirMapMode airMapMode;
   private @Nullable GamePlayer lastAirAllocator;
