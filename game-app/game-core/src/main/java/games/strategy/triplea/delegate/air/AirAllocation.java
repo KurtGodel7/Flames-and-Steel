@@ -330,17 +330,16 @@ public class AirAllocation {
     return carrierLoad(player, zone, aircraftAfterMoves(player, stage, moves, zone));
   }
 
-  /** Types of the player's aircraft in the zone once the moves are made (bomber stage: bombers). */
+  /**
+   * Types of the player's aircraft in the zone once the moves are made. In the bomber step the
+   * fighters there count too: they have not moved yet, so the bombers must leave them carrier room.
+   */
   private static List<UnitType> aircraftAfterMoves(
       final GamePlayer player, final Stage stage, final List<AirMove> moves, final Territory zone) {
     final List<UnitType> result = new ArrayList<>();
     for (final Unit unit :
         zone.getUnitCollection()
-            .getMatches(
-                u ->
-                    u.isOwnedBy(player)
-                        && Matches.unitIsAir().test(u)
-                        && (stage == Stage.FIGHTERS || isInStage(u, stage)))) {
+            .getMatches(u -> u.isOwnedBy(player) && Matches.unitIsAir().test(u))) {
       result.add(unit.getType());
     }
     for (final AirMove move : moves) {

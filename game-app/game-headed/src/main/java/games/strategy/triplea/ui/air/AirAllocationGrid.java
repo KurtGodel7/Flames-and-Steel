@@ -60,6 +60,7 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.SwingConstants;
+import javax.swing.Timer;
 import javax.swing.WindowConstants;
 import org.triplea.java.collections.IntegerMap;
 
@@ -85,6 +86,9 @@ final class AirAllocationGrid extends JDialog {
   private static final Color SELECTED = new Color(0xD6, 0xE8, 0xFF);
   private static final Color FOOTER = new Color(0xF7, 0xF7, 0xF7);
   private static final Color OCEAN = new Color(0xE0, 0xA8, 0x00);
+  private static final Color FLASH = new Color(0xFF, 0xCD, 0xD2);
+  private static final Color DIM = new Color(0xF0, 0xF0, 0xF0, 170);
+  private static final Color REASON = new Color(0x55, 0x55, 0x55);
 
   /** What the grid needs from the allocation step. */
   interface Host {
@@ -298,14 +302,18 @@ final class AirAllocationGrid extends JDialog {
     grid.add(footerLabel("Your " + aircraftWord() + " after moves"), c);
     for (int i = 0; i < columns.size(); i++) {
       c.gridx = i + 1;
-      grid.add(footerCell(String.valueOf(totalAfter(player, columns.get(i), staged)), true), c);
+      grid.add(
+          inColumn(
+              columns.get(i),
+              footerCell(String.valueOf(totalAfter(player, columns.get(i), staged)), true)),
+          c);
     }
     c.gridy++;
     c.gridx = 0;
     grid.add(footerLabel("Allies (moves so far)"), c);
     for (int i = 0; i < columns.size(); i++) {
       c.gridx = i + 1;
-      grid.add(footerCell(othersText(columns.get(i), true), false), c);
+      grid.add(inColumn(columns.get(i), footerCell(othersText(columns.get(i), true), false)), c);
     }
     c.gridy++;
     c.gridx = 0;
@@ -313,7 +321,7 @@ final class AirAllocationGrid extends JDialog {
     grid.add(footerLabel("Enemies (last revealed)"), c);
     for (int i = 0; i < columns.size(); i++) {
       c.gridx = i + 1;
-      grid.add(footerCell(othersText(columns.get(i), false), false), c);
+      grid.add(inColumn(columns.get(i), footerCell(othersText(columns.get(i), false), false)), c);
     }
     // a 1-pixel line on the right edge
     c.gridx = columns.size() + 1;
@@ -346,10 +354,18 @@ final class AirAllocationGrid extends JDialog {
       try (GameData.Unlocker ignored = host.data().acquireReadLock()) {
         final CarrierLoad load =
             AirAllocation.carrierLoadAfter(host.player(), host.stage(), staged, zone);
-        text.append("<br><font size=-2>carriers ")
-            .append(load.cost())
-            .append('/')
-            .append(load.capacity());
+        final int fighters =
+            host.stage() == Stage.BOMBERS ? fighterCarrierCost(host.player(), zone) : 0;
+        text.append("<br><font size=-2>carriers ");
+        if (fighters > 0) {
+          text.append(load.cost() - fighters)
+              .append(" bombers<br>+ ")
+              .append(fighters)
+              .append(" fighters");
+        } else {
+          text.append(load.cost());
+        }
+        text.append(" / ").append(load.capacity());
         if (load.jetCost() > 0 || load.fleetCapacity() > 0) {
           text.append(", jets ").append(load.jetCost()).append('/').append(load.fleetCapacity());
         }
@@ -360,14 +376,21 @@ final class AirAllocationGrid extends JDialog {
     l.setForeground(TEXT);
     final JButton all = small("All here");
     all.setName("allHere|" + zone.getName());
-    final List<AirMove> allHere = allHere(staged, zone);
-    all.setEnabled(!allHere.equals(staged));
-    all.setToolTipText(
-        all.isEnabled()
-            ? "Send every " + aircraftWord().replaceFirst("s$", "") + " that can go here"
-            : "Everything that can go here is already here");
-    all.addActionListener(e -> change(allHere(host.staged(), zone)));
-    final JPanel p = new JPanel(new BorderLayout(0, 3));
+    final ColumnCell p = new ColumnCell(zone, new BorderLayout(0, 3));
+    all.setToolTipText("Send every " + aircraftWord().replaceFirst("s$", "") + " that can go here");
+    all.addActionListener(
+        e -> {
+          final List<AirMove> moves = allHere(host.staged(), zone);
+          if (moves.equals(host.staged())) {
+            refuse(
+                p,
+                rows.stream().anyMatch(r -> r.from().equals(zone) || problem(r, zone).isEmpty())
+                    ? "Everything that can go to " + zoneName(zone) + " is already there."
+                    : "None of your " + aircraftWord() + " can go to " + zoneName(zone) + ".");
+            return;
+          }
+          change(moves);
+        });
     p.setOpaque(true);
     p.setBackground(HEADER);
     p.add(l, BorderLayout.CENTER);
@@ -393,9 +416,15 @@ final class AirAllocationGrid extends JDialog {
                 + AirAllocation.typeName(row.type())
                 + " × "
                 + row.count()
-                + "</b><br><font size=-2>now: "
+                + "</b><br><div style='width:190px'><font size=-2>now: "
                 + AirAllocation.zoneName(row.from())
-                + "</font></html>",
+                + " · "
+                + (reach(row).isEmpty()
+                    ? "can't move this round"
+                    : "can go to "
+                        + String.join(
+                            ", ", reach(row).stream().map(AirAllocationGrid::zoneName).toList()))
+                + "</font></div></html>",
             uiContext
                 .getUnitImageFactory()
                 .getIcon(ImageKey.builder().player(host.player()).type(row.type()).build()),
@@ -420,45 +449,81 @@ final class AirAllocationGrid extends JDialog {
   private JComponent cell(final Row row, final Territory column, final List<AirMove> staged) {
     final int moved = movedTo(row, column, staged);
     final int left = row.count() - movedOut(row, staged);
-    final JPanel p = new JPanel(new BorderLayout(2, 0));
+    final ColumnCell p = new ColumnCell(column, new BorderLayout(2, 0));
     p.setBorder(BorderFactory.createEmptyBorder(3, 4, 3, 4));
     if (column.equals(row.from())) {
       return homeCell(p, row, column, staged, left);
     }
     final Optional<String> problem = problem(row, column);
     if (problem.isPresent()) {
+      // blocked: the reason in the cell, the full reason on hover and on a click
       p.setBackground(GREY);
-      final JLabel l = new JLabel("–", SwingConstants.CENTER);
-      l.setForeground(GREY_TEXT);
+      final JLabel l =
+          new JLabel(
+              "<html><center>" + shortReason(problem.get()) + "</center></html>",
+              SwingConstants.CENTER);
+      l.setFont(l.getFont().deriveFont(Font.PLAIN, 11f));
+      l.setForeground(REASON);
       l.setToolTipText(problem.get());
       p.setToolTipText(problem.get());
       p.add(l, BorderLayout.CENTER);
+      final MouseAdapter click =
+          new MouseAdapter() {
+            @Override
+            public void mouseClicked(final MouseEvent e) {
+              refuse(p, AirAllocation.typeName(row.type()) + ": " + problem.get());
+            }
+          };
+      p.addMouseListener(click);
+      l.addMouseListener(click);
       return p;
     }
     p.setBackground(moved > 0 ? MOVED : USABLE);
     final JButton minus = small("−");
     minus.setName("minus|" + rowName(row) + "|" + column.getName());
-    minus.setEnabled(moved > 0);
-    minus.setToolTipText(moved > 0 ? "Send one back to " + zoneName(row.from()) : null);
-    minus.addActionListener(e -> change(adjust(host.staged(), row, column, -1)));
+    minus.setToolTipText(
+        moved > 0
+            ? "Send one back to " + zoneName(row.from())
+            : "None of these has been sent to " + zoneName(column));
+    minus.addActionListener(
+        e -> {
+          if (movedTo(row, column, host.staged()) <= 0) {
+            refuse(
+                p,
+                "No "
+                    + plural(row.type(), 2)
+                    + " from "
+                    + zoneName(row.from())
+                    + " are in "
+                    + zoneName(column)
+                    + " to send back.");
+            return;
+          }
+          change(adjust(host.staged(), row, column, -1));
+        });
     final JButton plus = small("+");
     plus.setName("plus|" + rowName(row) + "|" + column.getName());
-    final Optional<String> plusProblem = plusProblem(row, column, staged, left);
-    plus.setEnabled(plusProblem.isEmpty());
-    plus.setToolTipText(plusProblem.orElse("Move one more " + AirAllocation.typeName(row.type())));
-    plus.addActionListener(
-        e -> {
-          sent(row, column);
-          change(adjust(host.staged(), row, column, 1));
-        });
+    plus.setToolTipText(
+        left > 0
+            ? "Move one " + plural(row.type(), 1) + " here from " + zoneName(row.from())
+            : "Move one here from where they went last");
+    plus.addActionListener(e -> plus(p, row, column));
     final JLabel count = new JLabel(String.valueOf(moved), SwingConstants.CENTER);
     count.setFont(count.getFont().deriveFont(Font.BOLD, 14f));
     count.setForeground(TEXT);
     final JPanel middle = new JPanel(new BorderLayout());
     middle.setOpaque(false);
     middle.add(count, BorderLayout.CENTER);
+    // a full carrier front says so in the cell; otherwise the number of targets
+    final Optional<String> carrier = plusProblem(row, column, staged, 1);
     final Integer targets = targetCount.get(key(row.type(), column));
-    if (targets != null) {
+    if (carrier.isPresent()) {
+      final JLabel t = new JLabel(shortReason(carrier.get()), SwingConstants.CENTER);
+      t.setFont(t.getFont().deriveFont(Font.BOLD, 10f));
+      t.setForeground(new Color(0xB7, 0x1C, 0x1C));
+      t.setToolTipText(carrierDetail(column, staged, carrier.get()));
+      middle.add(t, BorderLayout.SOUTH);
+    } else if (targets != null) {
       final JLabel t =
           new JLabel(targets + (targets == 1 ? " target" : " targets"), SwingConstants.CENTER);
       t.setFont(t.getFont().deriveFont(10f));
@@ -469,6 +534,65 @@ final class AirAllocationGrid extends JDialog {
     p.add(middle, BorderLayout.CENTER);
     p.add(plus, BorderLayout.EAST);
     return p;
+  }
+
+  /**
+   * + in a cell: one aircraft from the home front if any are left there, otherwise from the column
+   * this group last sent one to (so it moves straight from one front to another).
+   */
+  private void plus(final JComponent cell, final Row row, final Territory column) {
+    final List<AirMove> staged = host.staged();
+    final int left = row.count() - movedOut(row, staged);
+    if (left > 0) {
+      final Optional<String> problem = plusProblem(row, column, staged, left);
+      if (problem.isPresent()) {
+        refuse(cell, carrierDetail(column, staged, problem.get()));
+        return;
+      }
+      sent(row, column);
+      change(adjust(staged, row, column, 1));
+      return;
+    }
+    final Optional<Territory> source = pullSource(row, staged, column);
+    if (source.isEmpty()) {
+      refuse(
+          cell,
+          row.count() == 1
+              ? "Your 1 " + plural(row.type(), 1) + " is already here."
+              : "All " + row.count() + " " + plural(row.type(), 2) + " are already here.");
+      return;
+    }
+    final List<AirMove> taken = adjust(staged, row, source.get(), -1);
+    final Optional<String> problem = plusProblem(row, column, taken, 1);
+    if (problem.isPresent()) {
+      refuse(cell, carrierDetail(column, taken, problem.get()));
+      return;
+    }
+    final Deque<Territory> order = sentOrder.get(row);
+    if (order != null) {
+      order.removeLastOccurrence(source.get());
+    }
+    sent(row, column);
+    change(adjust(taken, row, column, 1));
+  }
+
+  /** "Philippine Sea: 8/8 used" for a full carrier front; other reasons as they are. */
+  private String carrierDetail(
+      final Territory column, final List<AirMove> staged, final String reason) {
+    if (!reason.startsWith("No carrier capacity")) {
+      return reason;
+    }
+    try (GameData.Unlocker ignored = host.data().acquireReadLock()) {
+      final CarrierLoad load =
+          AirAllocation.carrierLoadAfter(host.player(), host.stage(), staged, column);
+      return "No carrier room: "
+          + zoneName(column)
+          + " "
+          + load.cost()
+          + "/"
+          + load.capacity()
+          + " used.";
+    }
   }
 
   /**
@@ -489,36 +613,49 @@ final class AirAllocationGrid extends JDialog {
     final JButton minus = small("−");
     minus.setName("minus|" + rowName(row) + "|" + column.getName());
     final Optional<Territory> sendTo = sendTarget(row, staged, left);
-    minus.setEnabled(sendTo.isPresent());
     minus.setToolTipText(
         sendTo
             .map(t -> "Send one to " + zoneName(t))
             .orElse(left <= 0 ? "None left here." : "No front can take one more."));
     minus.addActionListener(
-        e ->
-            sendTarget(row, host.staged(), row.count() - movedOut(row, host.staged()))
-                .ifPresent(
-                    t -> {
-                      sent(row, t);
-                      change(adjust(host.staged(), row, t, 1));
-                    }));
+        e -> {
+          final int now = row.count() - movedOut(row, host.staged());
+          final Optional<Territory> to = sendTarget(row, host.staged(), now);
+          if (to.isEmpty()) {
+            refuse(
+                p,
+                now <= 0
+                    ? "None of these " + plural(row.type(), 2) + " is staying here."
+                    : reach(row).isEmpty()
+                        ? "These " + plural(row.type(), 2) + " cannot move this round."
+                        : "No front they can reach has room for one more.");
+            return;
+          }
+          sent(row, to.get());
+          change(adjust(host.staged(), row, to.get(), 1));
+        });
     final JButton plus = small("+");
     plus.setName("plus|" + rowName(row) + "|" + column.getName());
-    final Optional<Territory> pullFrom = pullSource(row, staged);
-    plus.setEnabled(pullFrom.isPresent());
+    final Optional<Territory> pullFrom = pullSource(row, staged, null);
     plus.setToolTipText(
         pullFrom.map(t -> "Bring one back from " + zoneName(t)).orElse("None of them is moving."));
     plus.addActionListener(
-        e ->
-            pullSource(row, host.staged())
-                .ifPresent(
-                    t -> {
-                      final Deque<Territory> order = sentOrder.get(row);
-                      if (order != null) {
-                        order.removeLastOccurrence(t);
-                      }
-                      change(adjust(host.staged(), row, t, -1));
-                    }));
+        e -> {
+          final Optional<Territory> from = pullSource(row, host.staged(), null);
+          if (from.isEmpty()) {
+            refuse(
+                p,
+                row.count() == 1
+                    ? "Your 1 " + plural(row.type(), 1) + " is already staying."
+                    : "All " + row.count() + " " + plural(row.type(), 2) + " are already staying.");
+            return;
+          }
+          final Deque<Territory> order = sentOrder.get(row);
+          if (order != null) {
+            order.removeLastOccurrence(from.get());
+          }
+          change(adjust(host.staged(), row, from.get(), -1));
+        });
     p.add(minus, BorderLayout.WEST);
     p.add(l, BorderLayout.CENTER);
     p.add(plus, BorderLayout.EAST);
@@ -551,20 +688,25 @@ final class AirAllocationGrid extends JDialog {
     return Optional.empty();
   }
 
-  /** Where the Staying cell's + brings one back from: the column most recently sent to. */
-  private Optional<Territory> pullSource(final Row row, final List<AirMove> staged) {
+  /**
+   * Where one of the row's moved aircraft is taken from (the Staying cell's +, or a + once none are
+   * left at home): the column most recently sent to, other than {@code except}.
+   */
+  private Optional<Territory> pullSource(
+      final Row row, final List<AirMove> staged, final @Nullable Territory except) {
     final Deque<Territory> recent = sentOrder.get(row);
     if (recent != null) {
       for (final var it = recent.descendingIterator(); it.hasNext(); ) {
         final Territory t = it.next();
-        if (movedTo(row, t, staged) > 0) {
+        if (!t.equals(except) && movedTo(row, t, staged) > 0) {
           return Optional.of(t);
         }
       }
     }
     for (int i = columns.size() - 1; i >= 0; i--) {
-      if (movedTo(row, columns.get(i), staged) > 0) {
-        return Optional.of(columns.get(i));
+      final Territory t = columns.get(i);
+      if (!t.equals(except) && movedTo(row, t, staged) > 0) {
+        return Optional.of(t);
       }
     }
     return Optional.empty();
@@ -601,6 +743,104 @@ final class AirAllocationGrid extends JDialog {
     return result;
   }
 
+  // ---- clicks that cannot do anything say why
+
+  /** Shows why a click did nothing: the reason in the status line, and the cell flashes. */
+  private void refuse(final JComponent cell, final String reason) {
+    status.setText(
+        "<html><div style='width:320px'><font color='#b71c1c'>" + reason + "</font></div></html>");
+    final Color before = cell.getBackground();
+    cell.setBackground(FLASH);
+    final Timer timer = new Timer(450, e -> cell.setBackground(before));
+    timer.setRepeats(false);
+    timer.start();
+  }
+
+  /** The cell's short reason ("No targets") for a full reason from the rules. */
+  private static String shortReason(final String reason) {
+    if (reason.startsWith("Two fronts away")) {
+      return "2 fronts away";
+    }
+    if (reason.startsWith("No landing spot")) {
+      return "No landing spot";
+    }
+    if (reason.startsWith("No enemy") || reason.startsWith("No targets")) {
+      return "No targets";
+    }
+    if (reason.startsWith("No carrier capacity")) {
+      return "No carrier room";
+    }
+    if (reason.startsWith("Jets need fleet carriers")) {
+      return "No fleet carrier room";
+    }
+    if (reason.contains("cannot fly from carriers")) {
+      return "Can't use carriers";
+    }
+    if (reason.startsWith("Only fighters defend")) {
+      return "Fighters only";
+    }
+    if (reason.startsWith("No strategic bombing value")) {
+      return "Can't bomb";
+    }
+    final int i = reason.indexOf(" aircraft may not enter ");
+    if (i >= 0 && reason.endsWith(" fronts.")) {
+      final String tag =
+          reason.substring(i + " aircraft may not enter ".length(), reason.length() - 8);
+      return tag.equals("China") ? "China only" : tag + " front";
+    }
+    return "Not allowed";
+  }
+
+  /** "dive bomber" / "dive bombers". */
+  private static String plural(final UnitType type, final int count) {
+    final String name = AirAllocation.typeName(type).toLowerCase();
+    return count == 1 ? name : name + "s";
+  }
+
+  /**
+   * A grid cell that belongs to a column: it is dimmed while the selected (or pointed-at) row
+   * cannot use that column. Children paint through it, so the dimming stays on top.
+   */
+  private final class ColumnCell extends JPanel {
+    private static final long serialVersionUID = 1L;
+    private final Territory column;
+
+    ColumnCell(final Territory column, final java.awt.LayoutManager layout) {
+      super(layout);
+      this.column = column;
+    }
+
+    @Override
+    public boolean isOptimizedDrawingEnabled() {
+      return false;
+    }
+
+    @Override
+    public void paint(final Graphics g) {
+      super.paint(g);
+      if (dimmed(column)) {
+        g.setColor(DIM);
+        g.fillRect(0, 0, getWidth(), getHeight());
+      }
+    }
+  }
+
+  private boolean dimmed(final Territory column) {
+    final Row row = hoverRow != null ? hoverRow : selectedRow;
+    return row != null && !column.equals(row.from()) && problem(row, column).isPresent();
+  }
+
+  /** The fronts this row can move to this round. */
+  private List<Territory> reach(final Row row) {
+    final List<Territory> result = new ArrayList<>();
+    for (final Territory column : columns) {
+      if (!column.equals(row.from()) && problem(row, column).isEmpty()) {
+        result.add(column);
+      }
+    }
+    return result;
+  }
+
   private static JButton small(final String text) {
     final JButton b = new JButton(text);
     b.setMargin(new Insets(0, 5, 0, 5));
@@ -627,6 +867,23 @@ final class AirAllocationGrid extends JDialog {
       }
     }
     return Optional.empty();
+  }
+
+  private JComponent inColumn(final Territory column, final JComponent inner) {
+    final ColumnCell cell = new ColumnCell(column, new BorderLayout());
+    cell.setBackground(FOOTER);
+    cell.add(inner, BorderLayout.CENTER);
+    return cell;
+  }
+
+  /** Carrier spaces the nation's fighters take in the front (held for them in the bomber step). */
+  private static int fighterCarrierCost(final GamePlayer player, final Territory zone) {
+    return zone
+        .getUnitCollection()
+        .getMatches(u -> u.isOwnedBy(player) && AirAllocation.isInStage(u, Stage.FIGHTERS))
+        .stream()
+        .mapToInt(u -> Math.max(0, u.getUnitAttachment().getCarrierCost()))
+        .sum();
   }
 
   private JComponent footerLabel(final String text) {
@@ -663,6 +920,7 @@ final class AirAllocationGrid extends JDialog {
             hoverColumn = column;
             host.hoverZone(column);
             miniMap.repaint();
+            grid.repaint();
           }
 
           @Override
@@ -671,6 +929,7 @@ final class AirAllocationGrid extends JDialog {
             hoverColumn = null;
             host.hoverZone(null);
             miniMap.repaint();
+            grid.repaint();
           }
         });
     if (component instanceof Container container) {
@@ -972,11 +1231,7 @@ final class AirAllocationGrid extends JDialog {
       final int oy = TITLE;
       final List<Territory> reach = new ArrayList<>();
       if (row != null) {
-        for (final Territory column : columns) {
-          if (!column.equals(row.from()) && problem(row, column).isEmpty()) {
-            reach.add(column);
-          }
-        }
+        reach.addAll(reach(row));
         reach.add(row.from());
       }
       final Rectangle view = view(reach);
