@@ -87,7 +87,7 @@ class TabbedProductionPanel extends ProductionPanel {
     bottom.setBorder(BorderFactory.createEmptyBorder(0, 12, 0, 12));
     bottom.setLayout(new BorderLayout());
     bottom.add(totals, BorderLayout.WEST);
-    bottom.add(new JLabel("Attack | Defense | Movement"), BorderLayout.EAST);
+    bottom.add(new JLabel("Attack | Defense | Movement | Hits"), BorderLayout.EAST);
     JPanel donePanel = new JPanel();
     donePanel.setLayout(new BoxLayout(donePanel, BoxLayout.Y_AXIS));
     donePanel.add(Box.createVerticalGlue());

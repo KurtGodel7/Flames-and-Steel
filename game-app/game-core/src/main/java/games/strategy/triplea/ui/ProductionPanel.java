@@ -132,7 +132,7 @@ class ProductionPanel extends JPanel {
   protected void initLayout() {
     this.removeAll();
     this.setLayout(new GridBagLayout());
-    final JLabel legendLabel = new JLabel("Attack | Defense | Movement");
+    final JLabel legendLabel = new JLabel("Attack | Defense | Movement | Hits");
     this.add(
         legendLabel,
         new GridBagConstraints(
@@ -334,7 +334,11 @@ class ProductionPanel extends JPanel {
           final int attack = attach.getAttack(player);
           final int movement = attach.getMovement(player);
           final int defense = attach.getDefense(player);
-          info.setText(attack + " | " + defense + " | " + movement);
+          // Flames and Steel: hits too, with the nation's hit point techs
+          final int hits =
+              attach.getHitPoints()
+                  + type.getData().getTechTracker().getHitPointBonus(player, type);
+          info.setText(attack + " | " + defense + " | " + movement + " | " + hits);
           tooltip
               .append(type.getName())
               .append(": ")
