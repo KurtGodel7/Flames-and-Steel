@@ -29,6 +29,7 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -138,6 +139,18 @@ public class AirCombat {
         getTargets(player, zone).stream()
             .filter(target -> mayAttack(player, zone, type, target))
             .count();
+  }
+
+  /** {@link #countTargets} split by kind of target (kinds with none are left out). */
+  public static Map<TargetKind, Integer> countTargetsByKind(
+      final GamePlayer player, final Territory zone, final UnitType type) {
+    final Map<TargetKind, Integer> result = new EnumMap<>(TargetKind.class);
+    for (final Target target : getTargets(player, zone)) {
+      if (mayAttack(player, zone, type, target)) {
+        result.merge(target.kind(), 1, Integer::sum);
+      }
+    }
+    return result;
   }
 
   /** Whether this aircraft type may attack that kind of target. */

@@ -14,6 +14,7 @@ import games.strategy.triplea.delegate.air.AirAllocation.AirMove;
 import games.strategy.triplea.delegate.air.AirAllocation.CarrierLoad;
 import games.strategy.triplea.delegate.air.AirAllocation.Stage;
 import games.strategy.triplea.delegate.air.AirCombat;
+import games.strategy.triplea.delegate.air.AirCombat.TargetKind;
 import games.strategy.triplea.image.UnitImageFactory.ImageKey;
 import games.strategy.triplea.ui.UiContext;
 import games.strategy.triplea.ui.mapdata.MapData;
@@ -125,6 +126,7 @@ final class AirAllocationGrid extends JDialog {
   // per (type, column): why the type cannot be there (empty if it can), and its target count
   private final Map<String, Optional<String>> entry = new HashMap<>();
   private final Map<String, Integer> targetCount = new HashMap<>();
+  private final Map<String, Map<TargetKind, Integer>> targetKinds = new HashMap<>();
   private final Deque<List<AirMove>> undo = new ArrayDeque<>();
   // per row: the columns it sent aircraft to, most recent last (the Staying cell's + pulls back)
   private final Map<Row, Deque<Territory>> sentOrder = new HashMap<>();
@@ -234,8 +236,12 @@ final class AirAllocationGrid extends JDialog {
         for (final UnitType type : types) {
           final Optional<String> problem = AirAllocation.entryProblem(player, type, zone);
           entry.put(key(type, zone), problem);
-          if (problem.isEmpty() && !isFighter(type)) {
-            targetCount.put(key(type, zone), AirCombat.countTargets(player, zone, type));
+          // every front, the rows' own ones included, for every type that strikes
+          if (!isFighter(type)) {
+            final Map<TargetKind, Integer> kinds = AirCombat.countTargetsByKind(player, zone, type);
+            targetKinds.put(key(type, zone), kinds);
+            targetCount.put(
+                key(type, zone), kinds.values().stream().mapToInt(Integer::intValue).sum());
           }
         }
       }
@@ -504,24 +510,14 @@ final class AirAllocationGrid extends JDialog {
     middle.add(count);
     // a full carrier front says so in the cell; otherwise the number of targets
     final Optional<String> carrier = carrierFull(row, column);
-    final Integer targets = targetCount.get(key(row.type(), column));
     final JLabel note;
     if (carrier.isPresent()) {
       note = new TipLabel(shortReason(carrier.get()), SwingConstants.CENTER);
       note.setFont(note.getFont().deriveFont(Font.BOLD, 10f));
       note.setForeground(new Color(0xB7, 0x1C, 0x1C));
       note.setToolTipText(carrierDetail(column, staged, carrier.get()));
-    } else if (targets != null && targets == 0) {
-      note = new TipLabel("<html><center>no targets<br>this round</center></html>");
-      note.setFont(note.getFont().deriveFont(Font.BOLD, 10f));
-      note.setForeground(AMBER);
-      note.setToolTipText(noTargetsText(row, column));
-    } else if (targets != null) {
-      note = new TipLabel(targets + (targets == 1 ? " target" : " targets"));
-      note.setFont(note.getFont().deriveFont(10f));
-      note.setForeground(TEXT);
     } else {
-      note = null;
+      note = targetNote(row, column);
     }
     if (note != null) {
       note.setAlignmentX(CENTER_ALIGNMENT);
@@ -742,6 +738,11 @@ final class AirAllocationGrid extends JDialog {
     middle.setOpaque(false);
     middle.add(Box.createVerticalGlue());
     middle.add(l);
+    final JLabel note = targetNote(row, column);
+    if (note != null) {
+      note.setAlignmentX(CENTER_ALIGNMENT);
+      middle.add(note);
+    }
     final JButton all = allHereButton(p, row, column);
     all.setAlignmentX(CENTER_ALIGNMENT);
     middle.add(Box.createVerticalStrut(2));
@@ -1305,6 +1306,62 @@ final class AirAllocationGrid extends JDialog {
       }
     }
     return Optional.empty();
+  }
+
+  /**
+   * "3 targets" (or amber "no targets this round") for the row's type in the column, with what they
+   * are on hover; null for fighters, which have no targets of their own.
+   */
+  private @Nullable JLabel targetNote(final Row row, final Territory column) {
+    final Integer targets = targetCount.get(key(row.type(), column));
+    if (targets == null) {
+      return null;
+    }
+    final JLabel note;
+    if (targets == 0) {
+      note = new TipLabel("<html><center>no targets<br>this round</center></html>");
+      note.setFont(note.getFont().deriveFont(Font.BOLD, 10f));
+      note.setForeground(AMBER);
+      note.setToolTipText(noTargetsText(row, column));
+    } else {
+      note = new TipLabel(targets + (targets == 1 ? " target" : " targets"));
+      note.setFont(note.getFont().deriveFont(10f));
+      note.setForeground(TEXT);
+      note.setToolTipText(targetBreakdown(row, column));
+    }
+    note.setName("targets|" + rowName(row) + "|" + column.getName());
+    return note;
+  }
+
+  /**
+   * "7 targets: 3 land, 4 sea (2 with subs)" or "5 targets: 5 factories/APCs". Each target is one
+   * territory or sea zone the type could strike.
+   */
+  private String targetBreakdown(final Row row, final Territory column) {
+    final Map<TargetKind, Integer> kinds =
+        targetKinds.getOrDefault(key(row.type(), column), Map.of());
+    final int land = kinds.getOrDefault(TargetKind.LAND, 0);
+    final int subs = kinds.getOrDefault(TargetKind.SUBS, 0);
+    final int sea = kinds.getOrDefault(TargetKind.SURFACE, 0) + subs;
+    final int strategic = kinds.getOrDefault(TargetKind.STRATEGIC, 0);
+    final int total = land + sea + strategic;
+    final List<String> parts = new ArrayList<>();
+    if (land > 0) {
+      parts.add(land + " land");
+    }
+    if (sea > 0) {
+      parts.add(sea + " sea" + (subs > 0 ? " (" + subs + " with subs)" : ""));
+    }
+    if (strategic > 0) {
+      parts.add(strategic + " factories/APCs");
+    }
+    return "<html>"
+        + total
+        + (total == 1 ? " target: " : " targets: ")
+        + String.join(", ", parts)
+        + "<br><font size=-2>Each target is one territory or sea zone your "
+        + plural(row.type(), 2)
+        + "<br>here could strike this round.</font></html>";
   }
 
   /** The gentle note after moving aircraft into a front where they have nothing to attack. */
