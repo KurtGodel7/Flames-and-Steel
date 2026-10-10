@@ -9,6 +9,7 @@ import games.strategy.engine.stats.IStat;
 import games.strategy.engine.stats.ResourceStat;
 import games.strategy.triplea.Constants;
 import games.strategy.triplea.delegate.AbstractEndTurnDelegate;
+import games.strategy.triplea.delegate.Peacetime;
 import java.awt.GridBagLayout;
 import java.util.ArrayList;
 import java.util.List;
@@ -69,12 +70,24 @@ public class ResourceBar extends JPanel implements GameDataChangeListener {
               updateScheduled = false;
               final GamePlayer player;
               final IntegerMap<Resource> resourceIncomes;
+              final String peace;
               try (GameData.Unlocker ignored = gameData.acquireReadLock()) {
                 player = gameData.getSequence().getStep().getPlayerId();
                 if (player == null) {
                   return;
                 }
                 resourceIncomes = AbstractEndTurnDelegate.findEstimatedIncome(player, gameData);
+                // Flames and Steel: say so when the nation is at peace on fixed income
+                peace =
+                    Peacetime.isAtPeace(player)
+                        ? player.getName()
+                            + ": at peace, fixed income "
+                            + Peacetime.fixedIncome(player).orElse(0)
+                            + Peacetime.fixedManpower(player).stream()
+                                .mapToObj(m -> " PUs, " + m + " MP")
+                                .findFirst()
+                                .orElse(" PUs")
+                        : null;
               }
               SwingUtilities.invokeLater(
                   () -> {
@@ -93,6 +106,16 @@ public class ResourceBar extends JPanel implements GameDataChangeListener {
                       final JLabel label =
                           uiContext.getResourceImageFactory().getLabel(resource, text.toString());
                       label.setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 6));
+                      add(label, new GridBagConstraintsBuilder(count++, 0).weightY(1).build());
+                    }
+                    if (peace != null) {
+                      final JLabel label = new JLabel(peace);
+                      label.setFont(label.getFont().deriveFont(java.awt.Font.BOLD));
+                      label.setForeground(new java.awt.Color(0x1E, 0x6F, 0xD9));
+                      label.setToolTipText(
+                          "While at war with no one: fixed income instead of territory income and"
+                              + " bonuses; units can't move; no part in the air phase.");
+                      label.setBorder(BorderFactory.createEmptyBorder(0, 12, 0, 6));
                       add(label, new GridBagConstraintsBuilder(count++, 0).weightY(1).build());
                     }
                   });

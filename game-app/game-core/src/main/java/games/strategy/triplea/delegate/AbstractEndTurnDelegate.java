@@ -83,6 +83,18 @@ public abstract class AbstractEndTurnDelegate extends BaseTripleADelegate
     resources.add(EndTurnDelegate.findUnitCreatedResources(player, data));
     resources.add(EndTurnDelegate.findNationalObjectiveAndTriggerResources(player, data));
 
+    // Flames and Steel: a nation at peace collects fixed amounts
+    if (Peacetime.isAtPeace(player)) {
+      Peacetime.fixedIncome(player)
+          .ifPresent(
+              v -> resources.put(data.getResourceList().getResourceOrThrow(Constants.PUS), v));
+      Peacetime.fixedManpower(player)
+          .ifPresent(
+              v ->
+                  data.getResourceList()
+                      .getResourceOptional(Peacetime.MANPOWER_RESOURCE)
+                      .ifPresent(r -> resources.put(r, v)));
+    }
     return resources;
   }
 
@@ -226,6 +238,7 @@ public abstract class AbstractEndTurnDelegate extends BaseTripleADelegate
         bridge.addChange(upkeep);
       }
     }
+    endTurnReport.append(peacetimeIncome(leftOverResources));
     endTurnReport.append(Munitions.convert(bridge, player));
     endTurnReport.append(AlliedUnitSale.sellAlliedUnits(bridge, player));
     if (GameStepPropertiesHelper.isRepairUnits(data)) {
@@ -470,6 +483,49 @@ public abstract class AbstractEndTurnDelegate extends BaseTripleADelegate
         }
       }
     }
+  }
+
+  /**
+   * Flames and Steel: a nation at peace (see {@link Peacetime}) gains exactly its fixed PUs and
+   * manpower this turn, whatever its territories, triggers and bonuses gave it.
+   */
+  private String peacetimeIncome(final IntegerMap<Resource> before) {
+    if (!Peacetime.isAtPeace(player)) {
+      return "";
+    }
+    final StringBuilder text = new StringBuilder();
+    final CompositeChange change = new CompositeChange();
+    final ResourceList resources = getData().getResourceList();
+    final Map<Resource, Integer> fixed = new java.util.LinkedHashMap<>();
+    Peacetime.fixedIncome(player)
+        .ifPresent(v -> fixed.put(resources.getResourceOrThrow(Constants.PUS), v));
+    Peacetime.fixedManpower(player)
+        .ifPresent(
+            v ->
+                resources
+                    .getResourceOptional(Peacetime.MANPOWER_RESOURCE)
+                    .ifPresent(r -> fixed.put(r, v)));
+    for (final var e : fixed.entrySet()) {
+      final Resource resource = e.getKey();
+      final int gained = player.getResources().getQuantity(resource) - before.getInt(resource);
+      final int delta = e.getValue() - gained;
+      if (delta != 0) {
+        change.add(ChangeFactory.changeResourcesChange(player, resource, delta));
+      }
+      text.append(text.length() == 0 ? "" : ", ")
+          .append(e.getValue())
+          .append(' ')
+          .append(resource.getName())
+          .append(" (instead of ")
+          .append(gained)
+          .append(')');
+    }
+    if (!change.isEmpty()) {
+      bridge.addChange(change);
+    }
+    final String message = player.getName() + " are at peace: fixed income " + text + ".";
+    bridge.getHistoryWriter().startEvent(message);
+    return "<br />" + message + "<br />";
   }
 
   protected abstract String addOtherResources(IDelegateBridge bridge);

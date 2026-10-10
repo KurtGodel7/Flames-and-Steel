@@ -127,6 +127,7 @@ final class AirAllocationGrid extends JDialog {
   private final Map<String, Optional<String>> entry = new HashMap<>();
   private final Map<String, Integer> targetCount = new HashMap<>();
   private final Map<String, Map<TargetKind, Integer>> targetKinds = new HashMap<>();
+  private final Map<String, Integer> neutralTargets = new HashMap<>();
   private final Deque<List<AirMove>> undo = new ArrayDeque<>();
   // per row: the columns it sent aircraft to, most recent last (the Staying cell's + pulls back)
   private final Map<Row, Deque<Territory>> sentOrder = new HashMap<>();
@@ -240,6 +241,7 @@ final class AirAllocationGrid extends JDialog {
           if (!isFighter(type)) {
             final Map<TargetKind, Integer> kinds = AirCombat.countTargetsByKind(player, zone, type);
             targetKinds.put(key(type, zone), kinds);
+            neutralTargets.put(key(type, zone), AirCombat.countNeutralTargets(player, zone, type));
             targetCount.put(
                 key(type, zone), kinds.values().stream().mapToInt(Integer::intValue).sum());
           }
@@ -1346,8 +1348,9 @@ final class AirAllocationGrid extends JDialog {
     final int strategic = kinds.getOrDefault(TargetKind.STRATEGIC, 0);
     final int total = land + sea + strategic;
     final List<String> parts = new ArrayList<>();
+    final int neutral = neutralTargets.getOrDefault(key(row.type(), column), 0);
     if (land > 0) {
-      parts.add(land + " land");
+      parts.add(land + " land" + (neutral > 0 ? " (" + neutral + " neutral)" : ""));
     }
     if (sea > 0) {
       parts.add(sea + " sea" + (subs > 0 ? " (" + subs + " with subs)" : ""));

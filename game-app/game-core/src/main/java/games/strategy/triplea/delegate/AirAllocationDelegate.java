@@ -38,7 +38,7 @@ public class AirAllocationDelegate extends BaseTripleADelegate implements IAirAl
 
   @Override
   public boolean delegateCurrentlyRequiresUserInput() {
-    if (player == null || isRevealStep()) {
+    if (player == null || isRevealStep() || Peacetime.isAtPeace(player)) {
       return false;
     }
     final Stage stage = currentStage();
@@ -50,6 +50,9 @@ public class AirAllocationDelegate extends BaseTripleADelegate implements IAirAl
   public @Nullable String allocate(final List<AirMove> moves) {
     if (player == null || isRevealStep()) {
       return "This is not an air allocation step.";
+    }
+    if (Peacetime.isAtPeace(player)) {
+      return Peacetime.noAirMessage(player);
     }
     final Stage stage = currentStage();
     final Optional<String> error = AirAllocation.validate(player, stage, moves, getData().getMap());

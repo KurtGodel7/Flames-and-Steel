@@ -64,7 +64,7 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
 
   @Override
   public boolean delegateCurrentlyRequiresUserInput() {
-    if (player == null || !stepName().endsWith("AirTargets")) {
+    if (player == null || !stepName().endsWith("AirTargets") || Peacetime.isAtPeace(player)) {
       return false;
     }
     return AirZoneAttachment.getAirZones(getData().getMap()).stream()
@@ -78,6 +78,9 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
   public @Nullable String assignTargets(final List<TargetAssignment> assignments) {
     if (player == null || !stepName().endsWith("AirTargets")) {
       return "This is not a bomber target step.";
+    }
+    if (Peacetime.isAtPeace(player)) {
+      return Peacetime.noAirMessage(player);
     }
     final String error = validate(player, assignments);
     if (error != null) {

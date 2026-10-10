@@ -176,6 +176,10 @@ public class MoveDelegate extends AbstractMoveDelegate {
       if (GameStepPropertiesHelper.isResetUnitStateAtStart(data)) {
         resetUnitStateAndDelegateState();
       }
+      // Flames and Steel: a nation at peace skips its move steps
+      if (Peacetime.isAtPeace(player)) {
+        bridge.getHistoryWriter().startEvent(Peacetime.noMoveMessage(player));
+      }
       needToInitialize = false;
     }
   }
@@ -254,6 +258,9 @@ public class MoveDelegate extends AbstractMoveDelegate {
 
   @Override
   public boolean delegateCurrentlyRequiresUserInput() {
+    if (Peacetime.isAtPeace(player)) {
+      return false;
+    }
     final Predicate<Unit> moveableUnitOwnedByMe =
         PredicateBuilder.of(Matches.unitIsOwnedBy(player))
             // right now, land units on transports have movement taken away when they their
@@ -614,6 +621,9 @@ public class MoveDelegate extends AbstractMoveDelegate {
     // the reason we use this, is if we are in edit mode, we may have a different unit owner than
     // the current player
     final GamePlayer player = getUnitsOwner(move.getUnits());
+    if (Peacetime.isAtPeace(player) && !EditDelegate.getEditMode(data.getProperties())) {
+      return Optional.of(Peacetime.noMoveMessage(player));
+    }
     final MoveValidationResult result =
         new MoveValidator(data, GameStepPropertiesHelper.isNonCombatMove(data, false))
             .validateMove(move, player, movesToUndo);

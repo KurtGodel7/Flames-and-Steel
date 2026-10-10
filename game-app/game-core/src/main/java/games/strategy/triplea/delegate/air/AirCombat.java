@@ -153,14 +153,42 @@ public class AirCombat {
     return result;
   }
 
-  /** Whether this aircraft type may attack that kind of target. */
+  /** Game property listing aircraft types that attack only land targets, e.g. "a:b:c". */
+  public static final String LAND_TARGETS_ONLY = "FS Air Land Targets Only";
+
+  /**
+   * Whether this aircraft type may attack that kind of target. Types named in the game property
+   * {@value #LAND_TARGETS_ONLY} attack only land units and factories, never ships or submarines.
+   */
   public static boolean mayAttack(final UnitType type, final TargetKind kind) {
     final AirUnitAttachment air = AirUnitAttachment.get(type).orElse(null);
+    if ((kind == TargetKind.SURFACE || kind == TargetKind.SUBS) && isLandTargetsOnly(type)) {
+      return false;
+    }
     return switch (kind) {
       case STRATEGIC -> air != null && air.getBombingDamage() > 0;
       case SUBS -> air != null && air.isCanAttackSubs();
       default -> true;
     };
+  }
+
+  /** Whether the type is listed in the game property {@value #LAND_TARGETS_ONLY}. */
+  public static boolean isLandTargetsOnly(final UnitType type) {
+    final String list = type.getData().getProperties().get(LAND_TARGETS_ONLY, "");
+    return !list.isBlank() && List.of(list.split(":")).contains(type.getName());
+  }
+
+  /**
+   * How many of {@link #countTargets} are land targets in neutral territory (garrisons with no
+   * owner, which every nation is at war with).
+   */
+  public static int countNeutralTargets(
+      final GamePlayer player, final Territory zone, final UnitType type) {
+    return (int)
+        getTargets(player, zone).stream()
+            .filter(t -> t.kind() == TargetKind.LAND && t.territory().getOwner().isNull())
+            .filter(t -> mayAttack(player, zone, type, t))
+            .count();
   }
 
   /**
