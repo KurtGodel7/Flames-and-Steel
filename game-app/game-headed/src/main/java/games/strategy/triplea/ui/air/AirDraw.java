@@ -195,6 +195,33 @@ final class AirDraw {
     countLabel(g, String.valueOf(count), topLeft.x + w + 2, topLeft.y + h + 2);
   }
 
+  /**
+   * The damage badge of a stack, as on the map: hits taken out of hit points, e.g. "2/5", at the
+   * icon's top right corner. Nothing for undamaged units.
+   */
+  static void hitBadge(
+      final Graphics2D g,
+      final List<games.strategy.engine.data.Unit> units,
+      final int iconRight,
+      final int iconTop) {
+    if (units.isEmpty() || units.get(0).getHits() <= 0) {
+      return;
+    }
+    final String s =
+        units.get(0).getHits() + "/" + games.strategy.engine.data.Unit.maxHitPoints(units.get(0));
+    g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 11));
+    final FontMetrics fm = g.getFontMetrics();
+    final int w = fm.stringWidth(s) + 6;
+    final int h = fm.getAscent() + 2;
+    final int x = iconRight - w + 4;
+    final int y = iconTop - 4;
+    g.setColor(new Color(150, 0, 0));
+    g.fillRoundRect(x, y, w, h, 6, 6);
+    g.setColor(Color.WHITE);
+    g.drawRoundRect(x, y, w, h, 6, 6);
+    g.drawString(s, x + 3, y + fm.getAscent());
+  }
+
   /** White number with a dark outline, its bottom right corner at (x, y). */
   static void countLabel(final Graphics2D g, final String text, final int x, final int y) {
     g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 13));

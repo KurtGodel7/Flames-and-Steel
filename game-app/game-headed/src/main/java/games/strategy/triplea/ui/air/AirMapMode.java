@@ -683,6 +683,7 @@ public final class AirMapMode implements MapOverlay {
         }
         g.drawImage(imageOf(zone, item), x, y, null);
         AirDraw.countLabel(g, String.valueOf(item.count()), x + w + 14, y + h);
+        AirDraw.hitBadge(g, item.units(), x + w, y);
         final Rectangle rect = new Rectangle(x, y, w + 16, h);
         synchronized (hits) {
           boxHitRects.add(rect);
@@ -751,6 +752,7 @@ public final class AirMapMode implements MapOverlay {
         g.fillRect(x, y + 2, 4, h - 4);
         g.drawImage(imageOf(zone, item), x + 5, y, null);
         AirDraw.countLabel(g, String.valueOf(item.count()), x + w + 14, y + h);
+        AirDraw.hitBadge(g, item.units(), x + 5 + w, y);
         record(
             new Rectangle(x, y, cell, h),
             new Hit(zone, item.units(), item.moved(), greyed(zone, item)));

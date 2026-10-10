@@ -215,19 +215,30 @@ public class UnitsDrawer extends AbstractDrawable {
     }
   }
 
+  /**
+   * Flames and Steel: a damaged unit shows a badge with its hits taken out of its hit points, e.g.
+   * "2/5" (hit points include tech bonuses).
+   */
   private void displayHitDamage(final Rectangle bounds, final Graphics2D graphics) {
     final int damaged = unitCategory.getDamaged();
-    if (damaged > 1) {
-      final String s = String.valueOf(damaged);
-      final var factory = uiContext.getUnitImageFactory();
-      drawOutlinedText(
-          graphics,
-          s,
-          placementPoint.x - bounds.x + factory.getUnitImageWidth() * 3 / 4,
-          placementPoint.y - bounds.y + factory.getUnitImageHeight() / 4,
-          MapImage.getPropertyUnitHitDamageColor(),
-          MapImage.getPropertyUnitHitDamageOutline());
+    if (damaged <= 0 || unitCategory.getUnits().isEmpty()) {
+      return;
     }
+    final int hitPoints = Unit.maxHitPoints(unitCategory.getUnits().get(0));
+    final String s = damaged + "/" + hitPoints;
+    final var factory = uiContext.getUnitImageFactory();
+    graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+    graphics.setFont(new java.awt.Font(java.awt.Font.SANS_SERIF, java.awt.Font.BOLD, 11));
+    final var fm = graphics.getFontMetrics();
+    final int w = fm.stringWidth(s) + 6;
+    final int h = fm.getAscent() + 2;
+    final int x = placementPoint.x - bounds.x + factory.getUnitImageWidth() - w + 4;
+    final int y = placementPoint.y - bounds.y - 4;
+    graphics.setColor(new Color(150, 0, 0));
+    graphics.fillRoundRect(x, y, w, h, 6, 6);
+    graphics.setColor(Color.WHITE);
+    graphics.drawRoundRect(x, y, w, h, 6, 6);
+    graphics.drawString(s, x + 3, y + fm.getAscent());
   }
 
   private void displayFactoryDamage(final Rectangle bounds, final Graphics2D graphics) {
