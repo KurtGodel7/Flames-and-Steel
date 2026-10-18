@@ -106,6 +106,15 @@ class Draft54Test {
                     org.mockito.ArgumentMatchers.any(),
                     org.mockito.ArgumentMatchers.anyString()))
         .thenAnswer(i -> i.getArgument(1));
+    final String hint =
+        games.strategy.triplea.delegate.air.FleetAircraft.hint(
+                japanese,
+                carrier,
+                new games.strategy.engine.data.Route(zones[0], zones[1]),
+                data.getMap())
+            .orElseThrow();
+    assertThat(hint, hint.contains("carrier spots next round"), is(true));
+    assertThat(hint, hint.contains("with the fleet: 2 fighters"), is(true));
     advanceToStep(bridge, "japaneseNonCombatMove");
     final MoveDelegate move = (MoveDelegate) data.getDelegate("move");
     move.setDelegateBridgeAndPlayer(bridge);

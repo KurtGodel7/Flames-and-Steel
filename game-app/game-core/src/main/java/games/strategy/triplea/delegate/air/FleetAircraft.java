@@ -203,6 +203,48 @@ public final class FleetAircraft {
     return ChangeFactory.moveUnits(plan.from(), plan.to(), aircraft);
   }
 
+  /**
+   * While the player points carriers at a sea zone in another front: "Hawaiian Waters: 8 carrier
+   * spots next round · with the fleet: 2 fighters and 2 dive bombers". Empty if the move keeps the
+   * carriers in their front.
+   */
+  public static Optional<String> hint(
+      final GamePlayer player,
+      final Collection<Unit> moving,
+      final Route route,
+      final GameMap map) {
+    final List<Unit> carriers =
+        moving.stream().filter(u -> u.isOwnedBy(player) && isCarrier(u)).toList();
+    final Optional<Territory> from = frontOf(route.getStart(), map);
+    final Optional<Territory> to = frontOf(route.getEnd(), map);
+    if (carriers.isEmpty() || to.isEmpty() || to.equals(from)) {
+      return Optional.empty();
+    }
+    int spots = carriers.stream().mapToInt(u -> u.getUnitAttachment().getCarrierCapacity()).sum();
+    for (final Territory sea :
+        AirZoneAttachment.get(to.get()).orElseThrow().getCoveredTerritories()) {
+      spots +=
+          sea.getUnitCollection().getMatches(u -> u.isOwnedBy(player) && isCarrier(u)).stream()
+              .filter(u -> !moving.contains(u))
+              .mapToInt(u -> u.getUnitAttachment().getCarrierCapacity())
+              .sum();
+    }
+    final StringBuilder sb =
+        new StringBuilder(
+            AirAllocation.zoneName(to.get()) + ": " + spots + " carrier spots next round");
+    plan(player, moving, route, map)
+        .ifPresent(
+            plan -> {
+              final List<Unit> going = new ArrayList<>();
+              for (final UnitType type : plan.suggested().keySet()) {
+                going.addAll(type.create(plan.suggested().getInt(type), player, true, 0, 0));
+              }
+              sb.append(" · with the fleet: ")
+                  .append(going.isEmpty() ? "none" : MyFormatter.unitsToTextNoOwner(going));
+            });
+    return Optional.of(sb.toString());
+  }
+
   /** "2 fighters sail with the fleet from Pacific to Hawaiian Waters". */
   public static String historyText(final Plan plan, final Collection<Unit> aircraft) {
     return MyFormatter.unitsToTextNoOwner(aircraft)

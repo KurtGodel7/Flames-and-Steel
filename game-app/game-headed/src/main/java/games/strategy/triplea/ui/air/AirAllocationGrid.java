@@ -247,18 +247,27 @@ final class AirAllocationGrid extends JDialog {
           }
         }
       }
-      // the nation's current fronts, then every front next to one that some row may use
-      for (final Territory zone : zones) {
-        final boolean usable =
-            rows.stream()
-                .anyMatch(
-                    r ->
-                        AirAllocation.canMove(r.from(), zone)
-                            && entry.get(key(r.type(), zone)).isEmpty());
-        if (current.contains(zone) || usable) {
-          columns.add(zone);
+      // request 9 item 3: every front and bombing zone has a column, open or not; nearest first
+      // (the nation's own fronts, then their neighbours, and so on)
+      final Map<Territory, Integer> distance = new HashMap<>();
+      final ArrayDeque<Territory> queue = new ArrayDeque<>(current);
+      current.forEach(z -> distance.put(z, 0));
+      while (!queue.isEmpty()) {
+        final Territory z = queue.poll();
+        for (final Territory n : AirZoneAttachment.get(z).orElseThrow().getAdjacentZones()) {
+          if (!distance.containsKey(n)) {
+            distance.put(n, distance.get(z) + 1);
+            queue.add(n);
+          }
         }
       }
+      zones.stream()
+          .filter(
+              zone -> AirZoneAttachment.get(zone).orElseThrow().getZoneType() != ZoneType.RESERVE)
+          .sorted(
+              java.util.Comparator.comparingInt(
+                  (Territory z) -> distance.getOrDefault(z, Integer.MAX_VALUE)))
+          .forEach(columns::add);
     }
   }
 
@@ -421,7 +430,7 @@ final class AirAllocationGrid extends JDialog {
                 + AirAllocation.zoneName(row.from())
                 + " · "
                 + (reach(row).isEmpty()
-                    ? "can't move this round"
+                    ? "can't move this round: " + cantMoveText(row)
                     : "can go to "
                         + String.join(
                             ", ", reach(row).stream().map(AirAllocationGrid::zoneName).toList()))
@@ -545,7 +554,7 @@ final class AirAllocationGrid extends JDialog {
             "<html><center>" + shortReason(reason) + "</center></html>", SwingConstants.CENTER);
     l.setFont(l.getFont().deriveFont(Font.PLAIN, 11f));
     l.setForeground(REASON);
-    final String full = carrierDetail(column, host.staged(), reason);
+    final String full = fullReason(row, column, reason);
     l.setToolTipText(full);
     p.setToolTipText(full);
     p.add(l, BorderLayout.CENTER);
@@ -850,8 +859,13 @@ final class AirAllocationGrid extends JDialog {
 
   /** The cell's short reason ("No targets") for a full reason from the rules. */
   private static String shortReason(final String reason) {
-    if (reason.startsWith("Two fronts away")) {
-      return "2 fronts away";
+    final java.util.regex.Matcher rounds =
+        java.util.regex.Pattern.compile("^(\\d+) rounds").matcher(reason);
+    if (rounds.find()) {
+      return rounds.group(1) + " rounds away";
+    }
+    if (reason.startsWith("Can't be reached")) {
+      return "Out of reach";
     }
     if (reason.startsWith("No landing spot")) {
       return "No landing spot";
@@ -1054,9 +1068,163 @@ final class AirAllocationGrid extends JDialog {
 
   private Optional<String> problem(final Row row, final Territory column) {
     if (!AirAllocation.canMove(row.from(), column)) {
-      return Optional.of("Two fronts away: needs two rounds.");
+      return Optional.of(farReason(row, column));
     }
     return entry.get(key(row.type(), column));
+  }
+
+  // ---- request 9 item 3: say why a front is closed and how to get there
+
+  /** "Japanese" for the Japanese, "German" for the Germans: for "no German carriers here". */
+  private static String adjective(final GamePlayer player) {
+    final String name = player.getName();
+    return name.endsWith("ns") ? name.substring(0, name.length() - 1) : name;
+  }
+
+  /**
+   * The full reason a front is closed to this row, naming the front: "Philippine Sea: carrier-only
+   * — no Japanese carriers here (0 spots)", "Americas: no Japanese landing spot".
+   */
+  private String fullReason(final Row row, final Territory column, final String reason) {
+    if (reason.matches("^\\d+ rounds.*") || reason.startsWith("Can't be reached")) {
+      return reason;
+    }
+    final String nation = adjective(host.player());
+    if (reason.startsWith("No carriers")) {
+      return zoneName(column) + ": carrier-only — no " + nation + " carriers here (0 spots)";
+    }
+    if (reason.startsWith("No landing spot")) {
+      return zoneName(column) + ": no " + nation + " landing spot";
+    }
+    return zoneName(column) + ": " + carrierDetail(column, host.staged(), reason);
+  }
+
+  /** What a front on the way needs: "needs carriers", "needs a landing spot", or nothing. */
+  private String need(final Row row, final Territory via) {
+    final Optional<String> p = entry.get(key(row.type(), via));
+    if (p == null || p.isEmpty()) {
+      return "";
+    }
+    if (p.get().startsWith("No carriers")) {
+      return " (needs carriers)";
+    }
+    if (p.get().startsWith("No landing spot")) {
+      return " (needs a landing spot)";
+    }
+    return " (closed: " + shortReason(p.get()).toLowerCase() + ")";
+  }
+
+  /**
+   * How to reach a front more than one step away: "2 rounds: via Philippine Sea (needs carriers) or
+   * North Pacific (needs carriers)".
+   */
+  private String farReason(final Row row, final Territory column) {
+    final List<List<Territory>> routes = routes(row.from(), column);
+    if (routes.isEmpty()) {
+      return "Can't be reached from " + zoneName(row.from()) + ".";
+    }
+    final int rounds = routes.get(0).size();
+    final List<String> firstSteps = new ArrayList<>();
+    for (final List<Territory> route : routes) {
+      final String step = zoneName(route.get(0)) + need(row, route.get(0));
+      if (!firstSteps.contains(step)) {
+        firstSteps.add(step);
+      }
+    }
+    final StringBuilder sb =
+        new StringBuilder(rounds + " rounds: via " + String.join(" or ", firstSteps));
+    if (rounds > 2) {
+      final List<Territory> first = routes.get(0);
+      sb.append(", then ");
+      sb.append(
+          String.join(
+              ", then ",
+              first.subList(1, first.size() - 1).stream()
+                  .map(z -> zoneName(z) + need(row, z))
+                  .toList()));
+    }
+    final String there = need(row, column);
+    if (!there.isEmpty()) {
+      sb.append("; ").append(zoneName(column)).append(" itself").append(there);
+    }
+    return sb.append('.').toString();
+  }
+
+  /**
+   * The shortest ways from one front to another (up to 4), each as the fronts entered in order,
+   * ending with the destination; empty if there is no way.
+   */
+  private List<List<Territory>> routes(final Territory from, final Territory to) {
+    final Map<Territory, Integer> distance = new HashMap<>();
+    final Map<Territory, List<Territory>> parents = new HashMap<>();
+    final ArrayDeque<Territory> queue = new ArrayDeque<>();
+    distance.put(from, 0);
+    queue.add(from);
+    while (!queue.isEmpty()) {
+      final Territory z = queue.poll();
+      for (final Territory n : AirZoneAttachment.get(z).orElseThrow().getAdjacentZones()) {
+        if (!distance.containsKey(n)) {
+          distance.put(n, distance.get(z) + 1);
+          queue.add(n);
+        }
+        if (distance.get(n) == distance.get(z) + 1) {
+          parents.computeIfAbsent(n, k -> new ArrayList<>()).add(z);
+        }
+      }
+    }
+    if (!distance.containsKey(to) || to.equals(from)) {
+      return List.of();
+    }
+    final List<List<Territory>> result = new ArrayList<>();
+    collect(to, from, parents, new ArrayList<>(), result);
+    return result;
+  }
+
+  private static void collect(
+      final Territory at,
+      final Territory from,
+      final Map<Territory, List<Territory>> parents,
+      final List<Territory> tail,
+      final List<List<Territory>> result) {
+    if (result.size() >= 4) {
+      return;
+    }
+    if (at.equals(from)) {
+      final List<Territory> route = new ArrayList<>(tail);
+      java.util.Collections.reverse(route);
+      result.add(route);
+      return;
+    }
+    tail.add(at);
+    for (final Territory p : parents.getOrDefault(at, List.of())) {
+      collect(p, from, parents, tail, result);
+    }
+    tail.remove(tail.size() - 1);
+  }
+
+  /** The fronts on the ways to a far front, for the mini map (empty for a neighbour). */
+  private List<Territory> routeZones(final Territory from, final Territory to) {
+    if (AirAllocation.canMove(from, to)) {
+      return List.of();
+    }
+    final List<Territory> zones = new ArrayList<>();
+    for (final List<Territory> route : routes(from, to)) {
+      for (final Territory z : route) {
+        if (!zones.contains(z)) {
+          zones.add(z);
+        }
+      }
+    }
+    return zones;
+  }
+
+  /** "Philippine Sea — no carriers; Manchuria — no landing spot" for a row that can't move. */
+  private String cantMoveText(final Row row) {
+    final List<String> parts = new ArrayList<>();
+    for (final Territory n : AirZoneAttachment.get(row.from()).orElseThrow().getAdjacentZones()) {
+      problem(row, n).ifPresent(p -> parts.add(zoneName(n) + " — " + shortReason(p).toLowerCase()));
+    }
+    return parts.isEmpty() ? "no neighbouring fronts" : String.join("; ", parts);
   }
 
   private Optional<String> plusProblem(
@@ -1560,9 +1728,15 @@ final class AirAllocationGrid extends JDialog {
       g.drawString(title(row), 8, 16);
       final int oy = TITLE;
       final List<Territory> reach = new ArrayList<>();
+      // a hovered far front: the fronts on the way to it are shown too, outlined dashed
+      final List<Territory> route =
+          row != null && row == hoverRow && hoverColumn != null
+              ? routeZones(row.from(), hoverColumn)
+              : List.of();
       if (row != null) {
         reach.addAll(reach(row));
         reach.add(row.from());
+        route.stream().filter(z -> !reach.contains(z)).forEach(reach::add);
       }
       final Rectangle view = view(reach);
       final double scale = MAP_WIDTH / (double) view.width;
@@ -1624,6 +1798,21 @@ final class AirAllocationGrid extends JDialog {
         m.setColor(HERE);
         m.setStroke(new BasicStroke(2.5f * px));
         home.draw(m);
+      }
+      for (final Territory zone : route) {
+        final ZoneShape shape = shapes.get(zone);
+        if (shape != null) {
+          m.setColor(Color.WHITE);
+          m.setStroke(
+              new BasicStroke(
+                  2.5f * px,
+                  BasicStroke.CAP_BUTT,
+                  BasicStroke.JOIN_ROUND,
+                  10f,
+                  new float[] {7 * px, 5 * px},
+                  0f));
+          shape.draw(m);
+        }
       }
       if (hoverColumn != null && shapes.containsKey(hoverColumn)) {
         m.setColor(Color.WHITE);

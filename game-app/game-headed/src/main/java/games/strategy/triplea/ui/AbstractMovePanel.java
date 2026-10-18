@@ -89,6 +89,10 @@ public abstract class AbstractMovePanel extends ActionPanel {
     frame.setStatusWarningMessage(message);
   }
 
+  protected final void setStatusInfoMessage(final String message) {
+    frame.setStatusMessage(message);
+  }
+
   protected final boolean getListening() {
     return listening;
   }
