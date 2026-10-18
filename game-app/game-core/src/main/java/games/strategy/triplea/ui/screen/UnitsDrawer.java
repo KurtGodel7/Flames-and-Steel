@@ -41,6 +41,7 @@ public class UnitsDrawer extends AbstractDrawable {
   private static final int BAR_SPACING = 2;
 
   private static final int DRAW_MARGIN = 6;
+  private static final int OVERFLOW_LINE_HEIGHT = 3;
 
   @Getter private final Point placementPoint;
   private final boolean overflow;
@@ -92,12 +93,13 @@ public class UnitsDrawer extends AbstractDrawable {
     // belong to where
     final var factory = uiContext.getUnitImageFactory();
     if (overflow) {
+      // Flames and Steel: below the room for hit-point bars, so the bars never merge into it
       graphics.setColor(Color.BLACK);
       graphics.fillRect(
           placementPoint.x - bounds.x - 2,
-          placementPoint.y - bounds.y + factory.getUnitImageHeight(),
+          placementPoint.y - bounds.y + overflowLineOffset(),
           factory.getUnitImageWidth() + 2,
-          3);
+          OVERFLOW_LINE_HEIGHT);
     }
     final GamePlayer owner = unitCategory.getOwner();
     final boolean damagedImage =
@@ -249,14 +251,29 @@ public class UnitsDrawer extends AbstractDrawable {
    * size, e.g. the Yamato), the hit-point bar under it and a small margin for the count and flag.
    * The map uses it to pick the tiles to draw on, so nothing is cut off at a tile edge.
    */
+  /**
+   * Distance from the top of the unit to the overflow line: under the unit's image and the room a
+   * two-row hit-point bar needs.
+   */
+  private int overflowLineOffset() {
+    final var factory = uiContext.getUnitImageFactory();
+    final int imageHeight =
+        Math.max(
+            factory.getUnitImageHeight(),
+            factory.getImage(ImageKey.of(unitCategory)).getHeight(null));
+    return imageHeight + BAR_SPACING + HitPointBar.height(6, factory.getScaleFactor()) + 1;
+  }
+
   public Rectangle getDrawRectangle() {
     final var factory = uiContext.getUnitImageFactory();
     final Image img = factory.getImage(ImageKey.of(unitCategory));
     final int width = Math.max(factory.getUnitImageWidth(), img.getWidth(null));
     final int height =
-        Math.max(factory.getUnitImageHeight(), img.getHeight(null))
-            + BAR_SPACING
-            + HitPointBar.height(hitPoints(), factory.getScaleFactor());
+        overflow
+            ? overflowLineOffset() + OVERFLOW_LINE_HEIGHT
+            : Math.max(factory.getUnitImageHeight(), img.getHeight(null))
+                + BAR_SPACING
+                + HitPointBar.height(hitPoints(), factory.getScaleFactor());
     return new Rectangle(
         placementPoint.x - DRAW_MARGIN,
         placementPoint.y - DRAW_MARGIN,

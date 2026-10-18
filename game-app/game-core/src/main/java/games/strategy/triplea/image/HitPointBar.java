@@ -17,6 +17,8 @@ public final class HitPointBar {
   public static final Color BACKING = new Color(0x14, 0x14, 0x14);
   private static final int GAP = 1;
   private static final int BORDER = 1;
+  // clear space on each side, so bars of units standing side by side never touch
+  private static final int SIDE_GAP = 2;
   private static final int MAX_ONE_ROW = 5;
 
   /** Row height at units.scale 1.0; 3 px at the map's 0.6. */
@@ -39,10 +41,12 @@ public final class HitPointBar {
     return Math.max(2, (int) Math.round(ROW_HEIGHT_AT_SCALE_1 * scale));
   }
 
-  /** Width of one segment: equal whole pixels, the widest row (with its backing) fits the icon. */
+  /**
+   * Width of one segment: equal whole pixels; the widest row, its backing and a gap fit the icon.
+   */
   static int segmentWidth(final int iconWidth, final int hitPoints) {
     final int columns = rows(hitPoints)[0];
-    return Math.max(1, (iconWidth - 2 * BORDER - (columns - 1) * GAP) / columns);
+    return Math.max(1, (iconWidth - 2 * BORDER - 2 * SIDE_GAP - (columns - 1) * GAP) / columns);
   }
 
   /** Total height of the bar including its backing, or 0 if the unit has no bar. */
