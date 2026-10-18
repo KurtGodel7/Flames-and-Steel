@@ -9,6 +9,7 @@ import games.strategy.engine.delegate.IDelegateBridge;
 import games.strategy.triplea.Properties;
 import games.strategy.triplea.delegate.EditDelegate;
 import games.strategy.triplea.delegate.Matches;
+import games.strategy.triplea.delegate.battle.UnderseaWar;
 import games.strategy.triplea.delegate.battle.casualty.CasualtySelector;
 import games.strategy.triplea.delegate.data.CasualtyDetails;
 import games.strategy.triplea.delegate.power.calculator.CombatValueBuilder;
@@ -39,23 +40,51 @@ public class SelectMainBattleCasualties
 
   @Override
   public CasualtyDetails apply(final IDelegateBridge bridge, final SelectCasualties step) {
-
     final TargetUnits targetUnits = getTargetUnits(step);
-    final int totalHitPointsAvailable = getMaxHits(targetUnits.combatUnits);
-    final int hitCount = step.getFireRoundState().getDice().getHits();
-    final int hitsLeftForRestrictedTransports = hitCount - totalHitPointsAvailable;
-
-    final CasualtyDetails casualtyDetails;
     if (EditDelegate.getEditMode(step.getBattleState().getGameData().getProperties())) {
       final CasualtyDetails message =
           selectFunction.apply(bridge, step, step.getFiringGroup().getTargetUnits(), 0);
-      casualtyDetails = new CasualtyDetails(message, true);
+      return new CasualtyDetails(message, true);
+    }
+    final int hitCount = step.getFireRoundState().getDice().getHits();
 
-    } else if (totalHitPointsAvailable > hitCount) {
+    // Flames and Steel Undersea War: hits go to the surface warships first; hits beyond what they
+    // can take carry over to the submarines (and then, as usual, to restricted transports)
+    final List<Unit> surface =
+        UnderseaWar.surfaceShipsFirst(
+            step.getFiringGroup().getFiringUnits(), targetUnits.combatUnits);
+    if (!surface.isEmpty() && surface.size() < targetUnits.combatUnits.size()) {
+      final int surfaceHitPoints = getMaxHits(surface);
+      if (hitCount <= surfaceHitPoints) {
+        return select(bridge, step, TargetUnits.of(new ArrayList<>(surface), List.of()), hitCount);
+      }
+      final List<Unit> rest = new ArrayList<>(targetUnits.combatUnits);
+      rest.removeAll(surface);
+      final CasualtyDetails restDetails =
+          select(
+              bridge,
+              step,
+              TargetUnits.of(rest, targetUnits.restrictedTransports),
+              hitCount - surfaceHitPoints);
+      final List<Unit> killed = new ArrayList<>(surface);
+      killed.addAll(restDetails.getKilled());
+      return new CasualtyDetails(killed, restDetails.getDamaged(), restDetails.getAutoCalculated());
+    }
+    return select(bridge, step, targetUnits, hitCount);
+  }
+
+  private CasualtyDetails select(
+      final IDelegateBridge bridge,
+      final SelectCasualties step,
+      final TargetUnits targetUnits,
+      final int hitCount) {
+    final int totalHitPointsAvailable = getMaxHits(targetUnits.combatUnits);
+    final int hitsLeftForRestrictedTransports = hitCount - totalHitPointsAvailable;
+
+    final CasualtyDetails casualtyDetails;
+    if (totalHitPointsAvailable > hitCount) {
       // not all units were hit so the player needs to pick which ones are killed
-      casualtyDetails =
-          selectFunction.apply(
-              bridge, step, targetUnits.combatUnits, step.getFireRoundState().getDice().getHits());
+      casualtyDetails = selectFunction.apply(bridge, step, targetUnits.combatUnits, hitCount);
 
     } else if (totalHitPointsAvailable == hitCount || targetUnits.restrictedTransports.isEmpty()) {
       // all of the combat units were hit so kill them without asking the player

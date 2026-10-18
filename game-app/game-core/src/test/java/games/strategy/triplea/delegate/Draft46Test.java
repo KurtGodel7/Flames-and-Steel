@@ -150,7 +150,7 @@ class Draft46Test {
   }
 
   @Test
-  void underseaWarSubsTargetSubsButSurfaceShipsGoFirst() {
+  void underseaWarSubsTargetSurfaceShipsAndSubs() {
     grantUnderseaWar(germans);
     final List<Unit> attackers = new ArrayList<>(type("submarine").create(2, germans));
     attackers.addAll(type("typeXXI").create(1, germans));
@@ -165,14 +165,11 @@ class Draft46Test {
     assertThat(typeNames(group.getFiringUnits()), containsInAnyOrder("submarine", "typeXXI"));
     assertThat(typeNames(group.getTargetUnits()), containsInAnyOrder("submarine", "cruiser"));
 
-    // when the subs fire, the cruiser must be hit first
+    // both stay targets when the subs fire; the casualty step puts hits on the cruiser first
+    // (UnderseaWarCasualtiesTest)
     group.retainAliveTargets(defenders);
-    assertThat(typeNames(group.getTargetUnits()), is(List.of("cruiser")));
-
-    // once the surface ships are gone, the subs can be hit
-    final FiringGroup later = subPhaseGroups(attackers, subs).get(0);
-    later.retainAliveTargets(subs);
-    assertThat(typeNames(later.getTargetUnits()), is(List.of("submarine")));
+    assertThat(typeNames(group.getTargetUnits()), containsInAnyOrder("submarine", "cruiser"));
+    assertThat(UnderseaWar.surfaceShipsFirst(group.getFiringUnits(), defenders), is(cruiser));
   }
 
   @Test
@@ -196,8 +193,8 @@ class Draft46Test {
     defenders.addAll(type("transport").create(1, british));
     final List<Unit> attackers = type("submarine").create(1, germans);
     final FiringGroup group = subPhaseGroups(attackers, defenders).get(0);
-    group.retainAliveTargets(defenders);
     assertThat(group.getTargetUnits(), hasItem(subs.get(0)));
+    assertThat(UnderseaWar.surfaceShipsFirst(group.getFiringUnits(), defenders), is(empty()));
   }
 
   // --- 3. research stars

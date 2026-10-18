@@ -5,7 +5,6 @@ import com.google.common.collect.Multimap;
 import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.UnitType;
 import games.strategy.triplea.delegate.Matches;
-import games.strategy.triplea.delegate.battle.UnderseaWar;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -99,8 +98,6 @@ public class FiringGroup implements Serializable {
    */
   public void retainAliveTargets(final Collection<Unit> aliveUnits) {
     targetUnits.retainAll(new HashSet<>(aliveUnits));
-    // Flames and Steel Undersea War: enemy submarines only once their surface ships are gone
-    targetUnits.retainAll(new HashSet<>(UnderseaWar.restrictTargets(firingUnits, targetUnits)));
   }
 
   /**

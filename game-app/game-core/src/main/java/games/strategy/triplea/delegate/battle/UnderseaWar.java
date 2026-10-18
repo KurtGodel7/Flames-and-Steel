@@ -12,9 +12,9 @@ import java.util.stream.Collectors;
 /**
  * Flames and Steel "Undersea War" tech (Germany and Japan). A nation that has it lets its
  * submarines (every sea unit type that can evade, so Type XXI U-boats too) hit enemy submarines.
- * Their hits must go to the enemy's surface ships first: enemy submarines may be chosen as
- * casualties only once none of that side's surface ships are left in the battle. Submarines of
- * nations without the tech keep the map's rule (they cannot target submarines).
+ * Their hits must go to the enemy's surface warships first; hits beyond what those can take carry
+ * over to the enemy submarines (see SelectMainBattleCasualties). Submarines of nations without the
+ * tech keep the map's rule (they cannot target submarines).
  *
  * <p>The XML gives the tech no effect options, so it is recognised by its name.
  */
@@ -46,18 +46,16 @@ public final class UnderseaWar {
   }
 
   /**
-   * The targets these units may hit now: if they all have Undersea War and any enemy surface ship
-   * is among the targets, the enemy submarines are left out until the surface ships are gone.
-   * Otherwise the targets are returned unchanged.
+   * The targets that must take these units' hits first: when they all have Undersea War, the
+   * enemy's surface warships among the targets (hits beyond what those can take carry over to the
+   * enemy submarines). Empty when the rule doesn't apply.
    */
-  public static List<Unit> restrictTargets(
+  public static List<Unit> surfaceShipsFirst(
       final Collection<Unit> firingUnits, final Collection<Unit> targets) {
-    if (firingUnits.isEmpty()
-        || !firingUnits.stream().allMatch(UnderseaWar::mayHitSubs)
-        || targets.stream().noneMatch(UnderseaWar::isSurfaceShip)) {
-      return List.copyOf(targets);
+    if (firingUnits.isEmpty() || !firingUnits.stream().allMatch(UnderseaWar::mayHitSubs)) {
+      return List.of();
     }
-    return targets.stream().filter(u -> !isSub(u)).collect(Collectors.toList());
+    return targets.stream().filter(UnderseaWar::isSurfaceShip).collect(Collectors.toList());
   }
 
   /** A sea unit that is not a submarine; transports don't count (they are never casualties). */
