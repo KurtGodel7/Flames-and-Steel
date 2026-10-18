@@ -1762,6 +1762,25 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
         .orElse(Map.of());
   }
 
+  /** Flames and Steel: which aircraft sail with carriers changing front; null cancels the move. */
+  public @Nullable IntegerMap<UnitType> selectFleetAircraft(
+      final IntegerMap<UnitType> available,
+      final IntegerMap<UnitType> suggested,
+      final String description) {
+    messageAndDialogThreadPool.waitForAll();
+    requestWindowFocus();
+    return Interruptibles.awaitResult(
+            () ->
+                SwingAction.invokeAndWaitResult(
+                    () ->
+                        Optional.ofNullable(
+                            games.strategy.triplea.ui.air.FleetAircraftDialog.show(
+                                TripleAFrame.this, available, suggested, description))))
+        .result
+        .flatMap(o -> o)
+        .orElse(null);
+  }
+
   private ResearchScreen researchScreen() {
     if (researchScreen == null) {
       researchScreen = new ResearchScreen(this, data);

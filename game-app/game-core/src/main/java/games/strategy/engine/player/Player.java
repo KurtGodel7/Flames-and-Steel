@@ -230,6 +230,24 @@ public interface Player extends IRemote {
   boolean confirmMoveKamikaze();
 
   /**
+   * Flames and Steel: the nation's carriers sail from one air front to another; which of its
+   * aircraft in the old front go with the fleet. Players that don't ask take the suggestion (as
+   * many as fit, fighters first).
+   *
+   * @param available the nation's aircraft in the old front that could go, by type
+   * @param suggested the default choice
+   * @param description the fronts and the carriers' room, for the question
+   * @return how many of each type go
+   */
+  @RemoteActionCode(30)
+  default IntegerMap<games.strategy.engine.data.UnitType> selectFleetAircraft(
+      final IntegerMap<games.strategy.engine.data.UnitType> available,
+      final IntegerMap<games.strategy.engine.data.UnitType> suggested,
+      final String description) {
+    return suggested;
+  }
+
+  /**
    * Ask the player if he wishes to retreat.
    *
    * @param battleId - the battle

@@ -10,6 +10,7 @@ import games.strategy.engine.data.RepairRule;
 import games.strategy.engine.data.Resource;
 import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
+import games.strategy.engine.data.UnitType;
 import games.strategy.triplea.attachments.PlayerAttachment;
 import games.strategy.triplea.attachments.PoliticalActionAttachment;
 import games.strategy.triplea.attachments.TerritoryAttachment;
@@ -869,6 +870,14 @@ public class TripleAPlayer extends AbstractBasePlayer {
     final String question =
         "Not all air units in destination territory can land, do you still want to move?";
     return ui.getOk(question, question);
+  }
+
+  @Override
+  public IntegerMap<UnitType> selectFleetAircraft(
+      final IntegerMap<UnitType> available,
+      final IntegerMap<UnitType> suggested,
+      final String description) {
+    return ui.selectFleetAircraft(available, suggested, description);
   }
 
   @Override
