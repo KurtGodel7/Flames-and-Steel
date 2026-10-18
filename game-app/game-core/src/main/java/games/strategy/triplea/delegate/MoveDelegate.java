@@ -572,7 +572,9 @@ public class MoveDelegate extends AbstractMoveDelegate {
   private static int getLargestRepairRateForThisUnit(
       final Unit unitToBeRepaired, final Territory territoryUnitIsIn, final GameState data) {
     if (!Properties.getTwoHitPointUnitsRequireRepairFacilities(data.getProperties())) {
-      return 1;
+      // Flames and Steel (Sticky Hits): damage lasts until the end of the round, then heals fully;
+      // stock repairs one hit point, which for a 5-HP battleship left damage over several rounds
+      return Properties.getStickyHits(data.getProperties()) ? unitToBeRepaired.getHits() : 1;
     }
     final GamePlayer owner = unitToBeRepaired.getOwner();
     final Predicate<Unit> repairUnit =

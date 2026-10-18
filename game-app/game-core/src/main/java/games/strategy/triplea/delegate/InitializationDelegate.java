@@ -316,6 +316,14 @@ public class InitializationDelegate extends BaseTripleADelegate {
     }
     final UnitAttachment battleShipAttachment =
         optionalBattleshipUnitType.get().getUnitAttachment();
+    // Flames and Steel: the classic "Two hit battleship" option only switches a battleship between
+    // 1 and 2 hit points. A map that doesn't declare the option, or gives battleships more than 2
+    // hit points, keeps its own value (this used to reset Flames and Steel's 5-HP battleships to
+    // 1).
+    if (data.getProperties().get(Constants.TWO_HIT_BATTLESHIP_PROPERTY) == null
+        || battleShipAttachment.getHitPoints() > 2) {
+      return;
+    }
     final boolean defaultEnabled = battleShipAttachment.getHitPoints() > 1;
     if (userEnabled != defaultEnabled) {
       bridge.getHistoryWriter().startEvent("TwoHitBattleships: " + userEnabled);
