@@ -251,6 +251,9 @@ public final class AirTargetPanel extends ActionPanel {
     List<Unit> units = clickedUnits;
     Territory territory = clicked;
     final AirMapMode mode = frame.getAirMapMode();
+    if (mode != null && mode.consumeDragClick()) {
+      return; // the release that ended dragging a box
+    }
     if (mode != null) {
       final Optional<AirMapMode.Hit> hit = mode.hit(md.getMapPoint());
       if (hit.isPresent()) {

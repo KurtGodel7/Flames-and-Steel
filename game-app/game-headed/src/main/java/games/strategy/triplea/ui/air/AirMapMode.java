@@ -124,6 +124,14 @@ public final class AirMapMode implements MapOverlay {
   private final List<Hit> hits = new ArrayList<>();
   private final Map<Territory, Point> pendingSpot = new HashMap<>();
   private final Map<Territory, Rectangle> panelRect = new HashMap<>();
+  // request 9 item 4: box placement, the boxes' title bars (drag handles), the mouse and Alt
+  private final BoxPlacer placer = new BoxPlacer();
+  private final Map<Territory, Rectangle> panelTitle = new HashMap<>();
+  private volatile @Nullable Point mouseMapPoint;
+  private volatile boolean altHeld;
+  private @Nullable Territory dragZone;
+  private Point dragOffset = new Point();
+  private boolean dragMoved;
   private final Map<String, Rectangle> stackRect = new HashMap<>();
 
   private @Nullable Territory hovered;
@@ -166,6 +174,7 @@ public final class AirMapMode implements MapOverlay {
           public void mouseMoved(
               final @Nullable Territory territory,
               final games.strategy.triplea.ui.MouseDetails md) {
+            mouseOver(md.getMapPoint(), md.isAltDown());
             hit(md.getMapPoint())
                 .map(Hit::greyed)
                 .ifPresent(
@@ -176,6 +185,130 @@ public final class AirMapMode implements MapOverlay {
                     });
           }
         });
+    listenForBoxMoves();
+  }
+
+  /**
+   * Request 9 item 4: drag a box by its title bar (double-click the title to put it back), and hold
+   * Alt to hide the boxes.
+   */
+  private void listenForBoxMoves() {
+    final java.awt.event.MouseAdapter drag =
+        new java.awt.event.MouseAdapter() {
+          @Override
+          public void mousePressed(final java.awt.event.MouseEvent e) {
+            dragMoved = false;
+            if (!enabled || !SwingUtilities.isLeftMouseButton(e)) {
+              return;
+            }
+            final Point p = mapPoint(e);
+            titleAt(p)
+                .ifPresent(
+                    zone -> {
+                      final Rectangle r = panelRect.get(zone);
+                      dragZone = zone;
+                      dragOffset =
+                          new Point(p.x - (int) r.getCenterX(), p.y - (int) r.getCenterY());
+                    });
+          }
+
+          @Override
+          public void mouseDragged(final java.awt.event.MouseEvent e) {
+            final Territory zone = dragZone;
+            if (zone == null) {
+              return;
+            }
+            final Point p = mapPoint(e);
+            placer.moveTo(zone, new Point(p.x - dragOffset.x, p.y - dragOffset.y));
+            dragMoved = true;
+            repaint();
+          }
+
+          @Override
+          public void mouseReleased(final java.awt.event.MouseEvent e) {
+            if (dragZone != null && dragMoved) {
+              placer.remember(dragZone);
+            }
+            dragZone = null;
+          }
+
+          @Override
+          public void mouseClicked(final java.awt.event.MouseEvent e) {
+            if (enabled && e.getClickCount() == 2) {
+              titleAt(mapPoint(e))
+                  .ifPresent(
+                      zone -> {
+                        placer.reset(zone);
+                        repaint();
+                      });
+            }
+          }
+        };
+    mapPanel.addMouseListener(drag);
+    mapPanel.addMouseMotionListener(drag);
+    java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager()
+        .addKeyEventDispatcher(
+            e -> {
+              if (e.getKeyCode() == java.awt.event.KeyEvent.VK_ALT
+                  && (e.getID() == java.awt.event.KeyEvent.KEY_PRESSED
+                      || e.getID() == java.awt.event.KeyEvent.KEY_RELEASED)) {
+                setAltHeld(e.getID() == java.awt.event.KeyEvent.KEY_PRESSED);
+              }
+              return false;
+            });
+  }
+
+  private void setAltHeld(final boolean held) {
+    if (altHeld != held) {
+      altHeld = held;
+      if (enabled) {
+        repaint();
+      }
+    }
+  }
+
+  /** The mouse moved on the map: boxes fade or show again as it enters or leaves them. */
+  private void mouseOver(final Point mapPoint, final boolean alt) {
+    final Point before = mouseMapPoint;
+    mouseMapPoint = mapPoint;
+    setAltHeld(alt);
+    if (!enabled) {
+      return;
+    }
+    for (final Rectangle r : List.copyOf(panelRect.values())) {
+      if ((before != null && r.contains(before)) != r.contains(mapPoint)) {
+        repaint();
+        return;
+      }
+    }
+  }
+
+  private Optional<Territory> titleAt(final Point p) {
+    return panelTitle.entrySet().stream()
+        .filter(e -> e.getValue().contains(p))
+        .map(Map.Entry::getKey)
+        .findFirst();
+  }
+
+  private Point mapPoint(final java.awt.event.MouseEvent e) {
+    final double scale = mapPanel.getScale();
+    int x = (int) (e.getX() / scale + mapPanel.getXOffset());
+    final int y = (int) (e.getY() / scale + mapPanel.getYOffset());
+    final int width = mapWidth();
+    if (width > 0) {
+      x = ((x % width) + width) % width;
+    }
+    return new Point(x, y);
+  }
+
+  /**
+   * True once after a box was dragged: the mouse release that ends a drag is not a click on the
+   * map, so the air panels ignore it.
+   */
+  public boolean consumeDragClick() {
+    final boolean was = dragMoved;
+    dragMoved = false;
+    return was;
   }
 
   /** Without a map panel: for drawing tests only (switched on, no hover). */
@@ -435,6 +568,7 @@ public final class AirMapMode implements MapOverlay {
     boxStackRect.clear();
     pendingSpot.clear();
     panelRect.clear();
+    panelTitle.clear();
     stackRect.clear();
     final MapData mapData = uiContext.getMapData();
     try (GameData.Unlocker ignored = paintData.acquireReadLock()) {
@@ -789,8 +923,32 @@ public final class AirMapMode implements MapOverlay {
     final int width = Math.max(fm.stringWidth(title) + 12, 14 + FLAG_WIDTH + maxPerRow * cell);
     final int height =
         titleHeight + rows * (h + 4 + AirDraw.hitBarRoom(images.getScaleFactor())) + 6;
-    final Rectangle r = new Rectangle(at.x - width / 2, at.y - height / 2, width, height);
+    // request 9 item 4: placed clear of what the player acts on, or where the player dragged it
+    final Rectangle r =
+        BoxPlacer.box(placer.centreFor(zone, at, width, height, mapData, paintData), width, height);
+    final @Nullable Point mouse = mouseMapPoint;
+    final boolean mouseInside = mouse != null && r.contains(mouse);
+    if (altHeld && !mouseInside) {
+      // Alt hides the boxes; the one under the mouse stays, so Alt-click still picks 10 aircraft
+      return;
+    }
+    final @Nullable Territory under = hovered;
+    final boolean fadedBox =
+        !mouseInside
+            && under != null
+            && !AirZoneAttachment.isAirZone(under)
+            && BoxPlacer.covers(r, under, mapData);
     panelRect.put(zone, r);
+    panelTitle.put(zone, new Rectangle(r.x, r.y, r.width, titleHeight));
+    final java.awt.Composite panelComposite = g.getComposite();
+    final int hitsBefore;
+    synchronized (hits) {
+      hitsBefore = hits.size();
+    }
+    if (fadedBox) {
+      // the mouse is on a territory under the box: fade it so the territory shows
+      g.setComposite(java.awt.AlphaComposite.getInstance(java.awt.AlphaComposite.SRC_OVER, 0.3f));
+    }
     g.setColor(PANEL_BACK);
     g.fillRoundRect(r.x, r.y, r.width, r.height, 10, 10);
     final boolean contested = isContested(zone, stacks.getOrDefault(zone, List.of()));
@@ -850,6 +1008,16 @@ public final class AirMapMode implements MapOverlay {
       for (final String line : AirZoneOverlay.carrierLines(paintData, zone)) {
         AirDraw.tag(g, line, r.x + r.width / 2, ly, Color.WHITE);
         ly += 18;
+      }
+    }
+    g.setComposite(panelComposite);
+    if (fadedBox) {
+      // a faded box lets clicks through to the territory under it
+      synchronized (hits) {
+        while (hits.size() > hitsBefore) {
+          hits.remove(hits.size() - 1);
+          hitRects.remove(hitRects.size() - 1);
+        }
       }
     }
   }
@@ -1023,6 +1191,11 @@ public final class AirMapMode implements MapOverlay {
     bombArea = bombs;
     bombAnchor = bombAnchors;
     stacks = groups;
+    placer.refresh(
+        d,
+        mapData,
+        uiContext.getUnitImageFactory().getUnitImageWidth(),
+        uiContext.getUnitImageFactory().getUnitImageHeight());
   }
 
   /**
