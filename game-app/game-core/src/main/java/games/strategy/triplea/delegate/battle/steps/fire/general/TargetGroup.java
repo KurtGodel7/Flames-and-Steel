@@ -5,9 +5,11 @@ import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.UnitType;
 import games.strategy.triplea.UnitUtils;
 import games.strategy.triplea.delegate.Matches;
+import games.strategy.triplea.delegate.battle.UnderseaWar;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -44,12 +46,25 @@ class TargetGroup {
    */
   public static List<TargetGroup> newTargetGroups(
       final Collection<Unit> units, final Collection<Unit> enemyUnits) {
+    return newTargetGroups(units, enemyUnits, false);
+  }
+
+  /**
+   * As above. With {@code underseaWar} (Flames and Steel), submarines among the units may also
+   * target enemy submarines, whatever canNotTarget and canNotBeTargetedBy say.
+   */
+  static List<TargetGroup> newTargetGroups(
+      final Collection<Unit> units, final Collection<Unit> enemyUnits, final boolean underseaWar) {
     final Set<UnitType> unitTypes = UnitUtils.getUnitTypesFromUnitList(units);
     final boolean destroyerPresent = unitTypes.stream().anyMatch(Matches.unitTypeIsDestroyer());
     final Set<UnitType> enemyUnitTypes = UnitUtils.getUnitTypesFromUnitList(enemyUnits);
     final List<TargetGroup> targetGroups = new ArrayList<>();
     for (final UnitType unitType : unitTypes) {
-      final Set<UnitType> targets = findTargets(unitType, destroyerPresent, enemyUnitTypes);
+      final Set<UnitType> targets =
+          new HashSet<>(findTargets(unitType, destroyerPresent, enemyUnitTypes));
+      if (underseaWar && UnderseaWar.isSub(unitType)) {
+        enemyUnitTypes.stream().filter(UnderseaWar::isSub).forEach(targets::add);
+      }
       if (targets.isEmpty()) {
         continue;
       }

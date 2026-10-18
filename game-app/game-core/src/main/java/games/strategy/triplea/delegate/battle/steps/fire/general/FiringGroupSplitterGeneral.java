@@ -11,6 +11,7 @@ import games.strategy.engine.data.UnitType;
 import games.strategy.triplea.Properties;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.battle.BattleState;
+import games.strategy.triplea.delegate.battle.UnderseaWar;
 import games.strategy.triplea.delegate.battle.steps.fire.FiringGroup;
 import games.strategy.triplea.delegate.battle.steps.fire.NavalPhases;
 import java.io.Serializable;
@@ -43,6 +44,9 @@ import org.triplea.java.collections.CollectionUtils;
 public class FiringGroupSplitterGeneral
     implements Function<BattleState, Collection<FiringGroup>>, Serializable {
   private static final long serialVersionUID = -8563922735558824822L;
+
+  /** Name suffix of the firing groups of Undersea War submarines (Flames and Steel). */
+  public static final String UNDERSEA_WAR_SUFFIX = " (Undersea War)";
 
   public enum Type {
     NORMAL,
@@ -82,7 +86,34 @@ public class FiringGroupSplitterGeneral
                 .build());
 
     final List<FiringGroup> firingGroups = new ArrayList<>();
-    final List<TargetGroup> targetGroups = TargetGroup.newTargetGroups(canFire, enemyCombatants);
+    // Flames and Steel: submarines whose nation has Undersea War also target enemy submarines, so
+    // they fire as their own groups (allied submarines of the same type may lack the tech)
+    final Collection<Unit> underseaWar =
+        CollectionUtils.getMatches(canFire, UnderseaWar::mayHitSubs);
+    final Collection<Unit> others = CollectionUtils.difference(canFire, underseaWar);
+    addFiringGroups(firingGroups, groupName, others, enemyCombatants, enemyUnits, false);
+    addFiringGroups(
+        firingGroups,
+        others.isEmpty() ? groupName : groupName + UNDERSEA_WAR_SUFFIX,
+        underseaWar,
+        enemyCombatants,
+        enemyUnits,
+        true);
+    return firingGroups;
+  }
+
+  private void addFiringGroups(
+      final List<FiringGroup> firingGroups,
+      final String groupName,
+      final Collection<Unit> canFire,
+      final Collection<Unit> enemyCombatants,
+      final Collection<Unit> enemyUnits,
+      final boolean underseaWar) {
+    final List<TargetGroup> targetGroups =
+        TargetGroup.newTargetGroups(canFire, enemyCombatants, underseaWar);
+    if (targetGroups.isEmpty()) {
+      return;
+    }
     if (targetGroups.size() == 1) {
       firingGroups.addAll(
           buildFiringGroups(groupName, canFire, enemyCombatants, targetGroups.get(0)));
@@ -96,7 +127,6 @@ public class FiringGroupSplitterGeneral
       targetGroups.removeAll(airVsSubGroups);
       generateNamedGroups(groupName, firingGroups, targetGroups, canFire, enemyCombatants);
     }
-    return firingGroups;
   }
 
   private Collection<Unit> getCombatParticipants(
