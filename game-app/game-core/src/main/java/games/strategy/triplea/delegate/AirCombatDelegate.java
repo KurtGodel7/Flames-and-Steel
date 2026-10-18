@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import javax.annotation.Nullable;
+import lombok.extern.slf4j.Slf4j;
 import org.triplea.java.collections.IntegerMap;
 
 /**
@@ -46,10 +47,13 @@ import org.triplea.java.collections.IntegerMap;
  *
  * <p>All fire uses low luck, and all hits follow the sticky hit rule.
  */
+@Slf4j
 public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombatDelegate {
   private static final int DOGFIGHT_ROUNDS = 2;
 
   private Map<GamePlayer, List<TargetAssignment>> pending = new LinkedHashMap<>();
+  // the window of the air battle being fought, closed if that battle fails
+  private transient AirBattleView currentView;
 
   @Override
   public void start() {
@@ -163,7 +167,7 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
         }
       }
       if (!sideB.isEmpty()) {
-        fightDogfight(zone, sideA, sideB);
+        safely("Dogfight in " + zone.getName(), () -> fightDogfight(zone, sideA, sideB));
       }
     }
   }
@@ -188,6 +192,7 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
             playerA,
             playerB,
             steps);
+    currentView = view;
     bridge.getHistoryWriter().startEvent("Dogfight in " + zone.getName());
     for (int round = 1; round <= DOGFIGHT_ROUNDS; round++) {
       final List<Unit> aliveA = alive(zone, sideA);
@@ -273,13 +278,41 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
     final IntegerMap<Territory> bombed = new IntegerMap<>();
     for (final Strike strike : strikes) {
       if (strike.target().kind() != TargetKind.STRATEGIC) {
-        fightStrike(strike, bombed);
+        safely(strikeName(strike), () -> fightStrike(strike, bombed));
       }
     }
     for (final Strike strike : strikes) {
       if (strike.target().kind() == TargetKind.STRATEGIC) {
-        fightStrike(strike, bombed);
+        safely(strikeName(strike), () -> fightStrike(strike, bombed));
       }
+    }
+  }
+
+  private static String strikeName(final Strike strike) {
+    return strike.target().kind() == TargetKind.STRATEGIC
+        ? "Strategic bombing of " + strike.target().territory().getName()
+        : "Air strike on " + strike.target().describe();
+  }
+
+  /**
+   * Runs one air battle. If it fails, the error is logged, the history says the battle was skipped,
+   * its window is closed and the air phase goes on, so one bad battle can't end the game.
+   */
+  private void safely(final String battle, final Runnable fight) {
+    try {
+      fight.run();
+    } catch (final RuntimeException e) {
+      log.error("Air phase: " + battle + " failed and was skipped", e);
+      bridge.getHistoryWriter().startEvent(battle + " skipped after an error (details in the log)");
+      if (currentView != null) {
+        try {
+          currentView.abort(battle + " skipped after an error");
+        } catch (final RuntimeException closeFailed) {
+          log.warn("Could not close the air battle window", closeFailed);
+        }
+      }
+    } finally {
+      currentView = null;
     }
   }
 
@@ -339,6 +372,7 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
     final AirBattleView view =
         AirBattleView.show(
             bridge, t, title, strike.survivors(), defenders, attacker, defender, steps);
+    currentView = view;
 
     // 1. AA guns fire first
     if (!aaGuns.isEmpty()) {

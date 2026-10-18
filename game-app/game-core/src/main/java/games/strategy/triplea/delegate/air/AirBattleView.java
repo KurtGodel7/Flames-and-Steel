@@ -116,10 +116,11 @@ public final class AirBattleView {
         .getDisplayChannelBroadcaster()
         .casualtyNotification(
             id, step, dice, hitPlayer, new ArrayList<>(killed), new ArrayList<>(damaged), Map.of());
-    if (autoCalculated || hitPlayer.isAi()) {
+    // nobody controls the neutral player (neutral garrisons), so it is never asked to confirm
+    if ((autoCalculated || hitPlayer.isAi()) && isControlled(hitPlayer)) {
       bridge.getRemotePlayer(hitPlayer).confirmOwnCasualties(id, "Press space to continue");
     }
-    if (firingPlayer.equals(hitPlayer)) {
+    if (firingPlayer.equals(hitPlayer) || !isControlled(firingPlayer)) {
       return;
     }
     final Player firing = bridge.getRemotePlayer(firingPlayer);
@@ -139,13 +140,28 @@ public final class AirBattleView {
     bridge.enterDelegateExecution();
   }
 
+  /**
+   * Whether a person or AI plays this player, so it can be asked to confirm. The neutral player
+   * (which owns neutral garrisons) has nobody behind it: asking it crashed the game.
+   */
+  static boolean isControlled(final GamePlayer player) {
+    return player != null && !player.isNull();
+  }
+
+  /** Closes the window after a strike that failed, so it doesn't stay open. */
+  public void abort(final String message) {
+    bridge.getDisplayChannelBroadcaster().battleEnd(id, message);
+  }
+
   /** Ends the battle with a message, e.g. "Germans lose 6 PUs". */
   public void end(final String message) {
     // let the players see the result before the next battle; the stock "battle over" message comes
     // after the wait, so the window ends with its own close button (sent before, the wait could
     // replace that button and leave the window with none)
-    bridge.getRemotePlayer(attacker).confirmOwnCasualties(id, message + END_PAUSE);
-    if (!defender.equals(attacker)) {
+    if (isControlled(attacker)) {
+      bridge.getRemotePlayer(attacker).confirmOwnCasualties(id, message + END_PAUSE);
+    }
+    if (!defender.equals(attacker) && isControlled(defender)) {
       final Player other = bridge.getRemotePlayer(defender);
       final Thread t =
           new Thread(

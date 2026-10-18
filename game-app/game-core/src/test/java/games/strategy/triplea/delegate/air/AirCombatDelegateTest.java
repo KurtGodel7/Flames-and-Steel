@@ -23,6 +23,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import games.strategy.engine.data.DefaultAttachment;
@@ -32,6 +33,7 @@ import games.strategy.engine.data.GameStep;
 import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.UnitType;
 import games.strategy.engine.delegate.IDelegateBridge;
+import games.strategy.engine.player.Player;
 import games.strategy.triplea.Constants;
 import games.strategy.triplea.attachments.AirUnitAttachment;
 import games.strategy.triplea.attachments.AirZoneAttachment;
@@ -135,6 +137,54 @@ class AirCombatDelegateTest {
 
     assertThat(count(karelia, russians(gameData)), is(1));
     assertThat(count(front, germans), is(3));
+  }
+
+  @Test
+  void strikeOnNeutralGarrisonNeverAsksTheNeutralPlayer() {
+    // as in the real game, nobody plays the neutral player: any call to it fails
+    // (request 8 bug 1: this ended the game with "Exception on remote")
+    final GamePlayer neutral = gameData.getPlayerList().getNullPlayer();
+    karelia.setOwner(neutral);
+    addTo(front, bomber.create(3, germans)); // 3 x 4 = 12: two hits
+    addTo(karelia, infantry(gameData).create(3, neutral));
+    final IDelegateBridge bridge = bridge(germans);
+    final Player nobody =
+        mock(
+            Player.class,
+            invocation -> {
+              throw new RuntimeException("Exception on remote");
+            });
+    when(bridge.getRemotePlayer(neutral)).thenReturn(nobody);
+
+    assertThat(
+        assign("germanAirTargets", germans, new TargetAssignment(front, bomber, 3, land(karelia))),
+        is(nullValue()));
+    advanceToStep(bridge, "airStrikes");
+    delegate.setDelegateBridgeAndPlayer(bridge);
+    delegate.start();
+    delegate.end();
+
+    assertThat(count(karelia, neutral), is(1));
+  }
+
+  @Test
+  void aFailingStrikeIsSkippedAndTheAirPhaseGoesOn() {
+    addTo(front, bomber.create(2, germans)); // 2 x 4 = 8: needs a die for the remainder
+    addTo(karelia, infantry(gameData).create(3, russians(gameData)));
+    final IDelegateBridge bridge = bridge(germans);
+    when(bridge.getRandom(anyInt(), any(), any(), anyString()))
+        .thenThrow(new IllegalStateException("broken strike"));
+
+    assertThat(
+        assign("germanAirTargets", germans, new TargetAssignment(front, bomber, 2, land(karelia))),
+        is(nullValue()));
+    advanceToStep(bridge, "airStrikes");
+    delegate.setDelegateBridgeAndPlayer(bridge);
+    delegate.start(); // must not throw
+    delegate.end();
+
+    assertThat(count(karelia, russians(gameData)), is(3));
+    assertThat(count(front, germans), is(2));
   }
 
   @Test
