@@ -137,14 +137,14 @@ public final class AirTargetPanel extends ActionPanel {
                         unit.isOwnedBy(player)
                             && AirCombat.isBomber(unit)
                             && !AirCombat.getBombers(player, zone).isEmpty()
-                            && !AirCombat.getTargets(player, zone).isEmpty(),
+                            && !AirCombat.getTargets(player, zone, unit.getType()).isEmpty(),
                     (zone, unit) ->
                         AirZoneAttachment.get(zone).orElseThrow().getZoneType() == ZoneType.RESERVE
                             ? "Aircraft in the reserve do not fight."
                             : !AirCombat.isBomber(unit)
                                 ? ResearchView.displayName(unit.getType().getName())
                                     + ": fighters do not strike targets."
-                                : "No targets within reach of "
+                                : "Nothing this aircraft may attack from "
                                     + AirAllocation.zoneName(zone)
                                     + ".");
             frame.getAirMapMode().setMarkUnassigned(true);
@@ -190,9 +190,7 @@ public final class AirTargetPanel extends ActionPanel {
       final int answer =
           JOptionPane.showConfirmDialog(
               JOptionPane.getFrameForComponent(this),
-              "Still without a target:\n  "
-                  + String.join("\n  ", left)
-                  + "\nThey will not attack this round. End anyway?",
+              String.join("\n", left) + "\nThey will not attack this round. End anyway?",
               "Bomber targets",
               JOptionPane.YES_NO_OPTION);
       if (answer != JOptionPane.YES_OPTION) {
@@ -204,32 +202,45 @@ public final class AirTargetPanel extends ActionPanel {
   }
 
   /**
-   * "3 Dive bomber (Eastern Front)" for each type and zone whose bombers could attack but have no
-   * target.
+   * One line per aircraft type and zone whose unassigned aircraft still have at least one legal
+   * target (the same targets the grid counts and the picker offers), e.g. "2 Torpedo Bomber in
+   * Mediterranean could still strike Sea Zone 97". Aircraft with nothing they may hit are left out.
    */
   private List<String> bombersLeft() {
     final GamePlayer player = getCurrentPlayer();
     final List<String> result = new ArrayList<>();
-    final List<Territory> zones;
     try (GameData.Unlocker ignored = getData().acquireReadLock()) {
-      zones =
-          AirZoneAttachment.getAirZones(getData().getMap()).stream()
-              .filter(z -> !AirCombat.getTargets(player, z).isEmpty())
-              .toList();
-    }
-    for (final Territory zone : zones) {
-      final IntegerMap<UnitType> left = available(player, zone);
-      for (final UnitType type : left.keySet()) {
-        result.add(
-            left.getInt(type)
-                + " "
-                + ResearchView.displayName(type.getName())
-                + " ("
-                + AirAllocation.zoneName(zone)
-                + ")");
+      for (final Territory zone : AirZoneAttachment.getAirZones(getData().getMap())) {
+        final IntegerMap<UnitType> left = available(player, zone);
+        for (final UnitType type : left.keySet()) {
+          final List<Target> targets = AirCombat.getTargets(player, zone, type);
+          if (left.getInt(type) > 0 && !targets.isEmpty()) {
+            result.add(
+                left.getInt(type)
+                    + " "
+                    + ResearchView.displayName(type.getName())
+                    + " in "
+                    + AirAllocation.zoneName(zone)
+                    + " could still strike "
+                    + describeTargets(targets));
+          }
+        }
       }
     }
     return result;
+  }
+
+  /** "Sea Zone 97", or "3 targets (Malta, Sicily, Sea Zone 97)", at most 3 named. */
+  private static String describeTargets(final List<Target> targets) {
+    final List<String> names = targets.stream().map(Target::describe).distinct().limit(3).toList();
+    if (targets.size() == 1) {
+      return names.get(0);
+    }
+    return targets.size()
+        + " targets ("
+        + String.join(", ", names)
+        + (targets.size() > names.size() ? ", ..." : "")
+        + ")";
   }
 
   // ---- selecting bombers and targets

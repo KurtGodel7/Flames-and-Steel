@@ -132,13 +132,21 @@ public class AirCombat {
         && t.anyUnitsMatch(Matches.unitCanProduceUnits().or(u -> ApcAttachment.isApc(u.getType())));
   }
 
+  /**
+   * The targets this nation's aircraft of this type in the zone may legally attack. The allocation
+   * grid's counts, the target picker and the "still without a target" warning all use this.
+   */
+  public static List<Target> getTargets(
+      final GamePlayer player, final Territory zone, final UnitType type) {
+    return getTargets(player, zone).stream()
+        .filter(target -> mayAttack(player, zone, type, target))
+        .toList();
+  }
+
   /** How many targets in the zone this nation's aircraft of this type could attack. */
   public static int countTargets(
       final GamePlayer player, final Territory zone, final UnitType type) {
-    return (int)
-        getTargets(player, zone).stream()
-            .filter(target -> mayAttack(player, zone, type, target))
-            .count();
+    return getTargets(player, zone, type).size();
   }
 
   /** {@link #countTargets} split by kind of target (kinds with none are left out). */

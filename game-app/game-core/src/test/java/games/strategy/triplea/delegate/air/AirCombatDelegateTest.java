@@ -16,6 +16,7 @@ import static games.strategy.triplea.delegate.GameDataTestUtil.transport;
 import static games.strategy.triplea.delegate.MockDelegateBridge.advanceToStep;
 import static games.strategy.triplea.delegate.MockDelegateBridge.newDelegateBridge;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
@@ -250,6 +251,24 @@ class AirCombatDelegateTest {
 
     // the hit damaged the battleship; both transports are untouched
     assertThat(seaZone.getUnitCollection().countMatches(Matches.unitIsSeaTransport()), is(2));
+  }
+
+  @Test
+  void aTypesLegalTargetsAreWhatThePickerAccepts() {
+    // request 8 bug 2: a zone holding only submarines has a target, but not for a plain bomber
+    addTo(naval, bomber.create(2, germans));
+    addTo(seaZone, submarine(gameData).create(1, british));
+
+    assertThat(AirCombat.getTargets(germans, naval).isEmpty(), is(false));
+    assertThat(AirCombat.getTargets(germans, naval, bomber), is(empty()));
+    assertThat(AirCombat.countTargets(germans, naval, bomber), is(0));
+
+    air(bomber, "canAttackSubs", "true");
+    final Target subs = new Target(seaZone, TargetKind.SUBS);
+    assertThat(AirCombat.getTargets(germans, naval, bomber), is(List.of(subs)));
+    assertThat(
+        assign("germanAirTargets", germans, new TargetAssignment(naval, bomber, 1, subs)),
+        is(nullValue()));
   }
 
   @Test
