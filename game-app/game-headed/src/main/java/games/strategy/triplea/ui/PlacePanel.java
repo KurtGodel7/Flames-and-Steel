@@ -18,6 +18,8 @@ import games.strategy.triplea.delegate.GameStepPropertiesHelper;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.data.PlaceableUnits;
 import games.strategy.triplea.delegate.remote.IAbstractPlaceDelegate;
+import games.strategy.triplea.formatter.MyFormatter;
+import games.strategy.triplea.formatter.UnitNames;
 import games.strategy.triplea.ui.panels.map.MapSelectionListener;
 import java.awt.Component;
 import java.awt.Dimension;
@@ -44,6 +46,8 @@ class PlacePanel extends AbstractMovePanel implements GameDataChangeListener {
   public static final String LBL_UNITS_LEFT_TO_PLACE = "Units left to place:";
   private static final long serialVersionUID = -4411301492537704785L;
   private final JLabel leftToPlaceLabel = createIndentedLabel();
+  // Flames and Steel: units left unplaced last turn ("Unplaced units live when not placed")
+  private final JLabel carriedOverLabel = createIndentedLabel();
   private final SimpleUnitPanel unitsToPlacePanel;
   private transient PlaceData placeData;
   private final transient MapSelectionListener placeMapSelectionListener =
@@ -206,6 +210,12 @@ class PlacePanel extends AbstractMovePanel implements GameDataChangeListener {
         postProductionStep = true;
       }
       lastPlayer = player;
+      final String carriedOver = postProductionStep ? carriedOverText(player) : "";
+      SwingUtilities.invokeLater(
+          () -> {
+            carriedOverLabel.setText(carriedOver);
+            carriedOverLabel.setVisible(!carriedOver.isEmpty());
+          });
       // During the place step, listen for changes to update the panel.
       if (GameStep.isPlaceStepName(step.getName())) {
         data.addDataChangeListener(this);
@@ -219,6 +229,28 @@ class PlacePanel extends AbstractMovePanel implements GameDataChangeListener {
     } else {
       SwingUtilities.invokeLater(unitsToPlacePanel::removeAll);
     }
+  }
+
+  /**
+   * "Carried over from last turn: 10 (6 infantry, 4 conscripts)", or "" when nothing was left
+   * unplaced last turn. Read under the data lock.
+   */
+  private static String carriedOverText(final GamePlayer player) {
+    final PlayerAttachment attachment = PlayerAttachment.get(player);
+    if (attachment == null || attachment.getCarriedOverUnits().totalValues() <= 0) {
+      return "";
+    }
+    final var carried = attachment.getCarriedOverUnits();
+    final List<String> parts = new ArrayList<>();
+    for (final String type : carried.keySet().stream().sorted().toList()) {
+      final int count = carried.getInt(type);
+      parts.add(count + " " + MyFormatter.pluralize(UnitNames.of(type), count));
+    }
+    return "Carried over from last turn: "
+        + carried.totalValues()
+        + " ("
+        + String.join(", ", parts)
+        + ")";
   }
 
   private void updateUnitsInUnitsToPlacePanel(final Collection<Unit> newUnitsToPlace) {
@@ -331,7 +363,10 @@ class PlacePanel extends AbstractMovePanel implements GameDataChangeListener {
   @Override
   protected final List<Component> getAdditionalButtons() {
     updateUnits();
-    return Arrays.asList(SwingComponents.leftBox(leftToPlaceLabel), add(unitsToPlacePanel));
+    return Arrays.asList(
+        SwingComponents.leftBox(leftToPlaceLabel),
+        SwingComponents.leftBox(carriedOverLabel),
+        add(unitsToPlacePanel));
   }
 
   private void updateUnits() {

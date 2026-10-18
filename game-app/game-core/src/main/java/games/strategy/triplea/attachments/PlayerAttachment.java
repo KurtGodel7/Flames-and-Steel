@@ -65,6 +65,9 @@ public class PlayerAttachment extends DefaultAttachment {
   // what each APC builds (APC unit id -> unit type name), and turns of progress towards it
   private @Nullable Map<String, String> apcProduction = null;
   private @Nullable IntegerMap<String> apcProgress = null;
+  // Flames and Steel: units still unplaced from the nation's last turn (unit type name -> count),
+  // recorded when its purchase step starts
+  private @Nullable IntegerMap<String> carriedOverUnits = null;
   // what resources can be used for suicide attacks, and at what attack power
   private @Nullable IntegerMap<Resource> suicideAttackResources = null;
   // what can be hit by suicide attacks
@@ -492,6 +495,19 @@ public class PlayerAttachment extends DefaultAttachment {
     return getIntegerMapProperty(apcProgress);
   }
 
+  private void setCarriedOverUnits(final String value) throws GameParseException {
+    throw new GameParseException("carriedOverUnits is set during the game, not in the XML");
+  }
+
+  private void setCarriedOverUnits(final IntegerMap<String> value) {
+    carriedOverUnits = value;
+  }
+
+  /** Units (by type name) the nation had left unplaced when this turn's purchase began. */
+  public IntegerMap<String> getCarriedOverUnits() {
+    return getIntegerMapProperty(carriedOverUnits);
+  }
+
   /** True if our territory is kept by whichever ally liberates it. */
   public boolean isLiberatedTerritoryToLiberator() {
     return LIBERATED_TO_LIBERATOR.equals(liberatedTerritoryGoesTo);
@@ -602,6 +618,13 @@ public class PlayerAttachment extends DefaultAttachment {
                   this::setApcProgress,
                   this::getApcProgress,
                   () -> apcProgress = null));
+      case "carriedOverUnits" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setCarriedOverUnits,
+                  this::setCarriedOverUnits,
+                  this::getCarriedOverUnits,
+                  () -> carriedOverUnits = null));
       case "convertsMunitions" ->
           Optional.of(
               MutableProperty.of(

@@ -18,6 +18,7 @@ import games.strategy.triplea.attachments.AbstractTriggerAttachment;
 import games.strategy.triplea.attachments.ApcAttachment;
 import games.strategy.triplea.attachments.FireTriggerParams;
 import games.strategy.triplea.attachments.ICondition;
+import games.strategy.triplea.attachments.PlayerAttachment;
 import games.strategy.triplea.attachments.TechAbilityAttachment;
 import games.strategy.triplea.attachments.TerritoryAttachment;
 import games.strategy.triplea.attachments.TriggerAttachment;
@@ -63,6 +64,7 @@ public class PurchaseDelegate extends BaseTripleADelegate
     super.start();
     final GameState data = getData();
     if (needToInitialize) {
+      recordCarriedOverUnits();
       if (Properties.getTriggers(data.getProperties())) {
         // First set up a match for what we want to have fire as a default in this delegate. List
         // out as a composite
@@ -101,6 +103,25 @@ public class PurchaseDelegate extends BaseTripleADelegate
         }
       }
       needToInitialize = false;
+    }
+  }
+
+  /**
+   * Flames and Steel: units the nation still holds when its purchase begins were left unplaced last
+   * turn ("Unplaced units live when not placed"); the place step shows them as carried over.
+   */
+  private void recordCarriedOverUnits() {
+    final PlayerAttachment attachment = PlayerAttachment.get(player);
+    if (attachment == null) {
+      return;
+    }
+    final IntegerMap<String> held = new IntegerMap<>();
+    for (final Unit unit : player.getUnitCollection()) {
+      held.add(unit.getType().getName(), 1);
+    }
+    if (!held.equals(attachment.getCarriedOverUnits())) {
+      bridge.addChange(
+          ChangeFactory.attachmentPropertyChange(attachment, held, "carriedOverUnits"));
     }
   }
 
