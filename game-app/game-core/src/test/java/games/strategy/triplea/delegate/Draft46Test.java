@@ -74,22 +74,22 @@ class Draft46Test {
   void munitionsCountAgainstFactoryPlacementCapacity() {
     final PlaceDelegate delegate = new PlaceDelegate();
     delegate.initialize("place");
-    delegate.setDelegateBridgeAndPlayer(newDelegateBridge(germans));
+    delegate.setDelegateBridgeAndPlayer(newDelegateBridge(british));
     delegate.start();
-    final Territory ruhr = territory("Ruhr");
-    final List<Unit> munitions = type("munitions").create(30, germans);
-    final List<Unit> infantry = type("infantry").create(30, germans);
-    germans.getUnitCollection().addAll(munitions);
-    germans.getUnitCollection().addAll(infantry);
+    final Territory london = territory("London");
+    final List<Unit> munitions = type("munitions").create(30, british);
+    final List<Unit> infantry = type("infantry").create(30, british);
+    british.getUnitCollection().addAll(munitions);
+    british.getUnitCollection().addAll(infantry);
 
-    final int capacity = delegate.getPlaceableUnits(infantry, ruhr).getMaxUnits();
+    final int capacity = delegate.getPlaceableUnits(infantry, london).getMaxUnits();
     assertThat(capacity, greaterThan(0));
     assertThat(capacity, lessThan(30));
-    assertThat(delegate.getPlaceableUnits(munitions, ruhr).getMaxUnits(), is(capacity));
+    assertThat(delegate.getPlaceableUnits(munitions, london).getMaxUnits(), is(capacity));
 
     // filling the factory with infantry leaves no room for munitions
-    assertThat(delegate.placeUnits(infantry.subList(0, capacity), ruhr).isEmpty(), is(true));
-    assertThat(delegate.getPlaceableUnits(munitions, ruhr).getMaxUnits(), is(0));
+    assertThat(delegate.placeUnits(infantry.subList(0, capacity), london).isEmpty(), is(true));
+    assertThat(delegate.getPlaceableUnits(munitions, london).getMaxUnits(), is(0));
   }
 
   // --- 4. munitions value
