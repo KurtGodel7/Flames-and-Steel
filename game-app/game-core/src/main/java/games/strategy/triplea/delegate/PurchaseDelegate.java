@@ -26,6 +26,7 @@ import games.strategy.triplea.delegate.apc.Apcs;
 import games.strategy.triplea.delegate.remote.IAbstractForumPosterDelegate;
 import games.strategy.triplea.delegate.remote.IPurchaseDelegate;
 import games.strategy.triplea.formatter.MyFormatter;
+import games.strategy.triplea.formatter.UnitNames;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -184,12 +185,14 @@ public class PurchaseDelegate extends BaseTripleADelegate
             return String.format(
                 "May only build %s more %s now (limit %s, set by your Advanced techs and"
                     + " national cap)",
-                allowedApcs, type.getName(), Apcs.getLimit(player));
+                allowedApcs,
+                MyFormatter.pluralize(UnitNames.of(type), allowedApcs == 1 ? 1 : 2),
+                Apcs.getLimit(player));
           }
         }
         final int maxBuilt = type.getUnitAttachment().getMaxBuiltPerPlayer();
         if (maxBuilt == 0) {
-          return "May not build any of this unit right now: " + type.getName();
+          return "May not build any of this unit right now: " + UnitNames.of(type);
         } else if (maxBuilt > 0) {
           // count how many units are yet to be placed or are in the field
           int currentlyBuilt = player.getUnitCollection().countMatches(Matches.unitIsOfType(type));
@@ -205,7 +208,7 @@ public class PurchaseDelegate extends BaseTripleADelegate
           if (quantity > allowedBuild) {
             return String.format(
                 "May only build %s of %s this turn, may only build %s total",
-                allowedBuild, type.getName(), maxBuilt);
+                allowedBuild, UnitNames.of(type), maxBuilt);
           }
         }
       }

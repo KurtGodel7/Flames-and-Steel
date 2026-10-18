@@ -10,6 +10,7 @@ import games.strategy.engine.data.ResourceCollection;
 import games.strategy.engine.data.UnitType;
 import games.strategy.triplea.Constants;
 import games.strategy.triplea.attachments.UnitAttachment;
+import games.strategy.triplea.formatter.UnitNames;
 import games.strategy.triplea.image.UnitImageFactory.ImageKey;
 import games.strategy.ui.ScrollableTextField;
 import games.strategy.ui.ScrollableTextFieldListener;
@@ -340,10 +341,10 @@ class ProductionPanel extends JPanel {
                   + type.getData().getTechTracker().getHitPointBonus(player, type);
           info.setText(attack + " | " + defense + " | " + movement + " | " + hits);
           tooltip
-              .append(type.getName())
+              .append(UnitNames.of(type))
               .append(": ")
               .append(uiContext.getTooltipProperties().getTooltip(type, player));
-          name.setText(type.getName());
+          name.setText(UnitNames.of(type));
           if (attach.getConsumesUnits().totalValues() == 1) {
             name.setForeground(Color.CYAN);
           } else if (attach.getConsumesUnits().totalValues() > 1) {

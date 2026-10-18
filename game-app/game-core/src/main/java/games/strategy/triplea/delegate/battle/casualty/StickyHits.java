@@ -3,6 +3,7 @@ package games.strategy.triplea.delegate.battle.casualty;
 import games.strategy.engine.data.Unit;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.data.CasualtyList;
+import games.strategy.triplea.formatter.UnitNames;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -200,7 +201,7 @@ public class StickyHits {
   private static String describe(final List<Unit> units) {
     final List<String> names = new ArrayList<>();
     for (final Unit unit : units) {
-      names.add(unit.getType().getName());
+      names.add(UnitNames.of(unit.getType()));
     }
     Collections.sort(names);
     return String.join(", ", names);

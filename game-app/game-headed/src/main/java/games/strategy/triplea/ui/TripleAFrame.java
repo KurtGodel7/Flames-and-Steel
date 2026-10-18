@@ -1969,7 +1969,12 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
     if (!mapPanel.getMouseHoverUnits().isEmpty()) {
       final Unit unit = mapPanel.getMouseHoverUnits().get(0);
       return MapUnitTooltipManager.getTooltipTextForUnit(
-          unit.getType(), unit.getOwner(), mapPanel.getMouseHoverUnits().size(), uiContext);
+          unit.getType(),
+          unit.getOwner(),
+          mapPanel.getMouseHoverUnits().size(),
+          unit.getHits(),
+          Unit.maxHitPoints(unit),
+          uiContext);
     }
     return "";
   }

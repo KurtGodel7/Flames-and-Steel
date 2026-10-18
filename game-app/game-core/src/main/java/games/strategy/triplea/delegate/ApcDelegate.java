@@ -34,7 +34,7 @@ public class ApcDelegate extends BaseTripleADelegate implements IApcDelegate {
   @Override
   public @Nullable String setProduction(final Map<Unit, UnitType> choices) {
     if (player == null || !stepName().endsWith("ApcProduction")) {
-      return "This is not an APC production step.";
+      return "This is not an SPC production step.";
     }
     final Optional<String> error = Apcs.validate(player, choices, getData().getMap());
     if (error.isPresent()) {

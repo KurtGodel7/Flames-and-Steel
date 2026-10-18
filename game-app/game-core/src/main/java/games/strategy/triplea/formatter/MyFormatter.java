@@ -64,7 +64,7 @@ public class MyFormatter {
       final int quantity = map.getInt(type);
       buf.append(quantity);
       buf.append(" ");
-      buf.append(quantity > 1 ? pluralize(type.getName()) : type.getName());
+      buf.append(quantity > 1 ? pluralize(UnitNames.of(type)) : UnitNames.of(type));
       count--;
       if (count > 1) {
         buf.append(", ");
@@ -97,7 +97,9 @@ public class MyFormatter {
           buf.append(quantity);
           buf.append(" ");
           buf.append(
-              quantity > 1 ? pluralize(owner.getType().getName()) : owner.getType().getName());
+              quantity > 1
+                  ? pluralize(UnitNames.of(owner.getType()))
+                  : UnitNames.of(owner.getType()));
           buf.append(" owned by the ");
           buf.append(owner.getOwner().getName());
           final int count = countRef.decrementAndGet();
@@ -108,6 +110,11 @@ public class MyFormatter {
           }
         });
     return buf.toString();
+  }
+
+  /** Unit types show their player-visible name; other named things their XML name. */
+  private static String shownName(final DefaultNamed named) {
+    return named instanceof UnitType ? UnitNames.of((UnitType) named) : named.getName();
   }
 
   public static String pluralize(final String in, final int quantity) {
@@ -308,9 +315,9 @@ public class MyFormatter {
         final int quantity = map.getInt(type);
         buf.append(quantity);
         buf.append(" ");
-        buf.append(quantity > 1 ? pluralize(type.getName()) : type.getName());
+        buf.append(quantity > 1 ? pluralize(shownName(type)) : shownName(type));
       } else {
-        buf.append(type.getName());
+        buf.append(shownName(type));
       }
       count--;
       if (count > 1) {
@@ -399,9 +406,9 @@ public class MyFormatter {
       final Unit current = entry.getKey();
       final int val = entry.getValue();
       if (valueBeforeKey) {
-        buf.append(val).append(assignment).append(current.getType().getName());
+        buf.append(val).append(assignment).append(UnitNames.of(current.getType()));
       } else {
-        buf.append(current.getType().getName()).append(assignment).append(val);
+        buf.append(UnitNames.of(current.getType())).append(assignment).append(val);
       }
     }
     return buf.toString().replaceFirst(separator, "");

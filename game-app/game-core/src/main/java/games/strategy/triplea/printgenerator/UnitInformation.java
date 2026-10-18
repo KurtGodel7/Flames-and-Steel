@@ -9,6 +9,7 @@ import games.strategy.engine.data.UnitType;
 import games.strategy.triplea.Constants;
 import games.strategy.triplea.attachments.UnitAttachment;
 import games.strategy.triplea.delegate.Matches;
+import games.strategy.triplea.formatter.UnitNames;
 import games.strategy.triplea.util.TuvCostsCalculator;
 import java.io.IOException;
 import java.io.Writer;
@@ -87,8 +88,8 @@ class UnitInformation extends InfoForFile {
       final UnitAttachment currentAttachment = entry.getValue();
       final String unitName =
           currentType.getName().equals(Constants.UNIT_TYPE_AAGUN)
-              ? currentType.getName()
-              : StringUtils.capitalize(currentType.getName());
+              ? UnitNames.of(currentType)
+              : StringUtils.capitalize(UnitNames.of(currentType));
       writer.append(csvField(unitName));
       writer
           .append(DELIMITER)

@@ -6,6 +6,7 @@ import games.strategy.engine.data.Unit;
 import games.strategy.triplea.Properties;
 import games.strategy.triplea.ResourceLoader;
 import games.strategy.triplea.delegate.data.CasualtyList;
+import games.strategy.triplea.image.HitPointBar;
 import games.strategy.triplea.image.UnitImageFactory;
 import games.strategy.triplea.image.UnitImageFactory.ImageKey;
 import games.strategy.triplea.util.UnitCategory;
@@ -488,7 +489,7 @@ public final class UnitChooser extends JPanel {
                 .anchor(GridBagConstraintsAnchor.WEST)
                 .fill(GridBagConstraintsFill.HORIZONTAL);
         panel.add(
-            new UnitChooserEntryIcon(damaged),
+            new UnitChooserEntryIcon(damaged, i),
             builder.insets(new Insets(0, (i == 0 ? 0 : 8), 0, 0)).gridX(gridx++).build());
         if (i == 0) {
           // -1 indicates a transport whose movement ended due to unloading already.
@@ -592,23 +593,52 @@ public final class UnitChooser extends JPanel {
       private static final long serialVersionUID = 591598594559651745L;
       private static final int PADDING = 6;
       @VisibleForTesting public boolean damaged;
+      // hits this column adds to the unit's existing damage (shown on the hit-point bar)
+      private final int extraHits;
 
       UnitChooserEntryIcon(final boolean damaged) {
+        this(damaged, damaged ? 1 : 0);
+      }
+
+      UnitChooserEntryIcon(final boolean damaged, final int extraHits) {
         this.damaged = damaged;
+        this.extraHits = extraHits;
 
         MapUnitTooltipManager.setUnitTooltip(
-            this, category.getType(), category.getOwner(), category.getUnits().size(), uiContext);
+            this,
+            category.getType(),
+            category.getOwner(),
+            category.getUnits().size(),
+            category.getDamaged(),
+            category.getHitPoints(),
+            uiContext);
+      }
+
+      private ImageKey imageKey() {
+        return ImageKey.builder()
+            .type(category.getType())
+            .player(category.getOwner())
+            .damaged(damaged || category.hasDamageOrBombingUnitDamage())
+            .disabled(category.getDisabled())
+            .build();
       }
 
       private Image getMainImage() {
         return NonWithdrawableFactory.getImage(
-            ImageKey.builder()
-                .type(category.getType())
-                .player(category.getOwner())
-                .damaged(damaged || category.hasDamageOrBombingUnitDamage())
-                .disabled(category.getDisabled())
-                .build(),
-            /* nonWithdrawable= */ !category.getCanRetreat());
+            imageKey(), /* nonWithdrawable= */ !category.getCanRetreat());
+      }
+
+      /** The unit's own image, without the non-withdrawable marker. */
+      private Image getUnitImage() {
+        return NonWithdrawableFactory.getImage(imageKey(), false);
+      }
+
+      private int hitPointBarHeight() {
+        final int height =
+            HitPointBar.height(
+                category.getHitPoints(),
+                NonWithdrawableFactory.getUnitImageFactoryForDecoratedImages().getScaleFactor());
+        return height == 0 ? 0 : height + 1;
       }
 
       @Override
@@ -618,15 +648,15 @@ public final class UnitChooser extends JPanel {
         final Image image = getMainImage();
         g.drawImage(image, 0, 0, this);
 
-        // Flames and Steel: the damage the unit already has
-        if (category.getDamaged() > 0) {
-          UnitImageFactory.paintHitBadge(
-              (Graphics2D) g,
-              category.getDamaged(),
-              category.getHitPoints(),
-              image.getWidth(null),
-              0);
-        }
+        // Flames and Steel: hit-point bar under the unit (existing damage plus this column's hits)
+        HitPointBar.paint(
+            (Graphics2D) g,
+            0,
+            image.getHeight(null) + 1,
+            getUnitImage().getWidth(null),
+            category.getHitPoints(),
+            category.getDamaged() + extraHits,
+            NonWithdrawableFactory.getUnitImageFactoryForDecoratedImages().getScaleFactor());
         int x = image.getWidth(null);
         for (final UnitOwner holder : category.getDependents()) {
           final Image dependentImage = NonWithdrawableFactory.getImage(ImageKey.of(holder), false);
@@ -647,7 +677,7 @@ public final class UnitChooser extends JPanel {
         // wider or taller than the default and would otherwise be clipped.
         final Image mainImage = getMainImage();
         int width = mainImage.getWidth(null);
-        int height = mainImage.getHeight(null);
+        int height = mainImage.getHeight(null) + hitPointBarHeight();
 
         for (final UnitOwner holder : category.getDependents()) {
           final Image dependentImage = NonWithdrawableFactory.getImage(ImageKey.of(holder), false);

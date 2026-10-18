@@ -9,6 +9,7 @@ import games.strategy.engine.data.ResourceCollection;
 import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.UnitType;
 import games.strategy.triplea.delegate.Matches;
+import games.strategy.triplea.formatter.UnitNames;
 import games.strategy.triplea.image.UnitImageFactory;
 import games.strategy.triplea.image.UnitImageFactory.ImageKey;
 import games.strategy.triplea.ui.UiContext;
@@ -62,7 +63,7 @@ public class UnitStatsTable {
               String.format(
                   "<td>%s</td><td>%s</td><td>%s</td><td>%s</td>",
                   getUnitImageUrl(ut, player, uiContext),
-                  ut.getName(),
+                  UnitNames.of(ut),
                   costs.get(player).get(ut).toStringForHtml(),
                   uiContext.getTooltipProperties().getTooltip(ut, player)),
               lineIndex,

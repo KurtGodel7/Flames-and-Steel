@@ -4,6 +4,8 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.UnitType;
+import games.strategy.triplea.formatter.UnitNames;
+import games.strategy.triplea.image.HitPointBar;
 import java.awt.MouseInfo;
 import java.awt.Point;
 import java.awt.Window;
@@ -110,6 +112,19 @@ public final class MapUnitTooltipManager implements ActionListener {
     component.setToolTipText("<html>" + text + "</html>");
   }
 
+  /** As above, for units that have taken {@code hits} of their {@code hitPoints}. */
+  public static void setUnitTooltip(
+      final JComponent component,
+      final UnitType unitType,
+      final GamePlayer player,
+      final int count,
+      final int hits,
+      final int hitPoints,
+      final UiContext uiContext) {
+    final String text = getTooltipTextForUnit(unitType, player, count, hits, hitPoints, uiContext);
+    component.setToolTipText("<html>" + text + "</html>");
+  }
+
   /**
    * Returns the tooltip text for the passed parameters.
    *
@@ -123,13 +138,39 @@ public final class MapUnitTooltipManager implements ActionListener {
       final GamePlayer player,
       final int count,
       final UiContext uiContext) {
+    return getTooltipTextForUnit(
+        unitType, player, count, 0, hitPointsOf(unitType, player), uiContext);
+  }
+
+  /**
+   * As above, for units that have taken {@code hits}. Flames and Steel: units with 2 or more hit
+   * points show what they have left, e.g. "Battleship — 3/5 HP".
+   */
+  public static String getTooltipTextForUnit(
+      final UnitType unitType,
+      final GamePlayer player,
+      final int count,
+      final int hits,
+      final int hitPoints,
+      final UiContext uiContext) {
     final String firstLine =
         String.format(
-            "<b>%s%s (%s)</b><br />",
+            "<b>%s%s (%s)</b>%s<br />",
             count == 1 ? "" : (count + " "),
-            StringUtils.capitalize(unitType.getName()),
-            player.getName());
+            StringUtils.capitalize(UnitNames.of(unitType)),
+            player.getName(),
+            HitPointBar.hasBar(hitPoints)
+                ? " — " + Math.max(0, hitPoints - hits) + "/" + hitPoints + " HP"
+                : "");
     return firstLine + uiContext.getTooltipProperties().getTooltip(unitType, player);
+  }
+
+  /** The type's hit points for this owner, including hit point techs. */
+  private static int hitPointsOf(final UnitType unitType, final @Nullable GamePlayer player) {
+    final int base = unitType.getUnitAttachment().getHitPoints();
+    return player == null
+        ? base
+        : base + unitType.getData().getTechTracker().getHitPointBonus(player, unitType);
   }
 
   /**

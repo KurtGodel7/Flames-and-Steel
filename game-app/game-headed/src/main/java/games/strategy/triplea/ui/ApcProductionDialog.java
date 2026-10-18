@@ -21,7 +21,10 @@ import javax.swing.JList;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 
-/** Flames and Steel: choose what each of the nation's APCs builds. Runs on the EDT. */
+/**
+ * Flames and Steel: choose what each of the nation's SPCs (unit type "apc") builds. Runs on the
+ * EDT.
+ */
 public final class ApcProductionDialog {
   private static final String NOTHING = "(nothing)";
 
@@ -48,8 +51,8 @@ public final class ApcProductionDialog {
         new JLabel(
             "<html><b>"
                 + player.getName()
-                + ": APC production</b><br>Each APC builds one advanced unit type at no PU cost."
-                + "<br>The units appear in the APC's territory near the end of the turn.</html>"),
+                + ": SPC production</b><br>Each Special Production Center (SPC) builds one advanced unit type at no PU cost."
+                + "<br>The units appear in the SPC's territory near the end of the turn.</html>"),
         c);
     c.gridwidth = 1;
     try (GameData.Unlocker ignored = data.acquireReadLock()) {
@@ -59,7 +62,7 @@ public final class ApcProductionDialog {
       for (final Unit apc : Apcs.getOwnApcs(player, data.getMap())) {
         c.gridy++;
         c.gridx = 0;
-        panel.add(new JLabel("APC in " + territoryName(apc, data)), c);
+        panel.add(new JLabel("SPC in " + territoryName(apc, data)), c);
         final JComboBox<Object> box = new JComboBox<>(options.toArray());
         box.setRenderer(
             new DefaultListCellRenderer() {
@@ -93,7 +96,7 @@ public final class ApcProductionDialog {
     JOptionPane.showOptionDialog(
         parent,
         panel,
-        player.getName() + " APC production",
+        player.getName() + " SPC production",
         JOptionPane.DEFAULT_OPTION,
         JOptionPane.PLAIN_MESSAGE,
         null,

@@ -11,6 +11,7 @@ import games.strategy.triplea.delegate.data.BattleListing;
 import games.strategy.triplea.delegate.data.CasualtyDetails;
 import games.strategy.triplea.delegate.data.CasualtyList;
 import games.strategy.triplea.delegate.data.FightBattleDetails;
+import games.strategy.triplea.formatter.UnitNames;
 import games.strategy.triplea.image.UnitImageFactory;
 import games.strategy.triplea.settings.ClientSetting;
 import games.strategy.triplea.ui.panels.map.MapPanel;
@@ -327,7 +328,7 @@ public final class BattlePanel extends ActionPanel {
     final Supplier<SelectTerritoryComponent> action =
         () -> {
           final var panel = new SelectTerritoryComponent(unitTerritory, territories, map);
-          final String unitName = unit.getType().getName() + " in " + unitTerritory;
+          final String unitName = UnitNames.of(unit.getType()) + " in " + unitTerritory;
           panel.setLabelText("Which territory should " + unitName + " bombard?");
           return panel;
         };

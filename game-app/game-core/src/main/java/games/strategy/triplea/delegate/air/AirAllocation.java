@@ -114,7 +114,7 @@ public class AirAllocation {
       }
       return AirCombat.countTargets(player, zone, type) > 0
           ? Optional.empty()
-          : Optional.of("No enemy factories or APCs within reach.");
+          : Optional.of("No enemy factories or SPCs within reach.");
     }
     if (!AirRange.hasLandingSpot(player, zone)) {
       return Optional.of("No landing spot in this front.");

@@ -42,6 +42,7 @@ import games.strategy.triplea.delegate.data.BattleRecord;
 import games.strategy.triplea.delegate.move.validation.AirMovementValidator;
 import games.strategy.triplea.delegate.remote.IBattleDelegate;
 import games.strategy.triplea.formatter.MyFormatter;
+import games.strategy.triplea.formatter.UnitNames;
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -1407,7 +1408,7 @@ public class BattleDelegate extends BaseTripleADelegate implements IBattleDelega
                   firingEnemy,
                   DiceType.COMBAT,
                   "Rolling for remainder in Kamikaze Suicide Attack on unit: "
-                      + unitUnderFire.getType().getName());
+                      + UnitNames.of(unitUnderFire.getType()));
           if (remainder > rolls[0]) {
             hits++;
           }
@@ -1422,7 +1423,8 @@ public class BattleDelegate extends BaseTripleADelegate implements IBattleDelega
               numTokens,
               firingEnemy,
               DiceType.COMBAT,
-              "Rolling for Kamikaze Suicide Attack on unit: " + unitUnderFire.getType().getName());
+              "Rolling for Kamikaze Suicide Attack on unit: "
+                  + UnitNames.of(unitUnderFire.getType()));
       final int[] powerOfTokens = new int[numTokens];
       int j = 0;
       for (final Entry<Resource, Integer> entry : numberOfAttacks.entrySet()) {

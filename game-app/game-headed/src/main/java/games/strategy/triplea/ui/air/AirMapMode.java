@@ -734,7 +734,7 @@ public final class AirMapMode implements MapOverlay {
         if (col == cols) {
           col = 0;
           x = x0;
-          y += h + 6;
+          y += h + 4 + AirDraw.hitBarRoom(images.getScaleFactor());
         }
         if (y + h > box.y + box.height) {
           return;
@@ -748,7 +748,7 @@ public final class AirMapMode implements MapOverlay {
         g.setComposite(oldComposite);
         paintUnassigned(g, zone, item, x, y, w);
         AirDraw.countLabel(g, String.valueOf(item.count()), x + w + 14, y + h);
-        AirDraw.hitBadge(g, item.units(), x + w, y);
+        AirDraw.hitBar(g, item.units(), x, y + h, w, images.getScaleFactor());
         final Rectangle rect = new Rectangle(x, y, w + 16, h);
         synchronized (hits) {
           boxHitRects.add(rect);
@@ -787,7 +787,8 @@ public final class AirMapMode implements MapOverlay {
     }
     final int cell = w + 16;
     final int width = Math.max(fm.stringWidth(title) + 12, 14 + FLAG_WIDTH + maxPerRow * cell);
-    final int height = titleHeight + rows * (h + 4) + 6;
+    final int height =
+        titleHeight + rows * (h + 4 + AirDraw.hitBarRoom(images.getScaleFactor())) + 6;
     final Rectangle r = new Rectangle(at.x - width / 2, at.y - height / 2, width, height);
     panelRect.put(zone, r);
     g.setColor(PANEL_BACK);
@@ -812,7 +813,7 @@ public final class AirMapMode implements MapOverlay {
       for (final Item item : group) {
         if (col == ICONS_PER_ROW) {
           col = 0;
-          y += h + 4;
+          y += h + 4 + AirDraw.hitBarRoom(images.getScaleFactor());
         }
         final int x = r.x + 6 + FLAG_WIDTH + col * cell;
         final java.awt.Composite oldComposite = g.getComposite();
@@ -826,7 +827,7 @@ public final class AirMapMode implements MapOverlay {
         g.setComposite(oldComposite);
         unassigned |= paintUnassigned(g, zone, item, x + 5, y, w);
         AirDraw.countLabel(g, String.valueOf(item.count()), x + w + 14, y + h);
-        AirDraw.hitBadge(g, item.units(), x + 5 + w, y);
+        AirDraw.hitBar(g, item.units(), x + 5, y + h, w, images.getScaleFactor());
         record(
             new Rectangle(x, y, cell, h),
             new Hit(zone, item.units(), item.moved(), greyed(zone, item)));
@@ -834,7 +835,7 @@ public final class AirMapMode implements MapOverlay {
             stackKey(zone, item.owner(), item.type()), new Rectangle(x + 5, y, w, h));
         col++;
       }
-      y += h + 4;
+      y += h + 4 + AirDraw.hitBarRoom(images.getScaleFactor());
     }
     pendingSpot.put(zone, new Point(r.x + 6, r.y + r.height + 6));
     if (contested) {

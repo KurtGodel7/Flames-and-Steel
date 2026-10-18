@@ -9,6 +9,7 @@ import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.UnitType;
 import games.strategy.triplea.Properties;
 import games.strategy.triplea.delegate.Matches;
+import games.strategy.triplea.image.HitPointBar;
 import games.strategy.triplea.image.MapImage;
 import games.strategy.triplea.image.UnitImageFactory;
 import games.strategy.triplea.settings.ClientSetting;
@@ -36,6 +37,11 @@ import lombok.Getter;
  * territory's default placement point, will be drawn under all units in this case.
  */
 public class UnitsDrawer extends AbstractDrawable {
+  /** Pixels between the icon's bottom edge and the hit-point bar (clear of the count outline). */
+  private static final int BAR_SPACING = 2;
+
+  private static final int DRAW_MARGIN = 6;
+
   @Getter private final Point placementPoint;
   private final boolean overflow;
   private final UiContext uiContext;
@@ -116,7 +122,7 @@ public class UnitsDrawer extends AbstractDrawable {
     if (unitsCount != 1) {
       drawMultipleUnits(bounds, graphics, mapData, unitsCount, img, factory);
     }
-    displayHitDamage(bounds, graphics);
+    displayHitPoints(bounds, graphics, img);
     // Display Factory Damage
     if (Properties.getDamageFromBombingDoneToUnitsInsteadOfTerritories(data.getProperties())
         && Matches.unitTypeCanBeDamaged().test(unitType)) {
@@ -215,30 +221,47 @@ public class UnitsDrawer extends AbstractDrawable {
     }
   }
 
+  /** Hit points of the units in this group (all share type, owner and damage), with techs. */
+  private int hitPoints() {
+    return unitCategory.getUnits().isEmpty()
+        ? unitCategory.getType().getUnitAttachment().getHitPoints()
+        : Unit.maxHitPoints(unitCategory.getUnits().get(0));
+  }
+
   /**
-   * Flames and Steel: a damaged unit shows a badge with its hits taken out of its hit points, e.g.
-   * "2/5" (hit points include tech bonuses).
+   * Flames and Steel: units with 2 or more hit points show a hit-point bar under the icon (hit
+   * points include tech bonuses), clear of the unit-count number drawn on the icon's bottom edge.
    */
-  private void displayHitDamage(final Rectangle bounds, final Graphics2D graphics) {
-    final int damaged = unitCategory.getDamaged();
-    if (damaged <= 0 || unitCategory.getUnits().isEmpty()) {
-      return;
-    }
-    final int hitPoints = Unit.maxHitPoints(unitCategory.getUnits().get(0));
-    final String s = damaged + "/" + hitPoints;
+  private void displayHitPoints(
+      final Rectangle bounds, final Graphics2D graphics, final Image img) {
+    HitPointBar.paint(
+        graphics,
+        placementPoint.x - bounds.x,
+        placementPoint.y - bounds.y + img.getHeight(null) + BAR_SPACING,
+        img.getWidth(null),
+        hitPoints(),
+        unitCategory.getDamaged(),
+        uiContext.getUnitImageFactory().getScaleFactor());
+  }
+
+  /**
+   * The map area this drawer paints on: its own image (which can be larger than the map's unit
+   * size, e.g. the Yamato), the hit-point bar under it and a small margin for the count and flag.
+   * The map uses it to pick the tiles to draw on, so nothing is cut off at a tile edge.
+   */
+  public Rectangle getDrawRectangle() {
     final var factory = uiContext.getUnitImageFactory();
-    graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-    graphics.setFont(new java.awt.Font(java.awt.Font.SANS_SERIF, java.awt.Font.BOLD, 11));
-    final var fm = graphics.getFontMetrics();
-    final int w = fm.stringWidth(s) + 6;
-    final int h = fm.getAscent() + 2;
-    final int x = placementPoint.x - bounds.x + factory.getUnitImageWidth() - w + 4;
-    final int y = placementPoint.y - bounds.y - 4;
-    graphics.setColor(new Color(150, 0, 0));
-    graphics.fillRoundRect(x, y, w, h, 6, 6);
-    graphics.setColor(Color.WHITE);
-    graphics.drawRoundRect(x, y, w, h, 6, 6);
-    graphics.drawString(s, x + 3, y + fm.getAscent());
+    final Image img = factory.getImage(ImageKey.of(unitCategory));
+    final int width = Math.max(factory.getUnitImageWidth(), img.getWidth(null));
+    final int height =
+        Math.max(factory.getUnitImageHeight(), img.getHeight(null))
+            + BAR_SPACING
+            + HitPointBar.height(hitPoints(), factory.getScaleFactor());
+    return new Rectangle(
+        placementPoint.x - DRAW_MARGIN,
+        placementPoint.y - DRAW_MARGIN,
+        width + 2 * DRAW_MARGIN,
+        height + 2 * DRAW_MARGIN);
   }
 
   private void displayFactoryDamage(final Rectangle bounds, final Graphics2D graphics) {

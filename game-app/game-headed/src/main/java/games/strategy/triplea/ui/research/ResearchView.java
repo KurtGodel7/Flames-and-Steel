@@ -6,6 +6,7 @@ import games.strategy.engine.data.TechnologyFrontier;
 import games.strategy.triplea.delegate.TechAdvance;
 import games.strategy.triplea.delegate.research.ResearchCenters;
 import games.strategy.triplea.delegate.research.ResearchCenters.Mode;
+import games.strategy.triplea.formatter.UnitNames;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -50,6 +51,9 @@ public record ResearchView(
    * "TypeXXIUboat" "Type XXI Uboat", "Propaganda1" "Propaganda 1".
    */
   public static String displayName(final String name) {
+    if (UnitNames.isRenamed(name)) {
+      return UnitNames.of(name);
+    }
     final StringBuilder sb = new StringBuilder();
     for (int i = 0; i < name.length(); i++) {
       final char c = name.charAt(i);

@@ -6,6 +6,8 @@ import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.Territory;
 import games.strategy.triplea.attachments.TerritoryAttachment;
+import games.strategy.triplea.formatter.UnitNames;
+import games.strategy.triplea.image.HitPointBar;
 import games.strategy.triplea.odds.calculator.BattleCalculatorDialog;
 import games.strategy.triplea.util.UnitCategory;
 import games.strategy.triplea.util.UnitSeparator;
@@ -147,6 +149,9 @@ public class TerritoryDetailPanel extends JPanel {
                 territoryAttachment ->
                     "<html>"
                         + territoryAttachment.toStringForInfo(true, true)
+                        + TerritoryManpower.of(territory)
+                            .map(mp -> "Manpower: " + mp.longText() + "<br>")
+                            .orElse("")
                         + "<br>"
                         + additionalText
                         + "</html>")
@@ -191,7 +196,13 @@ public class TerritoryDetailPanel extends JPanel {
         currentPlayer = item.getOwner();
         panel.add(Box.createVerticalStrut(15));
       }
-      final ImageIcon unitIcon = uiContext.getUnitImageFactory().getIcon(ImageKey.of(item));
+      // Flames and Steel: hit-point bar under units with 2 or more hit points
+      final ImageIcon unitIcon =
+          HitPointBar.withBar(
+              uiContext.getUnitImageFactory().getIcon(ImageKey.of(item)),
+              item.getHitPoints(),
+              item.getDamaged(),
+              1.0);
       // overlay flag onto upper-right of icon
       final ImageIcon flagIcon =
           new ImageIcon(uiContext.getFlagImageFactory().getSmallFlag(item.getOwner()));
@@ -202,7 +213,14 @@ public class TerritoryDetailPanel extends JPanel {
           new JLabel("x" + item.getUnits().size(), flaggedUnitIcon, SwingConstants.LEFT);
       final String toolTipText =
           "<html>"
-              + item.getType().getName()
+              + UnitNames.of(item.getType())
+              + (HitPointBar.hasBar(item.getHitPoints())
+                  ? " — "
+                      + Math.max(0, item.getHitPoints() - item.getDamaged())
+                      + "/"
+                      + item.getHitPoints()
+                      + " HP"
+                  : "")
               + ": "
               + uiContext.getTooltipProperties().getTooltip(item.getType(), currentPlayer)
               + "</html>";

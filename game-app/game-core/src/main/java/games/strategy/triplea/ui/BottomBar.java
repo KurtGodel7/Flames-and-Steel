@@ -16,6 +16,7 @@ import games.strategy.triplea.Constants;
 import games.strategy.triplea.attachments.RelationshipTypeAttachment;
 import games.strategy.triplea.attachments.TerritoryAttachment;
 import java.awt.Image;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -161,6 +162,7 @@ public class BottomBar extends JPanel implements TerritoryListener, ZoomMapListe
     // Get all the needed data while holding a lock, then invoke UI updates on the EDT.
     try (GameData.Unlocker ignored = territory.getData().acquireReadLock()) {
       final IntegerMap<Resource> resources = new IntegerMap<>();
+      final Optional<TerritoryManpower.Info> manpower = TerritoryManpower.of(territory);
       final List<String> territoryEffectNames;
       final Optional<TerritoryAttachment> optionalTerritoryAttachment =
           TerritoryAttachment.get(territory);
@@ -178,12 +180,15 @@ public class BottomBar extends JPanel implements TerritoryListener, ZoomMapListe
       }
 
       SwingUtilities.invokeLater(
-          () -> updateTerritoryInfo(territory, territoryEffectNames, resources));
+          () -> updateTerritoryInfo(territory, territoryEffectNames, resources, manpower));
     }
   }
 
   private void updateTerritoryInfo(
-      Territory territory, List<String> territoryEffectNames, IntegerMap<Resource> resources) {
+      Territory territory,
+      List<String> territoryEffectNames,
+      IntegerMap<Resource> resources,
+      Optional<TerritoryManpower.Info> manpower) {
     // Box layout with horizontal glue on both sides achieves the following desirable properties:
     //   1. If the content is narrower than the available space, it will be centered.
     //   2. If the content is wider than the available space, then the beginning will be shown,
@@ -207,7 +212,9 @@ public class BottomBar extends JPanel implements TerritoryListener, ZoomMapListe
       }
     }
 
-    territoryInfo.add(createTerritoryNameLabel(territory));
+    final JLabel nameLabel = createTerritoryNameLabel(territory);
+    nameLabel.setToolTipText(territoryToolTip(territory, resources, manpower));
+    territoryInfo.add(nameLabel);
 
     if (!territoryEffectText.isEmpty()) {
       territoryEffectText.setLength(territoryEffectText.length() - 2);
@@ -219,6 +226,18 @@ public class BottomBar extends JPanel implements TerritoryListener, ZoomMapListe
       territoryInfo.add(Box.createHorizontalStrut(6));
       territoryInfo.add(uiContext.getResourceImageFactory().getLabel(resource, resources));
     }
+    // Flames and Steel: manpower, collected by the original owner only
+    manpower.ifPresent(
+        mp ->
+            TerritoryManpower.resource(territory)
+                .ifPresent(
+                    resource -> {
+                      final JLabel label =
+                          uiContext.getResourceImageFactory().getLabel(resource, mp.shortText());
+                      label.setToolTipText(mp.longText());
+                      territoryInfo.add(Box.createHorizontalStrut(6));
+                      territoryInfo.add(label);
+                    }));
 
     final Collection<Unit> units =
         uiContext.isShowUnitsInStatusBar() ? territory.getUnits() : List.of();
@@ -232,6 +251,31 @@ public class BottomBar extends JPanel implements TerritoryListener, ZoomMapListe
 
     territoryInfo.add(Box.createHorizontalGlue());
     SwingComponents.redraw(territoryInfo);
+  }
+
+  /** "Kiev (3 PU, 2 MP)", with a line saying who collects the manpower. */
+  private static String territoryToolTip(
+      final Territory territory,
+      final IntegerMap<Resource> resources,
+      final Optional<TerritoryManpower.Info> manpower) {
+    final List<String> parts = new ArrayList<>();
+    for (final Resource resource : resources.keySet()) {
+      parts.add(
+          resources.getInt(resource)
+              + " "
+              + (resource.getName().equals(Constants.PUS) ? "PU" : resource.getName()));
+    }
+    manpower.ifPresent(mp -> parts.add(mp.shortText()));
+    final StringBuilder sb = new StringBuilder("<html>").append(territory.getName());
+    if (!parts.isEmpty()) {
+      sb.append(" (").append(String.join(", ", parts)).append(")");
+    }
+    manpower.ifPresent(
+        mp ->
+            sb.append("<br>Manpower: original owner only (")
+                .append(mp.receiverNames())
+                .append(")"));
+    return sb.append("</html>").toString();
   }
 
   private JLabel createTerritoryNameLabel(Territory territory) {

@@ -14,6 +14,7 @@ import games.strategy.triplea.attachments.TechAbilityAttachment;
 import games.strategy.triplea.delegate.GameStepPropertiesHelper;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.TechTracker;
+import games.strategy.triplea.formatter.UnitNames;
 import games.strategy.triplea.image.UnitImageFactory.ImageKey;
 import games.strategy.ui.ScrollableTextField;
 import games.strategy.ui.ScrollableTextFieldListener;
@@ -295,7 +296,7 @@ class ProductionRepairPanel extends JPanel {
       if (!type.equals(repairUnit.getType())) {
         throw new IllegalStateException(
             "Rule unit type "
-                + type.getName()
+                + UnitNames.of(type)
                 + " does not match "
                 + repairUnit
                 + ".  Please make sure your maps are up to date!");
@@ -311,7 +312,7 @@ class ProductionRepairPanel extends JPanel {
       final JLabel remaining = new JLabel("Damage left to repair: " + maxRepairAmount);
       final int space = 8;
       this.add(
-          new JLabel(type.getName()),
+          new JLabel(UnitNames.of(type)),
           new GridBagConstraints(
               0,
               0,

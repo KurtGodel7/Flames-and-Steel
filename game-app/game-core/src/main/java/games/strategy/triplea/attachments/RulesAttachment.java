@@ -463,6 +463,30 @@ public class RulesAttachment extends AbstractPlayerRulesAttachment {
     return directOwnershipTerritories;
   }
 
+  /**
+   * Flames and Steel: the territories listed in directOwnershipTerritories when it is the only
+   * condition here and uses count "each"; otherwise empty.
+   */
+  List<String> getDirectOwnershipEachTerritories() {
+    if (directOwnershipTerritories == null
+        || !Arrays.asList(directOwnershipTerritories).contains("each")
+        || hasOtherConditionThanDirectOwnership()) {
+      return List.of();
+    }
+    return Arrays.stream(directOwnershipTerritories).filter(n -> !n.equals("each")).toList();
+  }
+
+  private boolean hasOtherConditionThanDirectOwnership() {
+    return alliedOwnershipTerritories != null
+        || directExclusionTerritories != null
+        || alliedExclusionTerritories != null
+        || directPresenceTerritories != null
+        || alliedPresenceTerritories != null
+        || enemyPresenceTerritories != null
+        || enemyExclusionTerritories != null
+        || techs != null;
+  }
+
   private void resetDirectOwnershipTerritories() {
     directOwnershipTerritories = null;
   }

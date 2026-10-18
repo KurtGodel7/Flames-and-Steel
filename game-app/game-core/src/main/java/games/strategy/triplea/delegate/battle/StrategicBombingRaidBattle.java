@@ -37,6 +37,7 @@ import games.strategy.triplea.delegate.data.CasualtyDetails;
 import games.strategy.triplea.delegate.dice.RollDiceFactory;
 import games.strategy.triplea.delegate.power.calculator.CombatValueBuilder;
 import games.strategy.triplea.formatter.MyFormatter;
+import games.strategy.triplea.formatter.UnitNames;
 import games.strategy.triplea.settings.ClientSetting;
 import games.strategy.triplea.util.TuvUtils;
 import java.io.IOException;
@@ -174,7 +175,8 @@ public class StrategicBombingRaidBattle extends AbstractBattle implements Battle
         .orElseThrow(
             () ->
                 new IllegalStateException(
-                    MessageFormat.format("Unit {0} has no target", attacker.getType().getName())));
+                    MessageFormat.format(
+                        "Unit {0} has no target", UnitNames.of(attacker.getType()))));
   }
 
   @Override
@@ -962,7 +964,7 @@ public class StrategicBombingRaidBattle extends AbstractBattle implements Battle
                       battleSite.getName(),
                       MyFormatter.asDice(targetToDiceMap.get(current)),
                       currentUnitCost,
-                      current.getType().getName()));
+                      UnitNames.of(current.getType())));
           getRemote(bridge)
               .reportMessage(
                   MessageFormat.format(
@@ -970,10 +972,10 @@ public class StrategicBombingRaidBattle extends AbstractBattle implements Battle
                       battleSite.getName(),
                       MyFormatter.asDice(targetToDiceMap.get(current)),
                       currentUnitCost,
-                      current.getType().getName()),
+                      UnitNames.of(current.getType())),
                   MessageFormat.format(
                       "Bombing raid causes {0} damage to {1}",
-                      currentUnitCost, current.getType().getName()));
+                      currentUnitCost, UnitNames.of(current.getType())));
         }
       } else {
         // Record PUs lost

@@ -19,6 +19,7 @@ import games.strategy.triplea.delegate.battle.IBattle.BattleType;
 import games.strategy.triplea.delegate.battle.casualty.CasualtyUtil;
 import games.strategy.triplea.delegate.data.CasualtyDetails;
 import games.strategy.triplea.delegate.data.CasualtyList;
+import games.strategy.triplea.image.HitPointBar;
 import games.strategy.triplea.settings.ClientSetting;
 import games.strategy.triplea.ui.panels.map.MapPanel;
 import games.strategy.triplea.util.UnitCategory;
@@ -791,7 +792,7 @@ public class BattleDisplay extends JPanel {
       UnitSeparator.sortUnitCategories(unitCategories, gameData);
       for (final UnitCategory category : unitCategories) {
         final JPanel panel = new JPanel();
-        final ImageIcon unitImage =
+        final ImageIcon plainImage =
             uiContext
                 .getUnitImageFactory()
                 .getIcon(
@@ -801,13 +802,30 @@ public class BattleDisplay extends JPanel {
                         .damaged(damaged && category.hasDamageOrBombingUnitDamage())
                         .disabled(disabled && category.getDisabled())
                         .build());
+        // Flames and Steel: damaged survivors show their hit-point bar
+        final ImageIcon unitImage =
+            damaged
+                ? HitPointBar.withBar(
+                    plainImage, category.getHitPoints(), category.getDamaged(), 1.0)
+                : plainImage;
         final JLabel unit = new JLabel(unitImage);
         panel.add(unit);
         // Add a tooltip, with a count of 1 so that the tooltip doesn't have a number label (so it
         // won't get out of date
         // when units are killed.)
-        MapUnitTooltipManager.setUnitTooltip(
-            unit, category.getType(), category.getOwner(), 1, uiContext);
+        if (damaged) {
+          MapUnitTooltipManager.setUnitTooltip(
+              unit,
+              category.getType(),
+              category.getOwner(),
+              1,
+              category.getDamaged(),
+              category.getHitPoints(),
+              uiContext);
+        } else {
+          MapUnitTooltipManager.setUnitTooltip(
+              unit, category.getType(), category.getOwner(), 1, uiContext);
+        }
         for (final UnitOwner owner : category.getDependents()) {
           unit.add(uiContext.newUnitImageLabel(owner.getType(), owner.getOwner()));
         }

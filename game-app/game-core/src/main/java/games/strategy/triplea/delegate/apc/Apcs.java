@@ -148,11 +148,11 @@ public class Apcs {
     final List<UnitType> buildable = getBuildableTypes(player);
     for (final Map.Entry<Unit, UnitType> choice : choices.entrySet()) {
       if (!isOwnApc(choice.getKey(), player)) {
-        return Optional.of("That is not one of " + player.getName() + "'s own APCs.");
+        return Optional.of("That is not one of " + player.getName() + "'s own SPCs.");
       }
       if (choice.getValue() != null && !buildable.contains(choice.getValue())) {
         return Optional.of(
-            player.getName() + " cannot build " + choice.getValue().getName() + " in an APC.");
+            player.getName() + " cannot build " + choice.getValue().getName() + " in an SPC.");
       }
     }
     return Optional.empty();
@@ -208,7 +208,7 @@ public class Apcs {
       progress.add(id, 1);
       if (progress.getInt(id) < rate.getApcTurnsPerUnit()) {
         lines.add(
-            "APC in "
+            "SPC in "
                 + territory.get().getName()
                 + ": "
                 + type.get().getName()
@@ -221,7 +221,7 @@ public class Apcs {
       final Optional<Territory> placeAt = placeFor(type.get(), territory.get(), player, map);
       if (placeAt.isEmpty()) {
         lines.add(
-            "APC in "
+            "SPC in "
                 + territory.get().getName()
                 + ": no sea zone next to it, so no "
                 + type.get().getName()
@@ -231,7 +231,7 @@ public class Apcs {
       final List<Unit> built = type.get().create(rate.getApcUnitsPerTurn(), player);
       change.add(ChangeFactory.addUnits(placeAt.get(), built));
       lines.add(
-          "APC in "
+          "SPC in "
               + territory.get().getName()
               + " builds "
               + MyFormatter.unitsToText(built)
@@ -239,7 +239,7 @@ public class Apcs {
     }
     change.add(ChangeFactory.attachmentPropertyChange(attachment, progress, "apcProgress"));
     if (!lines.isEmpty()) {
-      bridge.getHistoryWriter().startEvent(player.getName() + " APC production");
+      bridge.getHistoryWriter().startEvent(player.getName() + " SPC production");
       lines.forEach(line -> bridge.getHistoryWriter().addChildToEvent(line));
     }
     bridge.addChange(change);
@@ -285,7 +285,7 @@ public class Apcs {
               + MyFormatter.pluralize(" PU", income)
               + " from "
               + apcs.size()
-              + " APC(s)");
+              + " SPC(s)");
     }
     for (final UnitType type : freePerApc.keySet()) {
       final Optional<String> tech =
@@ -304,7 +304,7 @@ public class Apcs {
       }
     }
     if (!lines.isEmpty()) {
-      bridge.getHistoryWriter().startEvent(player.getName() + " APC bonuses");
+      bridge.getHistoryWriter().startEvent(player.getName() + " SPC bonuses");
       lines.forEach(line -> bridge.getHistoryWriter().addChildToEvent(line));
       bridge.addChange(change);
     }

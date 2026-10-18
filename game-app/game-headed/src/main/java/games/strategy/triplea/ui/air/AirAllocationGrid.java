@@ -1336,7 +1336,7 @@ final class AirAllocationGrid extends JDialog {
   }
 
   /**
-   * "7 targets: 3 land, 4 sea (2 with subs)" or "5 targets: 5 factories/APCs". Each target is one
+   * "7 targets: 3 land, 4 sea (2 with subs)" or "5 targets: 5 factories/SPCs". Each target is one
    * territory or sea zone the type could strike.
    */
   private String targetBreakdown(final Row row, final Territory column) {
@@ -1356,7 +1356,7 @@ final class AirAllocationGrid extends JDialog {
       parts.add(sea + " sea" + (subs > 0 ? " (" + subs + " with subs)" : ""));
     }
     if (strategic > 0) {
-      parts.add(strategic + " factories/APCs");
+      parts.add(strategic + " factories/SPCs");
     }
     return "<html>"
         + total

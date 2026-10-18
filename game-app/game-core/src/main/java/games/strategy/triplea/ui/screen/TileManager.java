@@ -356,7 +356,7 @@ public class TileManager {
           new UnitsDrawer(category, territory, lastPlace, overflow, uiContext);
       drawing.add(drawable);
       allUnitDrawables.add(drawable);
-      for (final Tile tile : getTiles(drawable.getPlacementRectangle())) {
+      for (final Tile tile : getTiles(drawable.getDrawRectangle())) {
         tile.addDrawable(drawable);
         drawnOn.add(tile);
       }

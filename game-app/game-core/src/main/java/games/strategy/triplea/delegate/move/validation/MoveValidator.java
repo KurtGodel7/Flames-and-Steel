@@ -36,6 +36,7 @@ import games.strategy.triplea.delegate.battle.IBattle;
 import games.strategy.triplea.delegate.data.MoveValidationResult;
 import games.strategy.triplea.delegate.data.MustMoveWithDetails;
 import games.strategy.triplea.formatter.MyFormatter;
+import games.strategy.triplea.formatter.UnitNames;
 import games.strategy.triplea.util.TransportUtils;
 import games.strategy.triplea.util.UnitCategory;
 import games.strategy.triplea.util.UnitSeparator;
@@ -558,9 +559,9 @@ public class MoveValidator {
     if (route.isUnload() && Matches.isTerritoryEnemy(player).test(route.getEnd())) {
       for (final Unit unit : CollectionUtils.getMatches(units, Matches.unitCanInvade().negate())) {
         result.addDisallowedUnit(
-            unit.getType().getName()
+            UnitNames.of(unit.getType())
                 + " can't invade from "
-                + unit.getTransportedBy().getType().getName(),
+                + UnitNames.of(unit.getTransportedBy().getType()),
             unit);
       }
     }
@@ -857,7 +858,7 @@ public class MoveValidator {
           UnitStackingLimitFilter.filterUnits(unitsWithStackingLimits, limitType, player, t);
       for (Unit unit : CollectionUtils.difference(unitsWithStackingLimits, allowedUnits)) {
         result.addDisallowedUnit(
-            "Unit type " + unit.getType().getName() + " has reached stacking limit", unit);
+            "Unit type " + UnitNames.of(unit.getType()) + " has reached stacking limit", unit);
       }
     }
 

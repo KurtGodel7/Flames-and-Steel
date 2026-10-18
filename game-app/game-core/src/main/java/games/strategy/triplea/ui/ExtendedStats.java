@@ -12,6 +12,7 @@ import games.strategy.triplea.Properties;
 import games.strategy.triplea.attachments.TechAttachment;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.TechAdvance;
+import games.strategy.triplea.formatter.UnitNames;
 import games.strategy.triplea.ui.mapdata.MapData;
 import java.io.Serial;
 import java.util.ArrayList;
@@ -169,7 +170,7 @@ public class ExtendedStats extends StatPanel {
 
     @Override
     public @Nls String getName() {
-      return String.format("UnitType: %s", ut.getName());
+      return String.format("UnitType: %s", UnitNames.of(ut));
     }
 
     @Override

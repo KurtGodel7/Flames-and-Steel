@@ -228,6 +228,31 @@ public class TriggerAttachment extends AbstractTriggerAttachment {
         new FireTriggerParams(beforeOrAfter, stepName, true, true, true, true));
   }
 
+  /**
+   * Flames and Steel: how much of this resource each player collects for owning the territory, from
+   * triggers whose single condition lists the territory in directOwnershipTerritories with count
+   * "each" (the per-territory manpower triggers). Triggers with further conditions, such as tech
+   * bonuses, are ignored. The receivers are the trigger's players (the original owner).
+   */
+  public static Map<GamePlayer, Integer> getEachOwnershipResource(
+      final Territory territory, final String resourceName) {
+    final Map<GamePlayer, Integer> result = new LinkedHashMap<>();
+    for (final GamePlayer player : territory.getData().getPlayerList().getPlayers()) {
+      for (final TriggerAttachment t : getTriggers(player, x -> resourceName.equals(x.resource))) {
+        final List<RulesAttachment> conditions = t.getConditions();
+        if (t.resourceCount != 0
+            && conditions.size() == 1
+            && conditions
+                .get(0)
+                .getDirectOwnershipEachTerritories()
+                .contains(territory.getName())) {
+          t.getPlayers().forEach(p -> result.merge(p, t.resourceCount, Integer::sum));
+        }
+      }
+    }
+    return result;
+  }
+
   public static Set<TriggerAttachment> collectForAllTriggersMatching(
       final Set<GamePlayer> players, final Predicate<TriggerAttachment> triggerMatch) {
     Preconditions.checkNotNull(triggerMatch);

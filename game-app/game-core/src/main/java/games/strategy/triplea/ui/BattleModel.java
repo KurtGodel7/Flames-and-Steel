@@ -13,6 +13,7 @@ import games.strategy.triplea.delegate.power.calculator.CombatValue;
 import games.strategy.triplea.delegate.power.calculator.CombatValueBuilder;
 import games.strategy.triplea.delegate.power.calculator.PowerStrengthAndRolls;
 import games.strategy.triplea.delegate.power.calculator.TotalPowerAndTotalRolls;
+import games.strategy.triplea.image.HitPointBar;
 import games.strategy.triplea.image.UnitImageFactory;
 import games.strategy.triplea.util.UnitCategory;
 import games.strategy.triplea.util.UnitSeparator;
@@ -193,6 +194,8 @@ final class BattleModel extends DefaultTableModel {
     private UnitType unitType;
     private int count;
     private ImageIcon icon;
+    private int hits;
+    private int hitPoints;
 
     private UiContext uiContext;
 
@@ -207,10 +210,12 @@ final class BattleModel extends DefaultTableModel {
       this.player = imageKey.getPlayer();
       this.count = count;
       this.unitType = imageKey.getType();
-      // Flames and Steel: damaged units carry their "hits/hit points" badge
+      // Flames and Steel: units with 2+ hit points carry their hit-point bar
       this.icon =
-          UnitImageFactory.withHitBadge(
-              uiContext.getUnitImageFactory().getIcon(imageKey), hits, hitPoints);
+          HitPointBar.withBar(
+              uiContext.getUnitImageFactory().getIcon(imageKey), hitPoints, hits, 1.0);
+      this.hits = hits;
+      this.hitPoints = hitPoints;
       this.uiContext = uiContext;
     }
 
@@ -222,7 +227,8 @@ final class BattleModel extends DefaultTableModel {
       } else {
         stamp.setText("x" + count);
         stamp.setIcon(icon);
-        MapUnitTooltipManager.setUnitTooltip(stamp, unitType, player, count, uiContext);
+        MapUnitTooltipManager.setUnitTooltip(
+            stamp, unitType, player, count, hits, hitPoints, uiContext);
       }
     }
   }
