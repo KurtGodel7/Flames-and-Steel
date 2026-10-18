@@ -14,6 +14,7 @@ import games.strategy.engine.data.properties.GameProperties;
 import games.strategy.engine.player.PlayerBridge;
 import games.strategy.triplea.Properties;
 import games.strategy.triplea.attachments.PlayerAttachment;
+import games.strategy.triplea.delegate.FreeConscripts;
 import games.strategy.triplea.delegate.GameStepPropertiesHelper;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.data.PlaceableUnits;
@@ -33,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import javax.swing.BorderFactory;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -48,6 +50,10 @@ class PlacePanel extends AbstractMovePanel implements GameDataChangeListener {
   private final JLabel leftToPlaceLabel = createIndentedLabel();
   // Flames and Steel: units left unplaced last turn ("Unplaced units live when not placed")
   private final JLabel carriedOverLabel = createIndentedLabel();
+  // Flames and Steel request 10: free conscript placements (China)
+  private final JLabel freeConscriptLabel = createIndentedLabel();
+  private final FreeConscriptOverlay freeConscriptOverlay;
+  private boolean freeConscriptStatusShown;
   private final SimpleUnitPanel unitsToPlacePanel;
   private transient PlaceData placeData;
   private final transient MapSelectionListener placeMapSelectionListener =
@@ -103,6 +109,19 @@ class PlacePanel extends AbstractMovePanel implements GameDataChangeListener {
                   JOptionPane.INFORMATION_MESSAGE);
             }
             return production;
+          }
+        }
+
+        @Override
+        public void mouseEntered(final @Nullable Territory territory) {
+          // Flames and Steel: "Sian: 2 free conscripts" while pointing at a highlighted territory
+          final Integer free = territory == null ? null : freeConscriptOverlay.spots.get(territory);
+          if (isActive() && free != null) {
+            setStatusInfoMessage(territory.getName() + ": " + freeConscriptText(free));
+            freeConscriptStatusShown = true;
+          } else if (freeConscriptStatusShown) {
+            clearStatusMessage();
+            freeConscriptStatusShown = false;
           }
         }
 
@@ -181,6 +200,8 @@ class PlacePanel extends AbstractMovePanel implements GameDataChangeListener {
     unitsToPlacePanel = new SimpleUnitPanel(map.getUiContext());
     getData().addGameDataEventListener(GameDataEvent.GAME_STEP_CHANGED, this::updateStep);
     leftToPlaceLabel.setText(LBL_UNITS_LEFT_TO_PLACE);
+    freeConscriptOverlay = new FreeConscriptOverlay(map.getUiContext().getMapData());
+    freeConscriptLabel.setVisible(false);
   }
 
   private void updateStep() {
@@ -278,6 +299,7 @@ class PlacePanel extends AbstractMovePanel implements GameDataChangeListener {
       if (player != null) {
         final Collection<Unit> unitsToPlace = player.getUnits();
         updateUnitsInUnitsToPlacePanel(unitsToPlace);
+        SwingUtilities.invokeLater(this::refreshFreeConscripts);
       }
     }
   }
@@ -325,25 +347,164 @@ class PlacePanel extends AbstractMovePanel implements GameDataChangeListener {
   protected final void undoMoveSpecific() {
     leftToPlaceLabel.setText(LBL_UNITS_LEFT_TO_PLACE);
     updateUnits();
+    SwingUtilities.invokeLater(this::refreshFreeConscripts);
   }
 
   @Override
   protected final void cleanUpSpecific() {
     getMap().removeMapSelectionListener(placeMapSelectionListener);
+    getMap().removeOverlay(freeConscriptOverlay);
+    freeConscriptOverlay.spots = Map.of();
+    SwingUtilities.invokeLater(() -> freeConscriptLabel.setVisible(false));
   }
 
   @Override
   protected final void setUpSpecific() {
     getMap().addMapSelectionListener(placeMapSelectionListener);
+    getMap().addOverlay(freeConscriptOverlay);
+    SwingUtilities.invokeLater(this::refreshFreeConscripts);
+  }
+
+  // ---- Flames and Steel request 10: free conscripts (China)
+
+  /** Territories where the player may still place free conscripts, and how many. */
+  private Map<Territory, Integer> freeConscriptSpots() {
+    final GamePlayer player = getCurrentPlayer();
+    if (player == null || FreeConscripts.allowance(player) <= 0) {
+      return Map.of();
+    }
+    final org.triplea.java.collections.IntegerMap<Territory> placed =
+        new org.triplea.java.collections.IntegerMap<>();
+    for (final Object move : getUndoableMoves()) {
+      if (move instanceof games.strategy.triplea.delegate.UndoablePlacement p) {
+        placed.add(p.getPlaceTerritory(), FreeConscripts.count(p.getUnits()));
+      }
+    }
+    final Map<Territory, Integer> spots = new java.util.LinkedHashMap<>();
+    try (GameData.Unlocker ignored = getData().acquireReadLock()) {
+      for (final Territory t : getData().getMap().getTerritories()) {
+        final int left = FreeConscripts.left(t, player, placed.getInt(t));
+        if (left > 0) {
+          spots.put(t, left);
+        }
+      }
+    }
+    return spots;
+  }
+
+  private static String freeConscriptText(final int n) {
+    return n + (n == 1 ? " free conscript" : " free conscripts");
+  }
+
+  /** Highlights the territories with free conscripts left and updates the "left" line. */
+  private void refreshFreeConscripts() {
+    final Map<Territory, Integer> spots = isActive() ? freeConscriptSpots() : Map.of();
+    final GamePlayer player = getCurrentPlayer();
+    final int allowance = player == null ? 0 : FreeConscripts.allowance(player);
+    freeConscriptOverlay.spots = spots;
+    SwingUtilities.invokeLater(
+        () -> {
+          final int total = spots.values().stream().mapToInt(Integer::intValue).sum();
+          freeConscriptLabel.setText(
+              allowance <= 0
+                  ? ""
+                  : "Free conscript placements left: "
+                      + total
+                      + " ("
+                      + allowance
+                      + " per territory)");
+          freeConscriptLabel.setVisible(allowance > 0);
+          getMap().repaint();
+        });
+  }
+
+  /** Light green on the territories where free conscripts can still go. */
+  private static final class FreeConscriptOverlay
+      implements games.strategy.triplea.ui.panels.map.MapOverlay {
+    private volatile Map<Territory, Integer> spots = Map.of();
+    private final games.strategy.triplea.ui.mapdata.MapData mapData;
+
+    FreeConscriptOverlay(final games.strategy.triplea.ui.mapdata.MapData mapData) {
+      this.mapData = mapData;
+    }
+
+    @Override
+    public void paint(final java.awt.Graphics2D g, final GameData data) {
+      for (final Territory t : spots.keySet()) {
+        for (final java.awt.Polygon p : mapData.getPolygons(t)) {
+          g.setColor(new java.awt.Color(120, 230, 120, 70));
+          g.fill(p);
+          g.setColor(new java.awt.Color(40, 160, 40, 200));
+          g.setStroke(new java.awt.BasicStroke(2.5f));
+          g.draw(p);
+        }
+      }
+    }
+  }
+
+  /** Where the units left over could still go, for the end-of-placement question. */
+  private String whereUnitsCouldGo() {
+    final GamePlayer player = getCurrentPlayer();
+    final List<String> lines = new ArrayList<>();
+    final Collection<Unit> held = player.getUnits();
+    final Map<Territory, Integer> spots = freeConscriptSpots();
+    if (!spots.isEmpty() && held.stream().anyMatch(FreeConscripts::isConscript)) {
+      final List<String> names =
+          spots.entrySet().stream()
+              .limit(8)
+              .map(e -> e.getKey().getName() + " (" + e.getValue() + ")")
+              .toList();
+      lines.add(
+          "Free conscripts can still go to "
+              + spots.size()
+              + " territories: "
+              + String.join(", ", names)
+              + (spots.size() > names.size() ? ", ..." : ""));
+    }
+    final List<String> factories = new ArrayList<>();
+    final List<Territory> candidates;
+    try (GameData.Unlocker ignored = getData().acquireReadLock()) {
+      candidates =
+          getData().getMap().getTerritories().stream()
+              .filter(t -> !t.isWater() && t.isOwnedBy(player))
+              .filter(t -> t.anyUnitsMatch(Matches.unitCanProduceUnits()))
+              .toList();
+    }
+    // conscripts are already covered by the free spots listed above
+    final Collection<Unit> others =
+        CollectionUtils.getMatches(
+            held,
+            spots.isEmpty()
+                ? Matches.unitIsNotSea()
+                : Matches.unitIsNotSea().and(u -> !FreeConscripts.isConscript(u)));
+    for (final Territory t : others.isEmpty() ? List.<Territory>of() : candidates) {
+      final PlaceableUnits room =
+          ((IAbstractPlaceDelegate) getPlayerBridge().getRemoteDelegate())
+              .getPlaceableUnits(others, t);
+      if (!room.isError() && room.getMaxUnits() != 0 && !room.getUnits().isEmpty()) {
+        factories.add(
+            t.getName() + " (" + (room.getMaxUnits() < 0 ? "any" : room.getMaxUnits()) + ")");
+      }
+    }
+    if (!factories.isEmpty()) {
+      lines.add("Factories with room: " + String.join(", ", factories));
+    }
+    if (Properties.getUnplacedUnitsLive(getData().getProperties())) {
+      lines.add("Units you don't place now carry over to your next turn.");
+    }
+    return String.join("\n", lines);
   }
 
   @Override
   protected boolean doneMoveAction() {
     if (!getCurrentPlayer().getUnitCollection().isEmpty()) {
+      final String where = whereUnitsCouldGo();
       final int option =
           JOptionPane.showConfirmDialog(
               getTopLevelAncestor(),
-              "You have not placed all your units yet.  Are you sure you want to end your turn?",
+              "You have not placed all your units yet."
+                  + (where.isEmpty() ? "" : "\n" + where)
+                  + "\nAre you sure you want to end your turn?",
               "Confirm End Turn",
               JOptionPane.YES_NO_OPTION,
               JOptionPane.PLAIN_MESSAGE);
@@ -366,6 +527,7 @@ class PlacePanel extends AbstractMovePanel implements GameDataChangeListener {
     return Arrays.asList(
         SwingComponents.leftBox(leftToPlaceLabel),
         SwingComponents.leftBox(carriedOverLabel),
+        SwingComponents.leftBox(freeConscriptLabel),
         add(unitsToPlacePanel));
   }
 

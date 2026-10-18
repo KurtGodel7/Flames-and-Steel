@@ -158,6 +158,96 @@ class Draft54Test {
     assertThat(noFleet.getInt(type("fighter")), is(2));
   }
 
+  // --- request 10: Chinese free conscripts
+
+  private PlaceDelegate startPlace(final GamePlayer player) {
+    final IDelegateBridge bridge = newDelegateBridge(player);
+    advanceToStep(bridge, player.getName().equals("Chinese") ? "chinesePlace" : "germanPlace");
+    final PlaceDelegate place = new PlaceDelegate();
+    place.initialize("place");
+    place.setDelegateBridgeAndPlayer(bridge);
+    place.start();
+    return place;
+  }
+
+  private java.util.List<games.strategy.engine.data.Unit> hold(
+      final GamePlayer player, final String unitType, final int count) {
+    final var units = type(unitType).create(count, player);
+    player.getUnitCollection().addAll(units);
+    return units;
+  }
+
+  /** A land territory the player owns with no factory. */
+  private games.strategy.engine.data.Territory ownedWithoutFactory(final GamePlayer player) {
+    return data.getMap().getTerritories().stream()
+        .filter(t -> !t.isWater() && t.isOwnedBy(player))
+        .filter(t -> !t.anyUnitsMatch(Matches.unitCanProduceUnits()))
+        .findFirst()
+        .orElseThrow();
+  }
+
+  @Test
+  void chinaPlacesTwoFreeConscriptsWithoutAFactoryButNothingElse() {
+    final GamePlayer chinese = data.getPlayerList().getPlayerId("Chinese");
+    assertThat(FreeConscripts.allowance(chinese), is(2));
+    final var place = startPlace(chinese);
+    final var t = ownedWithoutFactory(chinese);
+    final var conscripts = hold(chinese, "conscript", 3);
+    final var infantry = hold(chinese, "infantry", 1);
+
+    assertThat(place.getPlaceableUnits(conscripts, t).getMaxUnits(), is(2));
+    assertThat(place.canUnitsBePlaced(t, infantry, chinese).isPresent(), is(true));
+    assertThat(place.placeUnits(conscripts.subList(0, 2), t).isEmpty(), is(true));
+    // the allowance is used up
+    assertThat(place.placeUnits(conscripts.subList(2, 3), t).isPresent(), is(true));
+    place.end();
+  }
+
+  @Test
+  void inAFactoryTerritoryTheFirstTwoConscriptsAreFree() {
+    final GamePlayer chinese = data.getPlayerList().getPlayerId("Chinese");
+    final var place = startPlace(chinese);
+    final var chungking = data.getMap().getTerritoryOrThrow("Chungking");
+    final var infantry = hold(chinese, "infantry", 20);
+    final int capacity = place.getPlaceableUnits(infantry, chungking).getMaxUnits();
+    assertThat(capacity > 0 && capacity < 20, is(true));
+    final var conscripts = hold(chinese, "conscript", 5);
+
+    // capacity in infantry, plus 2 free conscripts
+    final var mixed = new java.util.ArrayList<>(infantry.subList(0, capacity));
+    mixed.addAll(conscripts.subList(0, 2));
+    assertThat(place.placeUnits(mixed, chungking).orElse(""), is(""));
+    // the factory is full and the free conscripts are used
+    assertThat(place.placeUnits(conscripts.subList(2, 3), chungking).isPresent(), is(true));
+    place.end();
+  }
+
+  @Test
+  void territoriesConqueredThisTurnAndOtherNationsGetNoFreeConscripts() throws Exception {
+    final GamePlayer chinese = data.getPlayerList().getPlayerId("Chinese");
+    final var place = startPlace(chinese);
+    final var t = ownedWithoutFactory(chinese);
+    final var tracker = data.getBattleDelegate().getBattleTracker();
+    final var add =
+        tracker
+            .getClass()
+            .getDeclaredMethod("addToConquered", games.strategy.engine.data.Territory.class);
+    add.setAccessible(true);
+    add.invoke(tracker, t);
+    assertThat(FreeConscripts.qualifies(t, chinese), is(false));
+    assertThat(
+        place.canUnitsBePlaced(t, hold(chinese, "conscript", 1), chinese).isPresent(), is(true));
+    place.end();
+
+    assertThat(FreeConscripts.allowance(germans), is(0));
+    final var germanPlace = startPlace(germans);
+    final var g = ownedWithoutFactory(germans);
+    assertThat(
+        germanPlace.canUnitsBePlaced(g, hold(germans, "conscript", 1), germans).isPresent(),
+        is(true));
+    germanPlace.end();
+  }
+
   // --- request 9 item 2: unplaced units carry over
 
   @Test

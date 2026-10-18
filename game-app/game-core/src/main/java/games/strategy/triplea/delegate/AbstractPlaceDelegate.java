@@ -245,6 +245,11 @@ public abstract class AbstractPlaceDelegate extends BaseTripleADelegate
       }
 
       unitsCanBePlacedByThisProducer.sort(getHardestToPlaceWithRequiresUnitsRestrictions());
+      if (FreeConscripts.allowance(player) > 0) {
+        // Flames and Steel: conscripts first, so the free ones are used before the factory
+        unitsCanBePlacedByThisProducer.sort(
+            Comparator.comparing(u -> !FreeConscripts.isConscript(u)));
+      }
       final int maxForThisProducer =
           getMaxUnitsToBePlacedFrom(producer, unitsCanBePlacedByThisProducer, at, player);
       // don't forget that -1 == infinite
@@ -714,6 +719,13 @@ public abstract class AbstractPlaceDelegate extends BaseTripleADelegate
         && Matches.isTerritoryOwnedBy(player).test(to)) {
       return Optional.empty();
     }
+    // Flames and Steel: a territory places its own free conscripts without a factory
+    if (producer.equals(to)
+        && !testUnits.isEmpty()
+        && testUnits.stream().allMatch(FreeConscripts::isConscript)
+        && freeConscriptsLeft(to, player) > 0) {
+      return Optional.empty();
+    }
     if (isPlayerAllowedToPlacementAnySeaZoneByOwnedLand(player)
         && Matches.territoryIsWater().test(to)
         && Matches.isTerritoryOwnedBy(player).test(producer)) {
@@ -969,6 +981,9 @@ public abstract class AbstractPlaceDelegate extends BaseTripleADelegate
                   units, Matches.unitIsAir().and(Matches.unitCanLandOnCarrier())));
         }
       }
+    } else if (freeConscriptsLeft(to, player) > 0) {
+      // Flames and Steel: free conscripts need no factory
+      placeableUnits.addAll(CollectionUtils.getMatches(units, FreeConscripts::isConscript));
     }
     addConstructionUnits(units, to, placeableUnits);
     // remove any units that require other units to be consumed on creation, if we don't have enough
@@ -1150,8 +1165,78 @@ public abstract class AbstractPlaceDelegate extends BaseTripleADelegate
     return getMaxUnitsToBePlacedFrom(producer, units, to, player, false, null, null);
   }
 
-  /** Returns -1 if we can place unlimited units. */
+  /**
+   * Returns -1 if we can place unlimited units. Flames and Steel: free conscripts come on top of
+   * the factory's capacity, and those already placed don't use it.
+   */
   protected int getMaxUnitsToBePlacedFrom(
+      final Territory producer,
+      final Collection<Unit> units,
+      final Territory to,
+      final GamePlayer player,
+      final boolean countSwitchedProductionToNeighbors,
+      final @Nullable Collection<Territory> notUsableAsOtherProducers,
+      final @Nullable Map<Territory, Integer> currentAvailablePlacementForOtherProducers) {
+    final int allowance =
+        producer.equals(to) && FreeConscripts.qualifies(to, player)
+            ? FreeConscripts.allowance(player)
+            : 0;
+    if (allowance <= 0) {
+      return factoryUnitsToBePlacedFrom(
+          producer,
+          units,
+          to,
+          player,
+          countSwitchedProductionToNeighbors,
+          notUsableAsOtherProducers,
+          currentAvailablePlacementForOtherProducers);
+    }
+    // the free conscripts already placed here don't count against the factory
+    final Collection<Unit> alreadyProduced = produced.get(producer);
+    final List<Unit> freeOnes =
+        alreadyProduced == null
+            ? List.of()
+            : alreadyProduced.stream()
+                .filter(FreeConscripts::isConscript)
+                .limit(allowance)
+                .toList();
+    if (!freeOnes.isEmpty()) {
+      alreadyProduced.removeAll(freeOnes);
+    }
+    final int factory;
+    try {
+      factory =
+          factoryUnitsToBePlacedFrom(
+              producer,
+              units,
+              to,
+              player,
+              countSwitchedProductionToNeighbors,
+              notUsableAsOtherProducers,
+              currentAvailablePlacementForOtherProducers);
+    } finally {
+      if (!freeOnes.isEmpty()) {
+        alreadyProduced.addAll(freeOnes);
+      }
+    }
+    if (factory == -1) {
+      return -1;
+    }
+    final int freeLeft = allowance - freeOnes.size();
+    // without a factory the stock value is the constructions allowed (other units can't be placed)
+    return factory + Math.min(freeLeft, FreeConscripts.count(units));
+  }
+
+  /** Free conscripts the player may still place in the territory this turn. */
+  protected int freeConscriptsLeft(final Territory t, final GamePlayer player) {
+    if (GameStepPropertiesHelper.isBid(getData())) {
+      return 0;
+    }
+    return FreeConscripts.left(t, player, FreeConscripts.count(getAlreadyProduced(t)));
+  }
+
+  /** Returns -1 if we can place unlimited units (the stock capacity, from factories). */
+  private int factoryUnitsToBePlacedFrom(
       final Territory producer,
       final Collection<Unit> units,
       final Territory to,
