@@ -722,7 +722,7 @@ public abstract class AbstractPlaceDelegate extends BaseTripleADelegate
     // Flames and Steel: a territory places its own free conscripts without a factory
     if (producer.equals(to)
         && !testUnits.isEmpty()
-        && testUnits.stream().allMatch(FreeConscripts::isConscript)
+        && testUnits.stream().anyMatch(FreeConscripts::isConscript)
         && freeConscriptsLeft(to, player) > 0) {
       return Optional.empty();
     }

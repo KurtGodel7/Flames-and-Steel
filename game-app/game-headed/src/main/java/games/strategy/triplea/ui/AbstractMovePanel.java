@@ -122,7 +122,11 @@ public abstract class AbstractMovePanel extends ActionPanel {
     undoableMoves = getMoveDelegate().getMovesMade();
     this.undoableMovesPanel.setMoves(new ArrayList<>(undoableMoves));
     undoAllButton.setEnabled(!undoableMoves.isEmpty());
+    movesUpdated();
   }
+
+  /** Called after the list of moves made this step changed (a move, an undo). */
+  protected void movesUpdated() {}
 
   protected final void cancelMove() {
     cancelMoveAction();

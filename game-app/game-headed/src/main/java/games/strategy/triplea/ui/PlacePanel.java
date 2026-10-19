@@ -367,6 +367,12 @@ class PlacePanel extends AbstractMovePanel implements GameDataChangeListener {
 
   // ---- Flames and Steel request 10: free conscripts (China)
 
+  @Override
+  protected void movesUpdated() {
+    // request 11 item 2: the counter and highlights follow every placement and undo
+    refreshFreeConscripts();
+  }
+
   /** Territories where the player may still place free conscripts, and how many. */
   private Map<Territory, Integer> freeConscriptSpots() {
     final GamePlayer player = getCurrentPlayer();

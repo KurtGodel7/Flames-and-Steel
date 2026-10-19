@@ -163,8 +163,8 @@ class Draft54Test {
   private PlaceDelegate startPlace(final GamePlayer player) {
     final IDelegateBridge bridge = newDelegateBridge(player);
     advanceToStep(bridge, player.getName().equals("Chinese") ? "chinesePlace" : "germanPlace");
-    final PlaceDelegate place = new PlaceDelegate();
-    place.initialize("place");
+    // the game's own place delegate, which undo looks up through the current step
+    final PlaceDelegate place = (PlaceDelegate) data.getDelegate("place");
     place.setDelegateBridgeAndPlayer(bridge);
     place.start();
     return place;
@@ -200,6 +200,40 @@ class Draft54Test {
     assertThat(place.placeUnits(conscripts.subList(0, 2), t).isEmpty(), is(true));
     // the allowance is used up
     assertThat(place.placeUnits(conscripts.subList(2, 3), t).isPresent(), is(true));
+    place.end();
+  }
+
+  @Test
+  void freeConscriptsMayBePlacedBeforeTheFactoryUnits() {
+    // request 11 item 2: China still holds infantry when it places conscripts without a factory
+    final GamePlayer chinese = data.getPlayerList().getPlayerId("Chinese");
+    final var place = startPlace(chinese);
+    final var t = ownedWithoutFactory(chinese);
+    final var conscripts = hold(chinese, "conscript", 2);
+    hold(chinese, "infantry", 5);
+    final var offered = place.getPlaceableUnits(chinese.getUnits(), t);
+    assertThat(offered.isError(), is(false));
+    assertThat(offered.getUnits().stream().allMatch(FreeConscripts::isConscript), is(true));
+    assertThat(offered.getMaxUnits(), is(2));
+    assertThat(place.placeUnits(conscripts, t).orElse(""), is(""));
+    place.end();
+  }
+
+  @Test
+  void inAFactoryTerritoryTheOrderOfPlacingNeverLosesCapacity() {
+    final GamePlayer chinese = data.getPlayerList().getPlayerId("Chinese");
+    final var place = startPlace(chinese);
+    final var chungking = data.getMap().getTerritoryOrThrow("Chungking");
+    final var infantry = hold(chinese, "infantry", 20);
+    final int capacity = place.getPlaceableUnits(infantry, chungking).getMaxUnits();
+    final var conscripts = hold(chinese, "conscript", 2);
+    // conscripts first, then the factory's full capacity in infantry
+    assertThat(place.placeUnits(conscripts, chungking).orElse(""), is(""));
+    assertThat(place.getPlaceableUnits(infantry, chungking).getMaxUnits(), is(capacity));
+    assertThat(place.placeUnits(infantry.subList(0, capacity), chungking).orElse(""), is(""));
+    // undo the conscripts: they can go back in, still free
+    assertThat(place.undoMove(0), is((String) null));
+    assertThat(place.getPlaceableUnits(conscripts, chungking).getMaxUnits(), is(2));
     place.end();
   }
 
