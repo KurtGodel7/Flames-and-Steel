@@ -31,6 +31,8 @@ final class BattleModel extends DefaultTableModel {
   private final GameData gameData;
   // is the player the aggressor?
   private final BattleState.Side side;
+  // Flames and Steel (request 14): changed on the Swing thread, read from the game thread too (the
+  // retreat summary); a copy-on-write list can be read from any thread while it changes
   private final Collection<Unit> units;
   private final IBattle.BattleType battleType;
   private final Collection<TerritoryEffect> territoryEffects;
@@ -41,7 +43,7 @@ final class BattleModel extends DefaultTableModel {
   private List<Unit> airBattleEnemies;
   private BattleModel enemyBattleModel = null;
   // Flames and Steel: the side's total power at the last refresh, for "about 1.3 hits a round"
-  private int lastTotalPower;
+  private volatile int lastTotalPower;
 
   /** "British: 2 battleships 3/5, 5/5; 8 HP left; about 1.3 hits a round". */
   String summary(final GamePlayer player) {
@@ -61,7 +63,7 @@ final class BattleModel extends DefaultTableModel {
     gameData = data;
     this.side = side;
     // were going to modify the units
-    this.units = new ArrayList<>(units);
+    this.units = new java.util.concurrent.CopyOnWriteArrayList<>(units);
     this.battleType = battleType;
     this.territoryEffects = territoryEffects;
     this.location = location;

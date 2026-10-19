@@ -361,7 +361,23 @@ public class BattleDisplay extends JPanel {
     attackerModel.notifyRetreat(retreating);
   }
 
-  /** Flames and Steel (request 11 item 1): both sides' state, shown before the retreat question. */
+  /**
+   * Flames and Steel (request 11 item 1): both sides' state, shown before the retreat question.
+   * Built on the Swing thread, which is the one that changes the battle models (request 14: reading
+   * them from the game thread crashed the game). If it fails anyway, the question is asked without
+   * it: the summary must never stop a battle.
+   */
+  private String safeSidesSummary() {
+    try {
+      return Interruptibles.awaitResult(() -> SwingAction.invokeAndWaitResult(this::sidesSummary))
+          .result
+          .orElse("");
+    } catch (final RuntimeException e) {
+      log.error("Could not build the battle summary for the retreat question", e);
+      return "";
+    }
+  }
+
   private String sidesSummary() {
     return "<br><br>"
         + attackerModel.summary(attacker)
@@ -376,7 +392,7 @@ public class BattleDisplay extends JPanel {
       final String plainMessage, final Collection<Territory> possible, final boolean submerge) {
     Util.ensureNotOnEventDispatchThread();
     final String message =
-        "<html>" + plainMessage.replace("\n", "<br>") + sidesSummary() + "</html>";
+        "<html>" + plainMessage.replace("\n", "<br>") + safeSidesSummary() + "</html>";
     final String title;
     final Supplier<RetreatResult> supplier;
     if (!submerge || possible.size() > 1) {
