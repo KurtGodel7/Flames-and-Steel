@@ -350,7 +350,12 @@ public class Apcs {
     final CompositeChange change = new CompositeChange();
     final List<String> lines = new ArrayList<>();
     if (incomePerApc > 0) {
-      final int income = incomePerApc * apcs.size();
+      final int full = incomePerApc * apcs.size();
+      // request 19: a mobilizing nation gets only this round's share of its PU bonuses too
+      final int percent =
+          games.strategy.triplea.delegate.Mobilization.percent(
+              player, bridge.getData().getSequence().getRound());
+      final int income = games.strategy.triplea.delegate.Mobilization.scale(full, percent);
       change.add(
           ChangeFactory.changeResourcesChange(
               player,
@@ -363,7 +368,8 @@ public class Apcs {
               + MyFormatter.pluralize(" PU", income)
               + " from "
               + apcs.size()
-              + " SPC(s)");
+              + " SPC(s)"
+              + (income != full ? " (mobilization " + percent + "% of " + full + ")" : ""));
     }
     for (final UnitType type : freePerApc.keySet()) {
       final Optional<String> tech =

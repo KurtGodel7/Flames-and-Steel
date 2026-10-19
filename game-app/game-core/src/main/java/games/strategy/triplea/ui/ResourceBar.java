@@ -9,6 +9,7 @@ import games.strategy.engine.stats.IStat;
 import games.strategy.engine.stats.ResourceStat;
 import games.strategy.triplea.Constants;
 import games.strategy.triplea.delegate.AbstractEndTurnDelegate;
+import games.strategy.triplea.delegate.Mobilization;
 import games.strategy.triplea.delegate.Peacetime;
 import java.awt.GridBagLayout;
 import java.util.ArrayList;
@@ -72,6 +73,10 @@ public class ResourceBar extends JPanel implements GameDataChangeListener {
               final IntegerMap<Resource> resourceIncomes;
               final String peace;
               final int bombed;
+              final int mobilizationPercent;
+              final int fullPuIncome;
+              final String mobilization;
+              final String mobilizationSchedule;
               try (GameData.Unlocker ignored = gameData.acquireReadLock()) {
                 player = gameData.getSequence().getStep().getPlayerId();
                 if (player == null) {
@@ -79,6 +84,17 @@ public class ResourceBar extends JPanel implements GameDataChangeListener {
                 }
                 resourceIncomes = AbstractEndTurnDelegate.findEstimatedIncome(player, gameData);
                 bombed = player.getTechAttachment().getBombedThisRound();
+                // Flames and Steel (request 19): the share of full PU income collected this round
+                final int round = gameData.getSequence().getRound();
+                mobilizationPercent = Mobilization.percent(player, round);
+                fullPuIncome =
+                    mobilizationPercent < 100
+                        ? AbstractEndTurnDelegate.findEstimatedIncomeBeforeMobilization(
+                                player, gameData)
+                            .getInt(gameData.getResourceList().getResourceOrThrow(Constants.PUS))
+                        : 0;
+                mobilization = Mobilization.statusText(player, round).orElse(null);
+                mobilizationSchedule = Mobilization.scheduleText(player);
                 // Flames and Steel: say so when the nation is at peace on fixed income
                 peace =
                     Peacetime.isAtPeace(player)
@@ -104,7 +120,16 @@ public class ResourceBar extends JPanel implements GameDataChangeListener {
                           resourceStat.getValue(player, gameData, uiContext.getMapData());
                       final int income = resourceIncomes.getInt(resource);
                       final var text = new StringBuilder(IStat.DECIMAL_FORMAT.format(quantity));
-                      text.append(" (").append(income >= 0 ? "+" : "").append(income).append(")");
+                      text.append(" (").append(income >= 0 ? "+" : "").append(income);
+                      // request 19: "+136 (60% of 227)" while mobilizing
+                      if (mobilizationPercent < 100 && resource.getName().equals(Constants.PUS)) {
+                        text.append(" (")
+                            .append(mobilizationPercent)
+                            .append("% of ")
+                            .append(fullPuIncome)
+                            .append(')');
+                      }
+                      text.append(")");
                       // Flames and Steel (request 15): PUs lost to this round's bombing raids
                       if (bombed > 0 && resource.getName().equals(Constants.PUS)) {
                         text.append(" (−").append(bombed).append(" from bombing this round)");
@@ -112,6 +137,12 @@ public class ResourceBar extends JPanel implements GameDataChangeListener {
                       final JLabel label =
                           uiContext.getResourceImageFactory().getLabel(resource, text.toString());
                       label.setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 6));
+                      add(label, new GridBagConstraintsBuilder(count++, 0).weightY(1).build());
+                    }
+                    if (mobilization != null) {
+                      final JLabel label = new JLabel(mobilization);
+                      label.setToolTipText("Mobilization: " + mobilizationSchedule);
+                      label.setBorder(BorderFactory.createEmptyBorder(0, 12, 0, 6));
                       add(label, new GridBagConstraintsBuilder(count++, 0).weightY(1).build());
                     }
                     if (peace != null) {

@@ -64,6 +64,19 @@ public abstract class AbstractEndTurnDelegate extends BaseTripleADelegate
    */
   public static IntegerMap<Resource> findEstimatedIncome(
       final GamePlayer player, final GameData data) {
+    final IntegerMap<Resource> resources = findEstimatedIncomeBeforeMobilization(player, data);
+    // Flames and Steel (request 19): a mobilizing nation collects only this round's share of PUs
+    final int percent = Mobilization.percent(player, data.getSequence().getRound());
+    if (percent < 100) {
+      final Resource pus = data.getResourceList().getResourceOrThrow(Constants.PUS);
+      resources.put(pus, Mobilization.scale(resources.getInt(pus), percent));
+    }
+    return resources;
+  }
+
+  /** As {@link #findEstimatedIncome}, but the full income a mobilizing nation is scaled from. */
+  public static IntegerMap<Resource> findEstimatedIncomeBeforeMobilization(
+      final GamePlayer player, final GameData data) {
     final IntegerMap<Resource> resources = new IntegerMap<>();
 
     // Only add territory resources if endTurn not endTurnNoPU
@@ -238,6 +251,7 @@ public abstract class AbstractEndTurnDelegate extends BaseTripleADelegate
         bridge.addChange(upkeep);
       }
     }
+    endTurnReport.append(mobilizationIncome(leftOverResources));
     endTurnReport.append(peacetimeIncome(leftOverResources));
     endTurnReport.append(Munitions.convert(bridge, player));
     endTurnReport.append(AlliedUnitSale.sellAlliedUnits(bridge, player));
@@ -483,6 +497,41 @@ public abstract class AbstractEndTurnDelegate extends BaseTripleADelegate
         }
       }
     }
+  }
+
+  /**
+   * Flames and Steel (request 19): a mobilizing nation (see {@link Mobilization}) keeps only its
+   * round's share of every PU this step gave it (territories, war bonds, triggers, bonuses),
+   * rounded down. Manpower is not touched.
+   */
+  private String mobilizationIncome(final IntegerMap<Resource> before) {
+    final int percent = Mobilization.percent(player, getData().getSequence().getRound());
+    if (percent >= 100) {
+      return "";
+    }
+    final Resource pus = getData().getResourceList().getResourceOrThrow(Constants.PUS);
+    final int gained = player.getResources().getQuantity(pus) - before.getInt(pus);
+    if (gained <= 0) {
+      return "";
+    }
+    final int kept = Mobilization.scale(gained, percent);
+    if (kept != gained) {
+      bridge.addChange(ChangeFactory.changeResourcesChange(player, pus, kept - gained));
+    }
+    final int total = player.getResources().getQuantity(pus);
+    final String message =
+        player.getName()
+            + " collect "
+            + kept
+            + " PUs (mobilization "
+            + percent
+            + "% of "
+            + gained
+            + "); end with "
+            + total
+            + " PUs";
+    bridge.getHistoryWriter().startEvent(message);
+    return "<br />" + message + "<br />";
   }
 
   /**
