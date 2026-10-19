@@ -186,10 +186,13 @@ public final class ResearchScreen extends JDialog {
   public void setGameData(final GameData newData) {
     data = newData;
     listen();
-    if (view != null) {
+    // request 18: switching to or from the history view only redraws an open screen; it never
+    // opens the screen (that looked as if the game had gone back to the research step)
+    if (view != null && isVisible()) {
       final GamePlayer same = data.getPlayerList().getPlayerId(view.player().getName());
       if (same != null) {
-        showNation(same);
+        fillNations(same);
+        showView(same);
       }
     }
   }

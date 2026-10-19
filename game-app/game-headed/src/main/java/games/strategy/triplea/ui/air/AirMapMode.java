@@ -385,12 +385,21 @@ public final class AirMapMode implements MapOverlay {
     }
   }
 
-  private static boolean isAirStep(final @Nullable GameStep step) {
+  // the map XML's names for the air allocation and air combat delegates
+  private static final Set<String> AIR_DELEGATE_NAMES =
+      java.util.Set.of("airAllocation", "airCombat");
+
+  static boolean isAirStep(final @Nullable GameStep step) {
     if (step == null) {
       return false;
     }
-    final IDelegate delegate = step.getDelegate();
-    return delegate instanceof AirAllocationDelegate || delegate instanceof AirCombatDelegate;
+    // request 18: the history view's copy of the game data has no delegates, so never fetch one
+    // that may be missing; go by the delegate's name there
+    final IDelegate delegate = step.getDelegateOptional().orElse(null);
+    if (delegate != null) {
+      return delegate instanceof AirAllocationDelegate || delegate instanceof AirCombatDelegate;
+    }
+    return AIR_DELEGATE_NAMES.contains(step.getDelegateName());
   }
 
   /** An air panel with a selection writes its own status; hover reports wait meanwhile. */

@@ -541,6 +541,31 @@ public class AirCombat {
     return type.getName().replaceAll("(?<=[a-z0-9])(?=[A-Z])", " ").toLowerCase(Locale.ROOT);
   }
 
+  /**
+   * One side of an air battle for the history (request 18): "Germans 3 fighters; Italians 1 fighter
+   * (1 damaged)", or "none".
+   */
+  public static String sideText(final Collection<Unit> units) {
+    if (units.isEmpty()) {
+      return "none";
+    }
+    final Map<GamePlayer, List<Unit>> byOwner =
+        units.stream()
+            .collect(
+                Collectors.groupingBy(
+                    Unit::getOwner, java.util.LinkedHashMap::new, Collectors.toList()));
+    return byOwner.entrySet().stream()
+        .map(
+            e -> {
+              final long damaged = e.getValue().stream().filter(u -> u.getHits() > 0).count();
+              return e.getKey().getName()
+                  + " "
+                  + MyFormatter.unitsToTextNoOwner(e.getValue())
+                  + (damaged > 0 ? " (" + damaged + " damaged)" : "");
+            })
+        .collect(Collectors.joining("; "));
+  }
+
   /** "German" for the Germans, "British" for the British. */
   public static String adjective(final GamePlayer player) {
     final String name = player.getName();

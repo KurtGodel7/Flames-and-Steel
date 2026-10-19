@@ -2128,22 +2128,32 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
     bottomBar.setGameDataForCurrentTerritory(newGameData);
     if (!TechAdvance.getTechAdvances(newGameData.getTechnologyFrontier(), null).isEmpty()) {
       technologyPanel.setGameData(newGameData);
-      researchPanel.setGameData(newGameData);
+      // Flames and Steel (request 18): a fork panel that fails to switch is logged and skipped,
+      // so the frame is never left half in the history view
+      switchSafely("research panel", () -> researchPanel.setGameData(newGameData));
       if (researchScreen != null) {
-        researchScreen.setGameData(newGameData);
+        switchSafely("research screen", () -> researchScreen.setGameData(newGameData));
       }
     }
     statsPanel.setGameData(newGameData);
     if (airZoneOverlay != null) {
-      airZoneOverlay.setGameData(newGameData);
-      airMapMode.setGameData(newGameData);
-      airPanel.setGameData(newGameData);
+      switchSafely("air front boxes", () -> airZoneOverlay.setGameData(newGameData));
+      switchSafely("air map mode", () -> airMapMode.setGameData(newGameData));
+      switchSafely("air tab", () -> airPanel.setGameData(newGameData));
     }
     economyPanel.setGameData(newGameData);
     if (objectivePanel != null) {
       objectivePanel.setGameData(newGameData);
     }
     territoryDetailPanel.setGameData(newGameData);
+  }
+
+  private static void switchSafely(final String what, final Runnable switchData) {
+    try {
+      switchData.run();
+    } catch (final RuntimeException e) {
+      log.error("Could not show the " + what + " for this game data; it may be out of date", e);
+    }
   }
 
   @Nonnull

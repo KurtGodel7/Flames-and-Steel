@@ -195,6 +195,17 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
             steps);
     currentView = view;
     bridge.getHistoryWriter().startEvent("Dogfight in " + zone.getName());
+    // request 18: who fought, readable later in the history
+    final List<Unit> everyone = new ArrayList<>(sideA);
+    everyone.addAll(sideB);
+    bridge
+        .getHistoryWriter()
+        .addChildToEvent(
+            "Aircraft at the start: "
+                + AirCombat.sideText(sideA)
+                + " against "
+                + AirCombat.sideText(sideB),
+            everyone);
     for (int round = 1; round <= DOGFIGHT_ROUNDS; round++) {
       final List<Unit> aliveA = alive(zone, sideA);
       final List<Unit> aliveB = alive(zone, sideB);
@@ -214,6 +225,14 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
       AirCombat.takeHits(
           bridge, view, casualtyStep(playerA, round), zone, aliveA, aliveB, rollB, diceB, text);
     }
+    final List<Unit> lost =
+        everyone.stream().filter(u -> !zone.getUnitCollection().contains(u)).toList();
+    final List<Unit> left =
+        everyone.stream().filter(u -> zone.getUnitCollection().contains(u)).toList();
+    bridge
+        .getHistoryWriter()
+        .addChildToEvent(
+            "Result: lost " + AirCombat.sideText(lost) + "; left " + AirCombat.sideText(left));
     view.end(
         playerA.getName()
             + " lost "
@@ -377,6 +396,18 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
         AirBattleView.show(
             bridge, t, title, strike.survivors(), defenders, attacker, defender, steps);
     currentView = view;
+    // request 18: who took part, readable later in the history
+    final List<Unit> involved = new ArrayList<>(strike.survivors());
+    involved.addAll(defenders);
+    bridge
+        .getHistoryWriter()
+        .addChildToEvent(
+            title
+                + ": "
+                + AirCombat.sideText(strike.survivors())
+                + " against "
+                + (defenders.isEmpty() ? "no units" : AirCombat.sideText(defenders)),
+            involved);
 
     // 1. AA guns fire first
     if (!aaGuns.isEmpty()) {
@@ -387,11 +418,14 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
           bridge, view, aaCasualties, strike.zone(), strike.survivors(), aaGuns, roll, dice, text);
     }
     if (strike.survivors().isEmpty()) {
+      strikeResult(title, strike, "all attacking aircraft lost to AA");
       view.end("All attacking aircraft lost");
       return;
     }
     if (kind == TargetKind.STRATEGIC) {
-      view.end(strategicBombing(strike, bombed, targets, view, strikeStep));
+      final String result = strategicBombing(strike, bombed, targets, view, strikeStep);
+      strikeResult(title, strike, result);
+      view.end(result);
       return;
     }
     // 2. the strike
@@ -431,12 +465,30 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
       }
     }
     final int lost = strike.aircraft().size() - strike.survivors().size();
-    view.end(
+    final String result =
         hit.killed().size()
             + " destroyed, "
             + hit.damaged().size()
             + " damaged"
-            + (lost > 0 ? "; " + lost + " aircraft lost" : ""));
+            + (lost > 0 ? "; " + lost + " aircraft lost" : "");
+    strikeResult(title, strike, result);
+    view.end(result);
+  }
+
+  /** The strike's last history line: its result, the aircraft lost and those left. */
+  private void strikeResult(final String title, final Strike strike, final String result) {
+    final List<Unit> lost =
+        strike.aircraft().stream().filter(u -> !strike.survivors().contains(u)).toList();
+    bridge
+        .getHistoryWriter()
+        .addChildToEvent(
+            title
+                + " result: "
+                + result
+                + "; aircraft lost "
+                + AirCombat.sideText(lost)
+                + "; left "
+                + AirCombat.sideText(strike.survivors()));
   }
 
   /** One strategic bombing raid's result, for the air phase summary. */
