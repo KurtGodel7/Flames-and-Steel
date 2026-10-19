@@ -79,6 +79,8 @@ public final class AirTargetPanel extends ActionPanel {
   private Map<Target, Boolean> targets = Map.of();
 
   private boolean listening;
+  // Flames and Steel (request 16): after Done the strikes are the game's; the panel only shows them
+  private boolean finished;
   // what the mouse points at, for the strike preview
   private @Nullable Territory hoverPlace;
   private @Nullable Point mousePoint;
@@ -122,6 +124,7 @@ public final class AirTargetPanel extends ActionPanel {
       final Consumer<List<TargetAssignment>> store) {
     SwingUtilities.invokeLater(
         () -> {
+          finished = false;
           staged.clear();
           staged.addAll(start);
           this.store = store;
@@ -162,8 +165,14 @@ public final class AirTargetPanel extends ActionPanel {
   /** Blocks until Done; returns the strikes. */
   public List<TargetAssignment> waitForTargets() {
     waitForRelease();
-    SwingUtilities.invokeLater(this::stopListening);
-    return List.copyOf(staged);
+    final List<TargetAssignment> result = List.copyOf(staged);
+    SwingUtilities.invokeLater(
+        () -> {
+          finished = true;
+          stopListening();
+          rebuild(getCurrentPlayer());
+        });
+    return result;
   }
 
   private void stopListening() {
@@ -601,6 +610,9 @@ public final class AirTargetPanel extends ActionPanel {
   }
 
   private void strikesChanged() {
+    if (finished) {
+      return;
+    }
     showAssigned();
     final List<TargetAssignment> snapshot = List.copyOf(staged);
     storeExecutor.execute(() -> store.accept(snapshot));
@@ -621,6 +633,17 @@ public final class AirTargetPanel extends ActionPanel {
                 + " all picked bombers can reach light up on the map and are listed here;"
                 + " click one to attack it."));
     add(leftAligned(actionLabel));
+    if (finished) {
+      // read only: the strikes are chosen and resolve once every nation has chosen
+      actionLabel.setText(player.getName() + " bomber targets: done");
+      add(leftAligned(new JLabel(staged.isEmpty() ? "No strikes." : "Strikes:")));
+      for (final TargetAssignment a : List.copyOf(staged)) {
+        add(leftAligned(new JLabel(describe(a), icon(player, a.unitType()), JLabel.LEFT)));
+      }
+      add(Box.createVerticalGlue());
+      refresh.run();
+      return;
+    }
 
     if (selectedZone != null) {
       add(leftAligned(new JLabel("Bombers in " + AirAllocation.zoneName(selectedZone) + ":")));
@@ -641,15 +664,7 @@ public final class AirTargetPanel extends ActionPanel {
     for (final TargetAssignment a : List.copyOf(staged)) {
       final JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
       row.add(new JLabel(icon(player, a.unitType())));
-      row.add(
-          new JLabel(
-              a.count()
-                  + " "
-                  + ResearchView.displayName(a.unitType().getName())
-                  + " from "
-                  + AirAllocation.zoneName(a.zone())
-                  + " → "
-                  + a.target().describe()));
+      row.add(new JLabel(describe(a)));
       final JButton undo = smallButton("Undo");
       undo.addActionListener(
           e -> {
@@ -677,6 +692,17 @@ public final class AirTargetPanel extends ActionPanel {
     add(leftAligned(buttons));
     add(Box.createVerticalGlue());
     refresh.run();
+  }
+
+  /** "1 Torpedo Bomber from Mediterranean → Tobruk". */
+  private static String describe(final TargetAssignment a) {
+    return a.count()
+        + " "
+        + ResearchView.displayName(a.unitType().getName())
+        + " from "
+        + AirAllocation.zoneName(a.zone())
+        + " → "
+        + a.target().describe();
   }
 
   /** The reach of each picked type, "only" buttons for mixed picks, and the targets in reach. */

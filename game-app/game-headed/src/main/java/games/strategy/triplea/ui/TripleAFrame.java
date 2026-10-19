@@ -1751,6 +1751,21 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
     return panel.waitForTargets();
   }
 
+  /**
+   * Flames and Steel (request 16): for a step played in its own window, the Actions tab says so
+   * instead of keeping the last step's panel.
+   */
+  public void showStepInfo(final GamePlayer gamePlayer, final String detail) {
+    if (actionButtonsPanel == null) {
+      return;
+    }
+    final String step;
+    try (GameData.Unlocker ignored = data.acquireReadLock()) {
+      step = data.getSequence().getStep().getDisplayName();
+    }
+    actionButtonsPanel.changeToStepInfo(gamePlayer, step, detail);
+  }
+
   /** Flames and Steel: asks what each of the nation's APCs builds. */
   public Map<Unit, UnitType> getApcProduction(final GamePlayer gamePlayer) {
     messageAndDialogThreadPool.waitForAll();
@@ -1929,6 +1944,15 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
           bottomBar.updateFromCurrentPlayer();
         });
     bottomBar.gameDataChanged();
+    // Flames and Steel (request 16): a step no local player plays gets no panel from a player, so
+    // the last step's panel (e.g. Italy's bomber targets) must not stay in the Actions tab
+    if (actionButtonsPanel != null
+        && (player == null || player.isNull() || uiContext.isCurrentPlayerRemote())) {
+      actionButtonsPanel.changeToStepInfo(
+          player,
+          stepDisplayName,
+          player == null || player.isNull() ? "" : "Waiting for " + player.getName() + ".");
+    }
     // if the game control has passed to someone else and we are not just showing the map, show the
     // history
     if (player != null && !player.isNull()) {

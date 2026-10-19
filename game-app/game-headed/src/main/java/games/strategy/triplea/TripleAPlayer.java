@@ -212,6 +212,9 @@ public class TripleAPlayer extends AbstractBasePlayer {
       soundPlayedAlreadyPlacement = false;
     } else {
       badStep = !GameStep.isTechActivationStepName(name);
+      if (!badStep) {
+        ui.showStepInfo(getGamePlayer(), "");
+      }
     }
     disableEditModeMenu();
     if (badStep) {
@@ -318,6 +321,7 @@ public class TripleAPlayer extends AbstractBasePlayer {
       return;
     }
     final IApcDelegate apcDelegate = (IApcDelegate) getPlayerBridge().getRemoteDelegate();
+    ui.showStepInfo(getGamePlayer(), "Choose in the APC window.");
     while (!getPlayerBridge().isGameOver()) {
       final String error = apcDelegate.setProduction(ui.getApcProduction(getGamePlayer()));
       if (error == null) {
@@ -399,6 +403,7 @@ public class TripleAPlayer extends AbstractBasePlayer {
       playSound(SoundPath.CLIP_PHASE_TECHNOLOGY);
       soundPlayedAlreadyTechnology = true;
     }
+    ui.showStepInfo(getGamePlayer(), "Choose in the research window.");
     while (!getPlayerBridge().isGameOver()) {
       final Optional<ResearchScreen.Choice> choice = ui.getResearchChoice(getGamePlayer());
       if (choice.isEmpty()) {

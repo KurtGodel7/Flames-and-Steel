@@ -66,8 +66,9 @@ public class ActionButtonsPanel extends JPanel {
   private @Nullable PickTerritoryAndUnitsPanel pickTerritoryAndUnitsPanel;
   @Getter private @Nullable AirAllocationPanel airAllocationPanel;
   @Getter private @Nullable AirTargetPanel airTargetPanel;
+  private @Nullable StepInfoPanel stepInfoPanel;
 
-  private @Nullable ActionPanel actionPanel;
+  @Getter private @Nullable ActionPanel actionPanel;
 
   public ActionButtonsPanel(final @Nonnull MovePanel movePanel, final TripleAFrame frame) {
     registerKeyBindings(frame);
@@ -86,6 +87,7 @@ public class ActionButtonsPanel extends JPanel {
     pickTerritoryAndUnitsPanel = new PickTerritoryAndUnitsPanel(frame);
     airAllocationPanel = new AirAllocationPanel(frame);
     airTargetPanel = new AirTargetPanel(frame);
+    stepInfoPanel = new StepInfoPanel(gameData, mapPanel);
     actionPanel = techPanel;
     setLayout(layout);
     add(new JLabel(""), "");
@@ -102,6 +104,7 @@ public class ActionButtonsPanel extends JPanel {
     add(pickTerritoryAndUnitsPanel, pickTerritoryAndUnitsPanel.toString());
     add(airAllocationPanel, airAllocationPanel.toString());
     add(airTargetPanel, airTargetPanel.toString());
+    add(stepInfoPanel, stepInfoPanel.toString());
     // this should not be necessary, but it makes tracking down garbage leaks easier in the profiler
     // since it removes a lot of links between objects and if there is a memory leak, this will
     // minimize the damage
@@ -135,6 +138,7 @@ public class ActionButtonsPanel extends JPanel {
               pickTerritoryAndUnitsPanel = null;
               airAllocationPanel = null;
               airTargetPanel = null;
+              stepInfoPanel = null;
             });
   }
 
@@ -206,6 +210,19 @@ public class ActionButtonsPanel extends JPanel {
   /** Flames and Steel: shows the air allocation panel. */
   public void changeToAirAllocation(final GamePlayer gamePlayer) {
     changeTo(gamePlayer, airAllocationPanel);
+  }
+
+  /**
+   * Flames and Steel (request 16): replaces the last step's panel with a plain line saying what
+   * step the game is in, for steps that have no panel of their own.
+   */
+  public void changeToStepInfo(
+      final @Nullable GamePlayer gamePlayer, final String step, final String detail) {
+    if (stepInfoPanel == null) {
+      return;
+    }
+    stepInfoPanel.setStep(gamePlayer, step, detail);
+    changeTo(gamePlayer, stepInfoPanel);
   }
 
   /** Flames and Steel: shows the bomber target panel. */
