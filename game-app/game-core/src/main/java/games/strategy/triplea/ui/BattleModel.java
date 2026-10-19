@@ -34,6 +34,13 @@ final class BattleModel extends DefaultTableModel {
   private final IBattle.BattleType battleType;
   private final Collection<TerritoryEffect> territoryEffects;
   private BattleModel enemyBattleModel = null;
+  // Flames and Steel: the side's total power at the last refresh, for "about 1.3 hits a round"
+  private int lastTotalPower;
+
+  /** "British: 2 battleships 3/5, 5/5; 8 HP left; about 1.3 hits a round". */
+  String summary(final GamePlayer player) {
+    return BattleDamageText.sideSummary(player, units, lastTotalPower, gameData.getDiceSides());
+  }
 
   BattleModel(
       final Collection<Unit> units,
@@ -131,6 +138,7 @@ final class BattleModel extends DefaultTableModel {
                 .build();
       }
       unitPowerAndRollsMap = PowerStrengthAndRolls.build(units, combatValue);
+      lastTotalPower = unitPowerAndRollsMap.calculateTotalPower();
       final List<Unit> enemies =
           enemyBattleModel == null ? List.of() : new ArrayList<>(enemyBattleModel.getUnits());
       airZoneStrength =
@@ -225,7 +233,11 @@ final class BattleModel extends DefaultTableModel {
         stamp.setIcon(null);
         stamp.setToolTipText(null);
       } else {
-        stamp.setText("x" + count);
+        // Flames and Steel: multi-hit units say what they have left, e.g. "x1  3/5"
+        stamp.setText(
+            "x"
+                + count
+                + (hitPoints > 1 ? "  " + Math.max(0, hitPoints - hits) + "/" + hitPoints : ""));
         stamp.setIcon(icon);
         MapUnitTooltipManager.setUnitTooltip(
             stamp, unitType, player, count, hits, hitPoints, uiContext);

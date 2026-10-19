@@ -160,7 +160,12 @@ public final class MapUnitTooltipManager implements ActionListener {
             StringUtils.capitalize(UnitNames.of(unitType)),
             player.getName(),
             HitPointBar.hasBar(hitPoints)
-                ? " — " + Math.max(0, hitPoints - hits) + "/" + hitPoints + " HP"
+                ? " — "
+                    + Math.max(0, hitPoints - hits)
+                    + "/"
+                    + hitPoints
+                    + " HP"
+                    + (hits > 0 ? " (heals at end of round)" : "")
                 : "");
     return firstLine + uiContext.getTooltipProperties().getTooltip(unitType, player);
   }

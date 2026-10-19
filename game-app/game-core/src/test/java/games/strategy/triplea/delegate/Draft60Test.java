@@ -235,6 +235,24 @@ class Draft60Test {
     assertThat(batavia.getOwner().getName(), is("Dutch"));
   }
 
+  // --- request 11 item 1: battle damage in words
+
+  @Test
+  void battleDamageIsDescribedForEachHitAndEachSide() {
+    final GamePlayer british = player("British");
+    final var battleships = type("battleship").create(2, british);
+    battleships.get(0).setHits(2);
+    final var cruiser = type("cruiser").create(1, player("Italians"));
+    final var lines =
+        games.strategy.triplea.ui.BattleDamageText.hitLines(
+            cruiser, List.of(battleships.get(0), battleships.get(0)));
+    assertThat(
+        lines, is(List.of("British battleship took 2 hits: 3 of 5 left", "Italian cruiser sunk")));
+    final String summary =
+        games.strategy.triplea.ui.BattleDamageText.sideSummary(british, battleships, 8, 6);
+    assertThat(summary, is("British: 2 battleships 3/5, 5/5; 8 HP left; about 1.3 hits a round"));
+  }
+
   @Test
   void mapLoadsAndStartsWithTheDutch() {
     final InitializationDelegate init = new InitializationDelegate();

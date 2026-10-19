@@ -263,12 +263,20 @@ public class BattleDisplay extends JPanel {
     if (!isEditMode) {
       dicePanel.setDiceRoll(dice);
     }
+    // Flames and Steel: say what each hit did ("British battleship took 2 hits: 3 of 5 left")
+    final List<String> lines = BattleDamageText.hitLines(killed, new ArrayList<>(damaged));
     casualties.setNotification(killed, damaged, dependents);
+    casualties.setLines(lines);
     killed.addAll(updateKilledUnits(killed, player));
     if (player.equals(defender)) {
       defenderModel.removeCasualties(killed);
     } else {
       attackerModel.removeCasualties(killed);
+    }
+    // damaged units' bars and "3/5" change even when nothing died
+    if (!damaged.isEmpty()) {
+      defenderModel.refresh();
+      attackerModel.refresh();
     }
     casualties.setVisible(true);
   }
@@ -346,9 +354,22 @@ public class BattleDisplay extends JPanel {
     attackerModel.notifyRetreat(retreating);
   }
 
+  /** Flames and Steel (request 11 item 1): both sides' state, shown before the retreat question. */
+  private String sidesSummary() {
+    return "<br><br>"
+        + attackerModel.summary(attacker)
+        + "<br>"
+        + defenderModel.summary(defender)
+        + "<br><i>"
+        + BattleDamageText.HEALING
+        + "</i>";
+  }
+
   Optional<Territory> getRetreat(
-      final String message, final Collection<Territory> possible, final boolean submerge) {
+      final String plainMessage, final Collection<Territory> possible, final boolean submerge) {
     Util.ensureNotOnEventDispatchThread();
+    final String message =
+        "<html>" + plainMessage.replace("\n", "<br>") + sidesSummary() + "</html>";
     final String title;
     final Supplier<RetreatResult> supplier;
     if (!submerge || possible.size() > 1) {
@@ -735,11 +756,21 @@ public class BattleDisplay extends JPanel {
     private final JPanel damaged = new JPanel();
     private final UiContext uiContext;
 
+    // Flames and Steel: one line per unit hit
+    private final JLabel lines = new JLabel();
+
     CasualtyNotificationPanel(final UiContext uiContext) {
       this.uiContext = uiContext;
       setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
       add(killed);
       add(damaged);
+      lines.setAlignmentX(CENTER_ALIGNMENT);
+      add(lines);
+    }
+
+    void setLines(final List<String> text) {
+      lines.setText(text.isEmpty() ? "" : "<html>" + String.join("<br>", text) + "</html>");
+      lines.setVisible(!text.isEmpty());
     }
 
     void setNotification(
