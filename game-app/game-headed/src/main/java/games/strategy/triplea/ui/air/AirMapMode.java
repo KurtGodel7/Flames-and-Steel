@@ -83,6 +83,7 @@ public final class AirMapMode implements MapOverlay {
   private static final int ICONS_PER_ROW = 5;
   private static final Color CARRIER_ONLY = new Color(0xFF, 0xD0, 0x00);
   private static final Color UNASSIGNED = new Color(0xFF, 0x8C, 0x00);
+  private static final Color ASSIGNED = new Color(0x8C, 0xE0, 0x8C);
   private static final int FLAG_WIDTH = 18;
 
   /** A drawn aircraft stack (or a zone's name label) that can be clicked. */
@@ -521,6 +522,17 @@ public final class AirMapMode implements MapOverlay {
     return Optional.ofNullable(anchor.getOrDefault(zone, bombAnchor.get(zone)));
   }
 
+  /**
+   * Request 20: where to scroll to show a front's aircraft: its box, or for a docked box (which
+   * stays in view anyway) the front itself.
+   */
+  public Optional<Point> scrollTarget(final Territory zone) {
+    if (placer.isDocked(zone)) {
+      return Optional.ofNullable(anchor.getOrDefault(zone, bombAnchor.get(zone)));
+    }
+    return anchorOf(zone);
+  }
+
   /** The next free spot under a zone's stack for a pending (staged) icon, while painting. */
   public Optional<Point> takePendingSpot(final Territory zone, final int iconWidth) {
     final Point spot = pendingSpot.get(zone);
@@ -576,6 +588,7 @@ public final class AirMapMode implements MapOverlay {
     }
     boxStackRect.clear();
     pendingSpot.clear();
+    dockX = 0;
     panelRect.clear();
     panelTitle.clear();
     stackRect.clear();
@@ -780,6 +793,93 @@ public final class AirMapMode implements MapOverlay {
     return only != null && !item.owner().equals(only);
   }
 
+  // how far along the dock the next docked box goes, this paint
+  private int dockX;
+
+  /**
+   * Where a docked box goes this paint: left to right along the bottom of the visible map (the
+   * whole map when there is no map panel, as in previews).
+   */
+  private @Nullable Rectangle dockSpot(final int width, final int height) {
+    final Rectangle view;
+    if (mapPanel != null && mapPanel.getWidth() > 0) {
+      final double scale = mapPanel.getScale();
+      view =
+          new Rectangle(
+              mapPanel.getXOffset(),
+              mapPanel.getYOffset(),
+              (int) (mapPanel.getWidth() / scale),
+              (int) (mapPanel.getHeight() / scale));
+    } else {
+      final java.awt.Dimension size = uiContext.getMapData().getMapDimensions();
+      view = new Rectangle(0, 0, size.width, size.height);
+    }
+    final Rectangle r =
+        new Rectangle(view.x + 10 + dockX, view.y + view.height - height - 10, width, height);
+    dockX += width + 12;
+    return r;
+  }
+
+  /**
+   * The target step's label over a box with the acting nation's strike aircraft, and its hover
+   * text: "Choose targets: 2 groups waiting", "All assigned" or "Nothing in reach"; null when the
+   * nation has no strike aircraft there.
+   */
+  private @Nullable String[] targetStatus(final Territory zone, final List<List<Item>> groups) {
+    final GamePlayer player = actingPlayer;
+    if (player == null) {
+      return null;
+    }
+    final Set<UnitType> waiting = new LinkedHashSet<>();
+    final Set<UnitType> outOfReach = new LinkedHashSet<>();
+    for (final List<Item> group : groups) {
+      for (final Item item : group) {
+        if (!item.owner().equals(player) || item.units().isEmpty()) {
+          continue;
+        }
+        if (isSelectable(zone, item)) {
+          waiting.add(item.type());
+        } else if (AirCombat.isBomber(item.units().get(0))) {
+          outOfReach.add(item.type());
+        }
+      }
+    }
+    final String prefix = zone.getName() + "|" + player.getName() + "|";
+    final boolean assigned =
+        leaving.entrySet().stream()
+            .anyMatch(e -> e.getKey().startsWith(prefix) && e.getValue() > 0);
+    final String legend =
+        " Orange outline: strike aircraft still without a target. Grey: aircraft that cannot"
+            + " strike from here (fighters never strike; others have nothing in reach). Point at an"
+            + " icon for the reason.";
+    if (!waiting.isEmpty()) {
+      return new String[] {
+        "Choose targets: "
+            + waiting.size()
+            + (waiting.size() == 1 ? " group" : " groups")
+            + " waiting",
+        "These aircraft have targets in reach but none chosen yet: click them, or use the Actions"
+            + " panel."
+            + legend
+      };
+    }
+    if (assigned) {
+      return new String[] {
+        "All assigned", "Every strike aircraft here that can reach a target has one." + legend
+      };
+    }
+    if (!outOfReach.isEmpty()) {
+      return new String[] {
+        "Nothing in reach",
+        "No target is within reach of these strike aircraft from "
+            + AirAllocation.zoneName(zone)
+            + "."
+            + legend
+      };
+    }
+    return null;
+  }
+
   /** The target step's marker on bombers that have no target yet: an orange outline. */
   private boolean paintUnassigned(
       final Graphics2D g,
@@ -933,8 +1033,10 @@ public final class AirMapMode implements MapOverlay {
     final int height =
         titleHeight + rows * (h + 4 + AirDraw.hitBarRoom(images.getScaleFactor())) + 6;
     // request 9 item 4: placed clear of what the player acts on, or where the player dragged it
-    final Rectangle r =
-        BoxPlacer.box(placer.centreFor(zone, at, width, height, mapData, paintData), width, height);
+    final Point centre = placer.centreFor(zone, at, width, height, mapData, paintData);
+    // request 20: a front with no clear sea near it docks at the bottom of the visible map
+    final @Nullable Rectangle docked = placer.isDocked(zone) ? dockSpot(width, height) : null;
+    final Rectangle r = docked != null ? docked : BoxPlacer.box(centre, width, height);
     final @Nullable Point mouse = mouseMapPoint;
     final boolean mouseInside = mouse != null && r.contains(mouse);
     if (altHeld && !mouseInside) {
@@ -1008,8 +1110,17 @@ public final class AirMapMode implements MapOverlay {
     if (contested) {
       AirDraw.tag(g, "Dogfight", r.x + r.width / 2, r.y - 10, DOGFIGHT);
     }
-    if (unassigned) {
-      AirDraw.tag(g, "No target", r.x + r.width / 2, r.y - (contested ? 28 : 10), UNASSIGNED);
+    // request 20: in the target step, the box says what its strike aircraft are waiting for
+    final @Nullable String[] status = markUnassigned ? targetStatus(zone, groups) : null;
+    if (status != null) {
+      final int tagY = r.y - (contested ? 28 : 10);
+      final Color color =
+          unassigned ? UNASSIGNED : status[0].startsWith("All") ? ASSIGNED : Color.LIGHT_GRAY;
+      AirDraw.tag(g, status[0], r.x + r.width / 2, tagY, color);
+      final int tagWidth = g.getFontMetrics().stringWidth(status[0]) + 10;
+      record(
+          new Rectangle(r.x + r.width / 2 - tagWidth / 2, tagY - 9, tagWidth, 18),
+          new Hit(zone, List.of(), false, status[1]));
     }
     final ZoneType type = AirZoneAttachment.get(zone).orElseThrow().getZoneType();
     if (type == ZoneType.OCEAN) {

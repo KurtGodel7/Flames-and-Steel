@@ -404,6 +404,11 @@ public class MapPanel extends ImageScrollerLargeView {
     super.setTopLeft((int) (p.x - (getScaledWidth() / 2)), (int) (p.y - (getScaledHeight() / 2)));
   }
 
+  /** Flames and Steel (request 20): centres the view on a map point, e.g. an air front's box. */
+  public void centerOnPoint(final Point p) {
+    super.setTopLeft((int) (p.x - (getScaledWidth() / 2)), (int) (p.y - (getScaledHeight() / 2)));
+  }
+
   public void centerOn(final @Nullable Territory territory) {
     if (territory == null || ClientSetting.lockMap.getSetting()) {
       return;

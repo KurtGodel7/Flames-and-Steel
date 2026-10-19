@@ -146,8 +146,10 @@ public final class AirTargetPanel extends ActionPanel {
                             ? "Aircraft in the reserve do not fight."
                             : !AirCombat.isBomber(unit)
                                 ? ResearchView.displayName(unit.getType().getName())
-                                    + ": fighters do not strike targets."
-                                : "Nothing this aircraft may attack from "
+                                    + " (grey): fighters don't make strikes; they fight in the"
+                                    + " dogfight only."
+                                : AirRange.reachText(player, zone, unit.getType())
+                                    + " (grey): no targets in reach from "
                                     + AirAllocation.zoneName(zone)
                                     + ".");
             frame.getAirMapMode().setMarkUnassigned(true);
@@ -628,6 +630,7 @@ public final class AirTargetPanel extends ActionPanel {
       refresh.run();
       return;
     }
+    addOverview(player);
 
     if (selectedZone != null) {
       add(leftAligned(new JLabel("Bombers in " + AirAllocation.zoneName(selectedZone) + ":")));
@@ -676,6 +679,110 @@ public final class AirTargetPanel extends ActionPanel {
     add(leftAligned(buttons));
     add(Box.createVerticalGlue());
     refresh.run();
+  }
+
+  /**
+   * Request 20: the starting point of the step. Every front holding the nation's aircraft, with one
+   * line per type: how many targets are in reach and a button that picks the group, scrolls the map
+   * to its box and lights up its targets; or why it has nothing to do.
+   */
+  private void addOverview(final GamePlayer player) {
+    final List<JPanel> rows = new ArrayList<>();
+    try (GameData.Unlocker ignored = getData().acquireReadLock()) {
+      for (final Territory zone : AirZoneAttachment.getAirZones(getData().getMap())) {
+        if (AirZoneAttachment.get(zone).orElseThrow().getZoneType() == ZoneType.RESERVE) {
+          continue;
+        }
+        final IntegerMap<UnitType> all = new IntegerMap<>();
+        zone.getUnitCollection()
+            .getMatches(u -> u.isOwnedBy(player))
+            .forEach(u -> all.add(u.getType(), 1));
+        if (all.isEmpty()) {
+          continue;
+        }
+        final IntegerMap<UnitType> left = available(player, zone);
+        final List<String> parts = new ArrayList<>();
+        all.keySet().forEach(t -> parts.add(all.getInt(t) + " " + typeName(t, all.getInt(t))));
+        final JPanel header = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        header.add(
+            new JLabel(
+                "<html><b>"
+                    + AirAllocation.zoneName(zone)
+                    + ":</b> "
+                    + String.join(", ", parts)
+                    + "</html>"));
+        rows.add(header);
+        for (final UnitType type : all.keySet()) {
+          final int count = all.getInt(type);
+          final String name =
+              AirAllocation.typeName(type) + (count == 1 ? "" : "s") + " (" + count + "): ";
+          final JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+          row.add(Box.createHorizontalStrut(10));
+          final boolean bomber =
+              zone.getUnitCollection()
+                  .anyMatch(u -> u.getType().equals(type) && AirCombat.isBomber(u));
+          if (!bomber) {
+            row.add(new JLabel(name + "fighters don't make strikes; they fight in the dogfight."));
+          } else {
+            final int targets = AirCombat.getTargets(player, zone, type).size();
+            final int free = left.getInt(type);
+            if (targets == 0) {
+              row.add(
+                  new JLabel(
+                      name
+                          + "nothing in reach ("
+                          + AirRange.reachText(player, zone, type)
+                              .toLowerCase(java.util.Locale.ROOT)
+                          + ")."));
+            } else if (free <= 0) {
+              row.add(new JLabel(name + "all assigned."));
+            } else {
+              row.add(
+                  new JLabel(
+                      name
+                          + targets
+                          + (targets == 1 ? " target" : " targets")
+                          + " in reach"
+                          + (free < count ? "; " + free + " without a target" : "")
+                          + "."));
+              final JButton choose = smallButton("Choose targets");
+              choose.addActionListener(e -> chooseGroup(player, zone, type));
+              row.add(choose);
+            }
+          }
+          rows.add(row);
+        }
+      }
+    }
+    if (rows.isEmpty()) {
+      add(leftAligned(new JLabel("You have no aircraft in any front.")));
+    }
+    rows.forEach(r -> add(leftAligned(r)));
+    add(Box.createVerticalStrut(6));
+  }
+
+  /** "dive bomber", "dive bombers". */
+  private static String typeName(final UnitType type, final int count) {
+    final String name = AirAllocation.typeName(type).toLowerCase(java.util.Locale.ROOT);
+    return count == 1 ? name : name + "s";
+  }
+
+  /**
+   * Picks every aircraft of the type without a target in the front, scrolls the map to the front's
+   * box and lights up the targets in reach.
+   */
+  private void chooseGroup(final GamePlayer player, final Territory zone, final UnitType type) {
+    final int free = available(player, zone).getInt(type);
+    if (free <= 0) {
+      return;
+    }
+    selectedZone = zone;
+    selected.clear();
+    selected.put(type, free);
+    if (frame.getAirMapMode() != null) {
+      frame.getAirMapMode().scrollTarget(zone).ifPresent(p -> getMap().centerOnPoint(p));
+    }
+    selectionChanged();
   }
 
   /** "1 Torpedo Bomber from Mediterranean → Tobruk". */
