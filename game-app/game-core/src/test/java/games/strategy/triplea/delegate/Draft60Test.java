@@ -253,6 +253,30 @@ class Draft60Test {
     assertThat(summary, is("British: 2 battleships 3/5, 5/5; 8 HP left; about 1.3 hits a round"));
   }
 
+  // --- request 11 item 3: SPC warnings
+
+  @Test
+  void anSpcWithoutAdvancedResearchWarnsThatItBuildsNothing() {
+    final GamePlayer germans = player("Germans");
+    final var techs = games.strategy.triplea.delegate.apc.Apcs.unlockingTechs(data);
+    assertThat("techs " + techs, techs.isEmpty(), is(false));
+    final var warning =
+        games.strategy.triplea.delegate.apc.Apcs.buildsNothingWarning(germans).orElseThrow();
+    assertThat(warning, warning.startsWith("Builds nothing yet: needs one of "), is(true));
+    assertThat(warning, warning.contains(techs.get(0)), is(true));
+    final var essen =
+        data.getMap().getTerritories().stream()
+            .filter(t -> t.isOwnedBy(germans) && !t.isWater())
+            .findFirst()
+            .orElseThrow();
+    data.performChange(
+        games.strategy.engine.data.changefactory.ChangeFactory.addUnits(
+            essen, type("apc").create(1, germans)));
+    assertThat(
+        games.strategy.triplea.delegate.apc.Apcs.idleLines(germans, data.getMap()),
+        is(List.of(essen.getName() + " SPC: idle, no Advanced tech yet")));
+  }
+
   @Test
   void mapLoadsAndStartsWithTheDutch() {
     final InitializationDelegate init = new InitializationDelegate();

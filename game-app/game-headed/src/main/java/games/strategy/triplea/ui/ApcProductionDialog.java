@@ -56,6 +56,22 @@ public final class ApcProductionDialog {
         c);
     c.gridwidth = 1;
     try (GameData.Unlocker ignored = data.acquireReadLock()) {
+      // request 11 item 3: say which SPCs sit idle and why
+      final List<String> idle = Apcs.idleLines(player, data.getMap());
+      final java.util.Optional<String> nothing = Apcs.buildsNothingWarning(player);
+      if (!idle.isEmpty() || nothing.isPresent()) {
+        c.gridy++;
+        c.gridx = 0;
+        c.gridwidth = 2;
+        final JLabel warning =
+            new JLabel(
+                "<html><font color='#E07000'>"
+                    + String.join("<br>", idle)
+                    + nothing.map(n -> (idle.isEmpty() ? "" : "<br>") + n + ".").orElse("")
+                    + "</font></html>");
+        panel.add(warning, c);
+        c.gridwidth = 1;
+      }
       final List<Object> options = new ArrayList<>();
       options.add(NOTHING);
       options.addAll(Apcs.getBuildableTypes(player));

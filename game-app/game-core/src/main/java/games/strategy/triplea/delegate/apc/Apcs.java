@@ -1,6 +1,7 @@
 package games.strategy.triplea.delegate.apc;
 
 import games.strategy.engine.data.CompositeChange;
+import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GameMap;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.Territory;
@@ -17,6 +18,7 @@ import games.strategy.triplea.delegate.AirFronts;
 import games.strategy.triplea.delegate.TechAdvance;
 import games.strategy.triplea.delegate.TechTracker;
 import games.strategy.triplea.formatter.MyFormatter;
+import games.strategy.triplea.formatter.UnitNames;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -116,6 +118,81 @@ public class Apcs {
     return types;
   }
 
+  // ---- request 11 item 3: warnings for SPCs that can't build anything
+
+  /** "AdvancedArmor" as "Advanced Armor". */
+  private static String techName(final String name) {
+    return name.replaceAll("(?<=[a-z0-9])(?=[A-Z])", " ");
+  }
+
+  /** The techs that unlock an SPC unit type, by readable name, from the XML. */
+  public static List<String> unlockingTechs(final GameData data) {
+    final java.util.Set<String> techs = new java.util.TreeSet<>();
+    for (final UnitType type : data.getUnitTypeList().getAllUnitTypes()) {
+      ApcAttachment.get(type)
+          .filter(a -> a.getApcUnitsPerTurn() > 0)
+          .flatMap(ApcAttachment::getApcRequiredTech)
+          .ifPresent(t -> techs.add(techName(t)));
+    }
+    return List.copyOf(techs);
+  }
+
+  /**
+   * "Builds nothing yet: needs an Advanced research (Advanced Armor, Advanced Jets, …)" when none
+   * of the nation's SPCs could build anything now.
+   */
+  public static Optional<String> buildsNothingWarning(final GamePlayer player) {
+    if (!getBuildableTypes(player).isEmpty()) {
+      return Optional.empty();
+    }
+    final List<String> techs = unlockingTechs(player.getData());
+    return Optional.of(
+        "Builds nothing yet: needs "
+            + (techs.isEmpty()
+                ? "a tech that unlocks an SPC unit"
+                : "one of " + String.join(", ", techs)));
+  }
+
+  /**
+   * Why the SPC sits idle this turn, if it does: nothing chosen, no tech, or its unit is barred.
+   */
+  public static Optional<String> idleReason(final Unit apc, final GamePlayer player) {
+    final List<UnitType> buildable = getBuildableTypes(player);
+    if (buildable.isEmpty()) {
+      return Optional.of("idle, no Advanced tech yet");
+    }
+    final Optional<UnitType> type = getProduction(apc, player);
+    if (type.isEmpty()) {
+      return Optional.of("idle, nothing chosen");
+    }
+    if (!buildable.contains(type.get())) {
+      return Optional.of("idle, " + UnitNames.of(type.get()) + " can no longer be built");
+    }
+    final int max = type.get().getUnitAttachment().getMaxBuiltPerPlayer();
+    if (max >= 0) {
+      int count = player.getUnitCollection().countMatches(u -> u.getType().equals(type.get()));
+      for (final Territory t : player.getData().getMap().getTerritories()) {
+        count +=
+            t.getUnitCollection()
+                .countMatches(u -> u.isOwnedBy(player) && u.getType().equals(type.get()));
+      }
+      if (count >= max) {
+        return Optional.of("idle, " + UnitNames.of(type.get()) + " limit reached (" + max + ")");
+      }
+    }
+    return Optional.empty();
+  }
+
+  /** "Essen SPC: idle, no Advanced tech yet" for each of the nation's SPCs that builds nothing. */
+  public static List<String> idleLines(final GamePlayer player, final GameMap map) {
+    final List<String> lines = new ArrayList<>();
+    for (final Unit apc : getOwnApcs(player, map)) {
+      final String where = territoryOf(apc, map).map(Territory::getName).orElse("?");
+      idleReason(apc, player).ifPresent(r -> lines.add(where + " SPC: " + r));
+    }
+    return lines;
+  }
+
   private static boolean hasTech(final GamePlayer player, final String techName) {
     return TechTracker.getCurrentTechAdvances(player, player.getData().getTechnologyFrontier())
         .stream()
@@ -196,7 +273,8 @@ public class Apcs {
     final List<UnitType> buildable = getBuildableTypes(player);
     final IntegerMap<String> progress = new IntegerMap<>(attachment.getApcProgress());
     final CompositeChange change = new CompositeChange();
-    final List<String> lines = new ArrayList<>();
+    // request 11 item 3: idle SPCs are listed with the reason
+    final List<String> lines = new ArrayList<>(idleLines(player, map));
     for (final Unit apc : getOwnApcs(player, map)) {
       final Optional<UnitType> type = getProduction(apc, player);
       final Optional<Territory> territory = territoryOf(apc, map);

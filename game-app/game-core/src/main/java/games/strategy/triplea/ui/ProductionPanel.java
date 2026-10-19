@@ -62,7 +62,37 @@ class ProductionPanel extends JPanel {
 
   protected JDialog dialog;
   private boolean bid;
-  final Action doneAction = SwingAction.of("Done", () -> dialog.setVisible(false));
+  final Action doneAction = SwingAction.of("Done", this::confirmAndClose);
+
+  /**
+   * Flames and Steel (request 11 item 3): buying an SPC that can't build anything yet asks first;
+   * the purchase isn't blocked (the nation may research the tech next turn).
+   */
+  private void confirmAndClose() {
+    if (gamePlayer != null) {
+      final boolean buyingSpc =
+          getProduction().keySet().stream()
+              .flatMap(r -> r.getResults().keySet().stream())
+              .anyMatch(
+                  u ->
+                      u instanceof UnitType type
+                          && games.strategy.triplea.attachments.ApcAttachment.isApc(type));
+      final Optional<String> warning =
+          buyingSpc
+              ? games.strategy.triplea.delegate.apc.Apcs.buildsNothingWarning(gamePlayer)
+              : java.util.Optional.empty();
+      if (warning.isPresent()
+          && javax.swing.JOptionPane.showConfirmDialog(
+                  dialog,
+                  "Special Production Center: " + warning.get() + ".\nBuy it anyway?",
+                  "Special Production Center",
+                  javax.swing.JOptionPane.YES_NO_OPTION)
+              != javax.swing.JOptionPane.YES_OPTION) {
+        return;
+      }
+    }
+    dialog.setVisible(false);
+  }
 
   ProductionPanel(final UiContext uiContext) {
     this.uiContext = uiContext;
@@ -90,9 +120,7 @@ class ProductionPanel extends JPanel {
     dialog.setContentPane(this);
 
     SwingKeyBinding.addKeyBinding(
-        dialog,
-        KeyCombination.of(KeyCode.ENTER, ButtonDownMask.CTRL),
-        () -> dialog.setVisible(false));
+        dialog, KeyCombination.of(KeyCode.ENTER, ButtonDownMask.CTRL), this::confirmAndClose);
     SwingKeyBinding.addKeyBinding(dialog, KeyCode.ESCAPE, () -> dialog.setVisible(false));
 
     this.bid = bid;
@@ -345,6 +373,18 @@ class ProductionPanel extends JPanel {
               .append(": ")
               .append(uiContext.getTooltipProperties().getTooltip(type, player));
           name.setText(UnitNames.of(type));
+          // Flames and Steel: an SPC that would build nothing says so (request 11 item 3)
+          final Optional<String> spcWarning =
+              games.strategy.triplea.attachments.ApcAttachment.isApc(type)
+                  ? games.strategy.triplea.delegate.apc.Apcs.buildsNothingWarning(player)
+                  : java.util.Optional.empty();
+          if (spcWarning.isPresent()) {
+            name.setText(
+                "<html>"
+                    + UnitNames.of(type)
+                    + "<br><font color='#E07000'>builds nothing yet</font></html>");
+            tooltip.append("<br><b>").append(spcWarning.get()).append("</b>");
+          }
           if (attach.getConsumesUnits().totalValues() == 1) {
             name.setForeground(Color.CYAN);
           } else if (attach.getConsumesUnits().totalValues() > 1) {
