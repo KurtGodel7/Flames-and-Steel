@@ -162,6 +162,8 @@ public final class AirTargetPanel extends ActionPanel {
             getMap().addOverlay(overlay);
           }
           rebuild(player);
+          // request 22: begin with the first group waiting, after the map has drawn its boxes
+          SwingUtilities.invokeLater(() -> selectNextWaiting(player));
         });
   }
 
@@ -188,6 +190,7 @@ public final class AirTargetPanel extends ActionPanel {
       if (frame.getAirMapMode() != null) {
         frame.getAirMapMode().setBusy(false);
         frame.getAirMapMode().setMarkUnassigned(false);
+        frame.getAirMapMode().setBanner(null);
         frame.getAirMapMode().setPending(Map.of(), Map.of());
         frame.getAirMapMode().setActing(null, (zone, unit) -> false, (zone, unit) -> "");
       }
@@ -334,6 +337,20 @@ public final class AirTargetPanel extends ActionPanel {
       final List<Unit> units,
       final MouseDetails md) {
     final IntegerMap<UnitType> available = available(player, zone);
+    // request 22: a plain click on a group with nothing picked picks the whole group, exactly as
+    // its "Choose targets" button does (Ctrl, Alt and Shift keep their usual meanings)
+    if (!md.isShiftDown() && !md.isControlDown() && !md.isAltDown()) {
+      final Optional<UnitType> type =
+          units.stream()
+              .filter(u -> u.isOwnedBy(player) && AirCombat.isBomber(u))
+              .map(Unit::getType)
+              .filter(t -> available.getInt(t) > 0)
+              .findFirst();
+      if (type.isPresent() && (!zone.equals(selectedZone) || selected.getInt(type.get()) == 0)) {
+        chooseGroup(player, zone, type.get(), false);
+        return;
+      }
+    }
     if (!zone.equals(selectedZone)) {
       selected.clear();
       selectedZone = zone;
@@ -384,6 +401,58 @@ public final class AirTargetPanel extends ActionPanel {
     clearSelection();
     selectionChanged();
     strikesChanged();
+    // request 22: straight on to the next group still waiting
+    selectNextWaiting(getCurrentPlayer());
+  }
+
+  /** A front's aircraft of one type that still have targets in reach and no target yet. */
+  private record Group(Territory zone, UnitType type) {}
+
+  /** The groups still waiting, front by front. */
+  private List<Group> waitingGroups(final GamePlayer player) {
+    final List<Group> result = new ArrayList<>();
+    try (GameData.Unlocker ignored = getData().acquireReadLock()) {
+      for (final Territory zone : AirZoneAttachment.getAirZones(getData().getMap())) {
+        final IntegerMap<UnitType> free = available(player, zone);
+        for (final UnitType type : free.keySet()) {
+          if (free.getInt(type) > 0 && !AirCombat.getTargets(player, zone, type).isEmpty()) {
+            result.add(new Group(zone, type));
+          }
+        }
+      }
+    }
+    return result;
+  }
+
+  /** Picks the first group still waiting, scrolls to it and lights up its targets. */
+  private void selectNextWaiting(final GamePlayer player) {
+    if (finished || player == null) {
+      return;
+    }
+    final List<Group> waiting = waitingGroups(player);
+    if (!waiting.isEmpty()) {
+      chooseGroup(player, waiting.get(0).zone(), waiting.get(0).type(), true);
+    }
+    updateBanner(player, waiting.size());
+  }
+
+  /**
+   * Request 22: the banner over the map while groups wait: "Italians: choose targets for 2 aircraft
+   * groups. ..."; gone when none wait or the step ends.
+   */
+  private void updateBanner(final GamePlayer player, final int waiting) {
+    final AirMapMode mode = frame.getAirMapMode();
+    if (mode == null) {
+      return;
+    }
+    mode.setBanner(
+        finished || waiting == 0
+            ? null
+            : player.getName()
+                + ": choose targets for "
+                + waiting
+                + (waiting == 1 ? " aircraft group" : " aircraft groups")
+                + ". Click Choose targets on the right, or click a group's box.");
   }
 
   /** The player's bombers in the zone that do not have a target yet. */
@@ -601,6 +670,7 @@ public final class AirTargetPanel extends ActionPanel {
       return;
     }
     showAssigned();
+    updateBanner(getCurrentPlayer(), waitingGroups(getCurrentPlayer()).size());
     final List<TargetAssignment> snapshot = List.copyOf(staged);
     storeExecutor.execute(() -> store.accept(snapshot));
     rebuild(getCurrentPlayer());
@@ -615,7 +685,8 @@ public final class AirTargetPanel extends ActionPanel {
     // the help is a tooltip on the heading; the panel itself lists the strikes
     actionLabel.setToolTipText(
         AirSelection.wrap(
-            AirSelection.HELP
+            "Click a group's icon in its box (or its Choose targets button here) to pick the whole"
+                + " group; then Ctrl, Alt and Shift clicks and right-clicks adjust it as usual."
                 + " Or use the counters here. The targets"
                 + " all picked bombers can reach light up on the map and are listed here;"
                 + " click one to attack it."));
@@ -749,8 +820,16 @@ public final class AirTargetPanel extends ActionPanel {
               final JButton choose = smallButton("Choose targets");
               choose.setToolTipText(
                   "Picks the whole group, shows its box and targets, and flashes the box. Same as"
-                      + " Ctrl-clicking the group's icon in its box.");
-              choose.addActionListener(e -> chooseGroup(player, zone, type));
+                      + " clicking the group's icon in its box.");
+              choose.addActionListener(e -> chooseGroup(player, zone, type, true));
+              // request 22: the group being chosen now has its button lit
+              if (zone.equals(selectedZone) && selected.getInt(type) > 0) {
+                choose.setText("Choosing: click a target");
+                choose.setBackground(new Color(0xFF, 0x8C, 0x00));
+                choose.setForeground(Color.BLACK);
+                choose.setOpaque(true);
+                choose.setFont(choose.getFont().deriveFont(java.awt.Font.BOLD));
+              }
               row.add(choose);
             }
           }
@@ -775,7 +854,8 @@ public final class AirTargetPanel extends ActionPanel {
    * Picks every aircraft of the type without a target in the front, scrolls the map to the front's
    * box and lights up the targets in reach.
    */
-  private void chooseGroup(final GamePlayer player, final Territory zone, final UnitType type) {
+  private void chooseGroup(
+      final GamePlayer player, final Territory zone, final UnitType type, final boolean scroll) {
     final int free = available(player, zone).getInt(type);
     if (free <= 0) {
       return;
@@ -795,7 +875,9 @@ public final class AirTargetPanel extends ActionPanel {
           }
         }
       }
-      if (view != null) {
+      if (!scroll) {
+        // clicked on the map: the box is in view already
+      } else if (view != null) {
         getMap().centerOnPoint(new Point((int) view.getCenterX(), (int) view.getCenterY()));
       } else {
         mode.scrollTarget(zone).ifPresent(p -> getMap().centerOnPoint(p));

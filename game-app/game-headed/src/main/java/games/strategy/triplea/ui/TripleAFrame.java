@@ -1747,6 +1747,8 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
       return List.of();
     }
     actionButtonsPanel.changeToAirTargets(gamePlayer);
+    // request 22: the target list is on the Actions tab; show it whatever tab was open
+    SwingUtilities.invokeLater(this::showActionPanelTab);
     panel.start(gamePlayer, start, store);
     return panel.waitForTargets();
   }

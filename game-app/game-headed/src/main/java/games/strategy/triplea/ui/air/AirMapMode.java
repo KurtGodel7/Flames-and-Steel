@@ -622,6 +622,7 @@ public final class AirMapMode implements MapOverlay {
       }
       if (!enabled) {
         paintHoverLink(g, mapData);
+        paintBanner(g);
         return;
       }
       // tint (also fades the ground and naval units) and bold borders
@@ -671,6 +672,7 @@ public final class AirMapMode implements MapOverlay {
             });
       }
       lastDockDepth = dockDepth;
+      paintBanner(g);
     }
   }
 
@@ -858,6 +860,36 @@ public final class AirMapMode implements MapOverlay {
     final javax.swing.Timer timer = new javax.swing.Timer(1700, e -> repaint());
     timer.setRepeats(false);
     timer.start();
+  }
+
+  // request 22: the target step's banner over the map, or null
+  private volatile @Nullable String banner;
+
+  /** Shows (or with null hides) a banner along the top of the visible map. */
+  public void setBanner(final @Nullable String text) {
+    banner = text;
+    repaint();
+  }
+
+  private void paintBanner(final Graphics2D g) {
+    final String text = banner;
+    if (text == null) {
+      return;
+    }
+    final Rectangle view = view();
+    g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 15));
+    final FontMetrics fm = g.getFontMetrics();
+    final int w = Math.min(view.width - 20, fm.stringWidth(text) + 30);
+    final int h = fm.getHeight() + 14;
+    final int x = view.x + (view.width - w) / 2;
+    final int y = view.y + 12;
+    g.setColor(new Color(0x1C, 0x1C, 0x1C, 230));
+    g.fillRoundRect(x, y, w, h, 12, 12);
+    g.setColor(UNASSIGNED);
+    g.setStroke(new BasicStroke(3f));
+    g.drawRoundRect(x, y, w, h, 12, 12);
+    g.setColor(Color.WHITE);
+    g.drawString(text, x + 15, y + 7 + fm.getAscent());
   }
 
   /** For tests: the box placer. */
