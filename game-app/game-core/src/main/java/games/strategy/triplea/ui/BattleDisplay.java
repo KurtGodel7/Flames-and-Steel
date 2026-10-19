@@ -14,6 +14,7 @@ import games.strategy.triplea.delegate.Die;
 import games.strategy.triplea.delegate.EditDelegate;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.TerritoryEffectHelper;
+import games.strategy.triplea.delegate.air.AirCombat;
 import games.strategy.triplea.delegate.battle.BattleState;
 import games.strategy.triplea.delegate.battle.IBattle.BattleType;
 import games.strategy.triplea.delegate.battle.casualty.CasualtyUtil;
@@ -131,10 +132,14 @@ public class BattleDisplay extends JPanel {
     this.mapPanel = mapPanel;
     this.uiContext = mapPanel.getUiContext();
 
+    // Flames and Steel: an air phase battle on an air front is a dogfight
+    final boolean dogfight = battleType.isAirBattle() && AirCombat.isDogfight(territory);
     final String battleStr =
-        (battleType == BattleType.NORMAL)
-            ? ""
-            : String.format("  (%s)", battleType.toDisplayText());
+        dogfight
+            ? "  (Dogfight: aircraft fire at dogfight values)"
+            : (battleType == BattleType.NORMAL)
+                ? ""
+                : String.format("  (%s)", battleType.toDisplayText());
     this.description =
         attacker.getName()
             + " attacks "
@@ -152,6 +157,7 @@ public class BattleDisplay extends JPanel {
             battleType,
             gameData,
             territoryEffects,
+            territory,
             uiContext);
     attackerModel =
         new BattleModel(
@@ -160,6 +166,7 @@ public class BattleDisplay extends JPanel {
             battleType,
             gameData,
             territoryEffects,
+            territory,
             uiContext);
     defenderModel.setEnemyBattleModel(attackerModel);
     attackerModel.setEnemyBattleModel(defenderModel);

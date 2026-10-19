@@ -268,9 +268,21 @@ public class AirCombat {
   public static int dogfightPower(final Unit unit) {
     final var techs = unit.getData().getTechTracker();
     final int extraRolls = techs.getDogfightRollsBonus(unit.getOwner(), unit.getType());
-    final int bonus = techs.getDogfightBonus(unit.getOwner(), unit.getType());
     return AirUnitAttachment.get(unit.getType())
-        .map(a -> Math.max(1, a.getDogfight() + bonus) * (a.getDogfightRolls() + extraRolls))
+        .map(a -> dogfightValue(unit) * (a.getDogfightRolls() + extraRolls))
+        .orElse(0);
+  }
+
+  /**
+   * The value one of an aircraft's dogfight dice hits at: the type's dogfight value plus the
+   * owner's dogfightBonus and its techs', never below 1. Never doubled: doubling against land or
+   * ships belongs to tactical strikes only.
+   */
+  public static int dogfightValue(final Unit unit) {
+    final int bonus =
+        unit.getData().getTechTracker().getDogfightBonus(unit.getOwner(), unit.getType());
+    return AirUnitAttachment.get(unit.getType())
+        .map(a -> Math.max(1, a.getDogfight() + bonus))
         .orElse(0);
   }
 
@@ -436,15 +448,25 @@ public class AirCombat {
   }
 
   /**
-   * The value a unit fires at in an air phase battle, for the battle window: dogfight power when
-   * both sides are aircraft, strike power for bombers against a target, AA for anti-aircraft guns,
-   * and fire-back for ships; 0 for units that do not fire.
+   * Whether the air phase battle shown at this place is a dogfight. Dogfights are shown at their
+   * air front, strikes at their target territory or sea zone.
    */
-  public static int displayStrength(final Unit unit, final Collection<Unit> enemies) {
+  public static boolean isDogfight(final Territory location) {
+    return location != null && AirZoneAttachment.isAirZone(location);
+  }
+
+  /**
+   * The battle window column for a unit in an air phase battle: in a dogfight every aircraft's
+   * dogfight value; in a strike the bombers' strike power against the target, AA for anti-aircraft
+   * guns, and fire-back for ships; 0 for units that do not fire.
+   *
+   * @param enemies the other side as the battle began: losses must not change how a side fires
+   */
+  public static int displayStrength(
+      final Unit unit, final boolean dogfight, final Collection<Unit> enemies) {
     final boolean air = Matches.unitIsAir().test(unit);
-    final boolean enemiesAir = !enemies.isEmpty() && enemies.stream().allMatch(Matches.unitIsAir());
-    if (air && enemiesAir) {
-      return dogfightPower(unit);
+    if (air && dogfight) {
+      return dogfightValue(unit);
     }
     if (air) {
       final boolean sea = enemies.stream().anyMatch(Matches.unitIsSea());

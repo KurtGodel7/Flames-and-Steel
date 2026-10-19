@@ -2,6 +2,7 @@ package games.strategy.triplea.ui;
 
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
+import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.TerritoryEffect;
 import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.UnitType;
@@ -33,6 +34,11 @@ final class BattleModel extends DefaultTableModel {
   private final Collection<Unit> units;
   private final IBattle.BattleType battleType;
   private final Collection<TerritoryEffect> territoryEffects;
+  // Flames and Steel: where the battle is; an air phase battle on an air front is a dogfight
+  private final Territory location;
+  // Flames and Steel: the other side as an air phase battle began. Losses can empty a side, and
+  // with no enemies left the survivors of a dogfight were shown at land-strike values.
+  private List<Unit> airBattleEnemies;
   private BattleModel enemyBattleModel = null;
   // Flames and Steel: the side's total power at the last refresh, for "about 1.3 hits a round"
   private int lastTotalPower;
@@ -48,6 +54,7 @@ final class BattleModel extends DefaultTableModel {
       final IBattle.BattleType battleType,
       final GameData data,
       final Collection<TerritoryEffect> territoryEffects,
+      final Territory location,
       final UiContext uiContext) {
     super(new Object[0][0], varDiceArray(data));
     this.uiContext = uiContext;
@@ -57,6 +64,7 @@ final class BattleModel extends DefaultTableModel {
     this.units = new ArrayList<>(units);
     this.battleType = battleType;
     this.territoryEffects = territoryEffects;
+    this.location = location;
   }
 
   private static String[] varDiceArray(final GameData data) {
@@ -139,11 +147,18 @@ final class BattleModel extends DefaultTableModel {
       }
       unitPowerAndRollsMap = PowerStrengthAndRolls.build(units, combatValue);
       lastTotalPower = unitPowerAndRollsMap.calculateTotalPower();
-      final List<Unit> enemies =
-          enemyBattleModel == null ? List.of() : new ArrayList<>(enemyBattleModel.getUnits());
+      if (airBattleEnemies == null && isAirPreBattleOrPreRaid) {
+        final List<Unit> enemies =
+            enemyBattleModel == null ? List.of() : new ArrayList<>(enemyBattleModel.getUnits());
+        airBattleEnemies = AirCombat.isAirZoneBattle(units, enemies) ? enemies : List.of();
+      }
+      final boolean dogfight = AirCombat.isDogfight(location);
       airZoneStrength =
-          isAirPreBattleOrPreRaid && AirCombat.isAirZoneBattle(units, enemies)
-              ? u -> Math.min(gameData.getDiceSides(), AirCombat.displayStrength(u, enemies))
+          isAirPreBattleOrPreRaid && (dogfight || !airBattleEnemies.isEmpty())
+              ? u ->
+                  Math.min(
+                      gameData.getDiceSides(),
+                      AirCombat.displayStrength(u, dogfight, airBattleEnemies))
               : null;
     }
     final List<UnitCategory> unitCategories =
