@@ -839,6 +839,10 @@ public abstract class AbstractPlaceDelegate extends BaseTripleADelegate
    */
   public Optional<@Nls String> canUnitsBePlaced(
       final Territory to, final Collection<Unit> units, final GamePlayer player) {
+    // Flames and Steel: new factories only in the player's factory area (request 12 section 5)
+    if (!to.isWater() && FactoryArea.includesFactory(units) && !FactoryArea.allows(player, to)) {
+      return Optional.of(FactoryArea.reason(player));
+    }
     final Collection<Unit> allowedUnits = getUnitsToBePlaced(to, units, player);
     if (allowedUnits == null || !allowedUnits.containsAll(units)) {
       return Optional.of(String.format("Cannot place these units in %s", to.getName()));
@@ -986,6 +990,10 @@ public abstract class AbstractPlaceDelegate extends BaseTripleADelegate
       placeableUnits.addAll(CollectionUtils.getMatches(units, FreeConscripts::isConscript));
     }
     addConstructionUnits(units, to, placeableUnits);
+    // Flames and Steel: no new factories outside the player's factory area
+    if (!water && !FactoryArea.allows(player, to)) {
+      placeableUnits.removeIf(Matches.unitCanProduceUnits());
+    }
     // remove any units that require other units to be consumed on creation, if we don't have enough
     // to consume (veqryn)
     placeableUnits.removeIf(

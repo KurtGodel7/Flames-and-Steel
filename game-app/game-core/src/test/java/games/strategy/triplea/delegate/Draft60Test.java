@@ -500,6 +500,49 @@ class Draft60Test {
         is(2));
   }
 
+  // --- request 12 section 5: the British factory area
+
+  private static final String BRITISH_AREA =
+      "London:Midlands:Northern England:Northern Ireland:Scotland:Wales:Wessex:Alberta:"
+          + "British Columbia:East Canadian Arctic:Manitoba:Maritimes:Montreal:Newfoundland:"
+          + "Northern Ontario:Northern Quebec:Northwest Territories:Saskatchewan:Toronto:"
+          + "West Canadian Arctic:Yukon:Bihar:Bombay:Calcutta:Central Provinces:Delhi:Hyderabad:"
+          + "Madras:Punjab:United Provinces:Adelaide:Brisbane:Central Australia:Darwin:Kimberley:"
+          + "Melbourne:Perth:Sydney:Tasmania:Townsville:Cape Town:Natal:Transvaal";
+
+  @Test
+  void britainBuildsNewFactoriesOnlyInItsFactoryArea() {
+    final GamePlayer british = player("British");
+    data.getProperties().set(FactoryArea.PREFIX + "British", BRITISH_AREA);
+    data.getProperties()
+        .set(
+            FactoryArea.TEXT_PREFIX + "British",
+            "Britain may build factories only in the Isles, Canada, India, Australia and South"
+                + " Africa");
+    for (final String name : BRITISH_AREA.split(":")) {
+      territory(name); // every listed territory exists on the map
+    }
+    final var outside =
+        data.getMap().getTerritories().stream()
+            .filter(t -> !t.isWater() && t.isOwnedBy(british) && !FactoryArea.allows(british, t))
+            .findFirst()
+            .orElseThrow();
+    goTo("britishPlace", 1);
+    final var place = (PlaceDelegate) data.getDelegate("place");
+    place.setDelegateBridgeAndPlayer(bridge(british));
+    place.start();
+    final var factory = type("factory").create(1, british);
+    british.getUnitCollection().addAll(factory);
+    assertThat(
+        place.canUnitsBePlaced(outside, factory, british).orElse(""),
+        is(
+            "Britain may build factories only in the Isles, Canada, India, Australia and South Africa"));
+    assertThat(
+        place.canUnitsBePlaced(territory("Bombay"), factory, british).orElse(""),
+        org.hamcrest.Matchers.not(org.hamcrest.Matchers.startsWith("Britain may build")));
+    place.end();
+  }
+
   @Test
   void mapLoadsAndStartsWithTheDutch() {
     final InitializationDelegate init = new InitializationDelegate();

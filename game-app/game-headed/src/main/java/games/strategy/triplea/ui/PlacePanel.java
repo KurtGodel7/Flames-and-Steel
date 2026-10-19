@@ -14,6 +14,7 @@ import games.strategy.engine.data.properties.GameProperties;
 import games.strategy.engine.player.PlayerBridge;
 import games.strategy.triplea.Properties;
 import games.strategy.triplea.attachments.PlayerAttachment;
+import games.strategy.triplea.delegate.FactoryArea;
 import games.strategy.triplea.delegate.FreeConscripts;
 import games.strategy.triplea.delegate.GameStepPropertiesHelper;
 import games.strategy.triplea.delegate.Matches;
@@ -115,6 +116,15 @@ class PlacePanel extends AbstractMovePanel implements GameDataChangeListener {
         @Override
         public void mouseEntered(final @Nullable Territory territory) {
           // Flames and Steel: "Sian: 2 free conscripts" while pointing at a highlighted territory
+          // request 12 section 5: why a greyed territory can't take a new factory
+          if (isActive()
+              && territory != null
+              && freeConscriptOverlay.noFactory.contains(territory)) {
+            setStatusInfoMessage(
+                territory.getName() + ": " + FactoryArea.reason(getCurrentPlayer()));
+            freeConscriptStatusShown = true;
+            return;
+          }
           final Integer free = territory == null ? null : freeConscriptOverlay.spots.get(territory);
           if (isActive() && free != null) {
             setStatusInfoMessage(territory.getName() + ": " + freeConscriptText(free));
@@ -398,6 +408,24 @@ class PlacePanel extends AbstractMovePanel implements GameDataChangeListener {
     return spots;
   }
 
+  /**
+   * Request 12 section 5: while the player holds a factory to place, its land outside its factory
+   * area (where it may not build one).
+   */
+  private java.util.Set<Territory> noFactoryTerritories() {
+    final GamePlayer player = getCurrentPlayer();
+    if (player == null
+        || FactoryArea.of(player).isEmpty()
+        || !FactoryArea.includesFactory(player.getUnits())) {
+      return java.util.Set.of();
+    }
+    try (GameData.Unlocker ignored = getData().acquireReadLock()) {
+      return getData().getMap().getTerritories().stream()
+          .filter(t -> !t.isWater() && t.isOwnedBy(player) && !FactoryArea.allows(player, t))
+          .collect(java.util.stream.Collectors.toSet());
+    }
+  }
+
   private static String freeConscriptText(final int n) {
     return n + (n == 1 ? " free conscript" : " free conscripts");
   }
@@ -408,6 +436,7 @@ class PlacePanel extends AbstractMovePanel implements GameDataChangeListener {
     final GamePlayer player = getCurrentPlayer();
     final int allowance = player == null ? 0 : FreeConscripts.allowance(player);
     freeConscriptOverlay.spots = spots;
+    freeConscriptOverlay.noFactory = isActive() ? noFactoryTerritories() : java.util.Set.of();
     SwingUtilities.invokeLater(
         () -> {
           final int total = spots.values().stream().mapToInt(Integer::intValue).sum();
@@ -428,6 +457,8 @@ class PlacePanel extends AbstractMovePanel implements GameDataChangeListener {
   private static final class FreeConscriptOverlay
       implements games.strategy.triplea.ui.panels.map.MapOverlay {
     private volatile Map<Territory, Integer> spots = Map.of();
+    // owned land where the player holds a factory but may not build one (shown grey)
+    private volatile java.util.Set<Territory> noFactory = java.util.Set.of();
     private final games.strategy.triplea.ui.mapdata.MapData mapData;
 
     FreeConscriptOverlay(final games.strategy.triplea.ui.mapdata.MapData mapData) {
@@ -436,6 +467,12 @@ class PlacePanel extends AbstractMovePanel implements GameDataChangeListener {
 
     @Override
     public void paint(final java.awt.Graphics2D g, final GameData data) {
+      for (final Territory t : noFactory) {
+        for (final java.awt.Polygon p : mapData.getPolygons(t)) {
+          g.setColor(new java.awt.Color(90, 90, 90, 90));
+          g.fill(p);
+        }
+      }
       for (final Territory t : spots.keySet()) {
         for (final java.awt.Polygon p : mapData.getPolygons(t)) {
           g.setColor(new java.awt.Color(120, 230, 120, 70));
