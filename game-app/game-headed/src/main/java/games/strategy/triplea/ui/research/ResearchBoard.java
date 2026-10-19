@@ -173,6 +173,8 @@ public final class ResearchBoard extends JPanel implements Scrollable {
 
     Block(final Category category) {
       this.category = category;
+      // request 21: each tech row explains its effect on hover
+      setToolTipText("");
       final MouseAdapter mouse =
           new MouseAdapter() {
             @Override
@@ -205,6 +207,24 @@ public final class ResearchBoard extends JPanel implements Scrollable {
     public Dimension getPreferredSize() {
       return new Dimension(
           MIN_BLOCK_WIDTH, HEADER_HEIGHT + category.techs().size() * ROW_HEIGHT + 8);
+    }
+
+    /** "Night Action (2 stars): +1 attack and defense for cruisers; ..." over a tech row. */
+    @Override
+    public String getToolTipText(final MouseEvent e) {
+      final int row = (e.getY() - HEADER_HEIGHT - 4) / ROW_HEIGHT;
+      if (e.getY() < HEADER_HEIGHT + 4 || row >= category.techs().size()) {
+        return null;
+      }
+      final Tech tech = category.techs().get(row);
+      return "<html><b>"
+          + tech.displayName()
+          + "</b> ("
+          + tech.required()
+          + (tech.required() == 1 ? " star" : " stars")
+          + ")"
+          + (tech.description().isEmpty() ? "" : "<br>" + tech.description())
+          + "</html>";
     }
 
     @Override

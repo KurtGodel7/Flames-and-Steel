@@ -18,7 +18,6 @@ import games.strategy.triplea.delegate.battle.steps.change.suicide.RemoveGeneral
 import games.strategy.triplea.delegate.battle.steps.fire.NavalBombardment;
 import games.strategy.triplea.delegate.battle.steps.fire.NavalDestroyerFire;
 import games.strategy.triplea.delegate.battle.steps.fire.NavalKeepDestroyerCasualties;
-import games.strategy.triplea.delegate.battle.steps.fire.NavalNightCombat;
 import games.strategy.triplea.delegate.battle.steps.fire.aa.DefensiveAaFire;
 import games.strategy.triplea.delegate.battle.steps.fire.aa.OffensiveAaFire;
 import games.strategy.triplea.delegate.battle.steps.fire.firststrike.ClearFirstStrikeCasualties;
@@ -115,7 +114,6 @@ public interface BattleStep extends IExecutable {
         new LandParatroopers(battleState, battleActions),
         new OffensiveSubsRetreat(battleState, battleActions),
         new DefensiveSubsRetreat(battleState, battleActions),
-        new NavalNightCombat(battleState, battleActions),
         new NavalDestroyerFire(battleState, battleActions, BattleState.Side.OFFENSE),
         new NavalDestroyerFire(battleState, battleActions, BattleState.Side.DEFENSE),
         new NavalKeepDestroyerCasualties(battleState, battleActions),

@@ -40,7 +40,8 @@ public record ResearchView(
    *
    * @param fixedRound the round the XML grants this tech on (China), or 0
    */
-  public record Tech(String name, int stars, int required, State state, int fixedRound) {
+  public record Tech(
+      String name, int stars, int required, State state, int fixedRound, String description) {
     public String displayName() {
       return ResearchView.displayName(name);
     }
@@ -110,7 +111,8 @@ public record ResearchView(
                   Math.min(required, ResearchCenters.getStars(player, tech)),
                   required,
                   state,
-                  fixedRounds.getOrDefault(tech, 0)));
+                  fixedRounds.getOrDefault(tech, 0),
+                  games.strategy.triplea.delegate.TechDescriptions.describe(tech)));
         }
         categories.add(new Category(frontier.getName(), List.copyOf(techs), next));
       }

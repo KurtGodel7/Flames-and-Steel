@@ -81,8 +81,6 @@ public class TechAbilityAttachment extends DefaultAttachment {
   private @Nullable IntegerMap<UnitType> dogfightBonus = null;
   // Flames and Steel (Yalta): territories that go to this tech's owner when an ally conquers them
   private @Nullable Set<Territory> alliedConquestTerritories = null;
-  // Flames and Steel (Night Combat): pre-battle naval strike value by unit type, first round only
-  private @Nullable IntegerMap<UnitType> nightCombat = null;
   // Flames and Steel (Naval Wasserfall): ships hit from the air fire back at defense times this
   private int airFireBackMultiplier = 0;
   // Flames and Steel research centres: breakthroughs (stars) needed to unlock this tech.
@@ -213,22 +211,6 @@ public class TechAbilityAttachment extends DefaultAttachment {
   /** Territories that go to this tech's owner when one of its allies conquers them (Yalta). */
   public Set<Territory> getAlliedConquestTerritories() {
     return getSetProperty(alliedConquestTerritories);
-  }
-
-  private void setNightCombat(final String value) throws GameParseException {
-    if (nightCombat == null) {
-      nightCombat = new IntegerMap<>();
-    }
-    applyCheckedValue("nightCombat", value, nightCombat::put);
-  }
-
-  private void setNightCombat(final IntegerMap<UnitType> value) {
-    nightCombat = value;
-  }
-
-  /** Night Combat strike value by unit type (e.g. destroyer 1, cruiser 2). */
-  public IntegerMap<UnitType> getNightCombat() {
-    return getIntegerMapProperty(nightCombat);
   }
 
   private void setAirFireBackMultiplier(final String value) {
@@ -1016,13 +998,6 @@ public class TechAbilityAttachment extends DefaultAttachment {
                   this::setAlliedConquestTerritories,
                   this::getAlliedConquestTerritories,
                   () -> alliedConquestTerritories = null));
-      case "nightCombat" ->
-          Optional.of(
-              MutableProperty.of(
-                  this::setNightCombat,
-                  this::setNightCombat,
-                  this::getNightCombat,
-                  () -> nightCombat = null));
       case "airFireBackMultiplier" ->
           Optional.of(
               MutableProperty.of(
