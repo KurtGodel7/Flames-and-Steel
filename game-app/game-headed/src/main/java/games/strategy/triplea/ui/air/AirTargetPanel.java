@@ -724,7 +724,7 @@ public final class AirTargetPanel extends ActionPanel {
         final JButton show = smallButton("Show");
         show.addActionListener(e -> getMap().centerOn(target.territory()));
         row.add(show);
-        final JLabel text = new JLabel(target.describe());
+        final JLabel text = new JLabel(targetLabel(player, target));
         text.setToolTipText(describe(player, target));
         row.add(text);
         targetsPanel.add(leftAligned(row));
@@ -732,6 +732,40 @@ public final class AirTargetPanel extends ActionPanel {
     }
     targetsPanel.revalidate();
     targetsPanel.repaint();
+  }
+
+  /**
+   * Request 12 section 4: a sea target says how many ships of that kind there are and the value the
+   * picked aircraft fire at against them, e.g. "Sea Zone 97: Surface ships (3): fires at 6".
+   */
+  private String targetLabel(final GamePlayer player, final Target target) {
+    if (target.kind() != TargetKind.SURFACE && target.kind() != TargetKind.SUBS) {
+      return target.describe();
+    }
+    final boolean subs = target.kind() == TargetKind.SUBS;
+    final int count = AirCombat.getShipTargetUnits(player, target.territory(), subs).size();
+    final List<String> values = new ArrayList<>();
+    for (final UnitType type : selected.keySet()) {
+      AirCombat.getBombers(player, selectedZone).stream()
+          .filter(u -> u.getType().equals(type))
+          .findFirst()
+          .ifPresent(
+              u -> {
+                final int value =
+                    Math.min(getData().getDiceSides(), AirCombat.strikePower(u, target.kind()));
+                values.add(
+                    selected.size() == 1
+                        ? String.valueOf(value)
+                        : ResearchView.displayName(type.getName()) + " " + value);
+              });
+    }
+    return target.territory().getName()
+        + ": "
+        + (subs ? "Submarines" : "Surface ships")
+        + " ("
+        + count
+        + ")"
+        + (values.isEmpty() ? "" : ": fires at " + String.join(", ", values));
   }
 
   private static JButton smallButton(final String text) {

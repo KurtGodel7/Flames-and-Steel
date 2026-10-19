@@ -459,6 +459,47 @@ class Draft60Test {
     assertThat(details.getKilled(), is(List.of()));
   }
 
+  // --- request 12 section 4: torpedo and medium bombers choose surface ships or subs
+
+  @Test
+  void torpedoBombersChooseSurfaceShipsOrSubsAtDifferentValues() {
+    final GamePlayer japan = player("Japanese");
+    final var torpedo = type("torpedoBomber").create(1, japan).get(0);
+    final var medium = type("mediumBomber").create(1, japan).get(0);
+    final var surface = games.strategy.triplea.delegate.air.AirCombat.TargetKind.SURFACE;
+    final var subs = games.strategy.triplea.delegate.air.AirCombat.TargetKind.SUBS;
+    assertThat(
+        games.strategy.triplea.delegate.air.AirCombat.strikePower(torpedo, surface),
+        is(2 * games.strategy.triplea.delegate.air.AirCombat.strikePower(torpedo, subs)));
+    assertThat(
+        games.strategy.triplea.delegate.air.AirCombat.strikePower(medium, surface),
+        is(games.strategy.triplea.delegate.air.AirCombat.strikePower(medium, subs)));
+    assertThat(
+        games.strategy.triplea.delegate.air.AirCombat.mayAttack(type("torpedoBomber"), subs),
+        is(true));
+    assertThat(
+        games.strategy.triplea.delegate.air.AirCombat.mayAttack(type("mediumBomber"), subs),
+        is(true));
+    assertThat(
+        games.strategy.triplea.delegate.air.AirCombat.mayAttack(type("diveBomber"), subs),
+        is(false));
+    // a zone with both kinds gives two separate targets; hits go only to that kind
+    usEndTurn(2);
+    final var sea = territory("Sea Zone 148 Java Sea");
+    data.performChange(
+        games.strategy.engine.data.changefactory.ChangeFactory.addUnits(
+            sea, type("cruiser").create(1, player("British"))));
+    data.performChange(
+        games.strategy.engine.data.changefactory.ChangeFactory.addUnits(
+            sea, type("submarine").create(2, player("British"))));
+    assertThat(
+        games.strategy.triplea.delegate.air.AirCombat.getShipTargetUnits(japan, sea, false).size(),
+        is(1));
+    assertThat(
+        games.strategy.triplea.delegate.air.AirCombat.getShipTargetUnits(japan, sea, true).size(),
+        is(2));
+  }
+
   @Test
   void mapLoadsAndStartsWithTheDutch() {
     final InitializationDelegate init = new InitializationDelegate();
