@@ -277,6 +277,120 @@ class Draft60Test {
         is(List.of(essen.getName() + " SPC: idle, no Advanced tech yet")));
   }
 
+  // --- request 12 section 2: battles end when one side can't hit the other
+
+  /** Two empty sea zones next to each other. */
+  private games.strategy.engine.data.Territory[] emptySeaPair() {
+    for (final var a : data.getMap().getTerritories()) {
+      if (!a.isWater() || !a.getUnits().isEmpty() || a.getName().startsWith("Air")) {
+        continue;
+      }
+      for (final var b : data.getMap().getNeighbors(a)) {
+        if (b.isWater() && b.getUnits().isEmpty() && !b.getName().startsWith("Air")) {
+          return new games.strategy.engine.data.Territory[] {a, b};
+        }
+      }
+    }
+    throw new IllegalStateException("no empty sea zones");
+  }
+
+  /** The attacker moves its units from a to b in its combat move, then the battle is fought. */
+  private void attack(
+      final String attacker,
+      final List<games.strategy.engine.data.Unit> units,
+      final games.strategy.engine.data.Territory a,
+      final games.strategy.engine.data.Territory b,
+      final String movePrefix) {
+    games.strategy.triplea.settings.ClientSetting.setPreferences(
+        new org.sonatype.goodies.prefs.memory.MemoryPreferences());
+    final GamePlayer p = player(attacker);
+    final var bridge = bridge(p);
+    org.mockito.Mockito.when(
+            bridge
+                .getRemotePlayer()
+                .selectCasualties(
+                    org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.anyInt(),
+                    org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.anyBoolean(),
+                    org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.anyBoolean()))
+        .thenAnswer(
+            i ->
+                new games.strategy.triplea.delegate.data.CasualtyDetails(
+                    i.<games.strategy.triplea.delegate.data.CasualtyList>getArgument(10), true));
+    goTo(movePrefix + "CombatMove", 3);
+    final var move = (MoveDelegate) data.getDelegate("move");
+    move.setDelegateBridgeAndPlayer(bridge);
+    move.start();
+    final var error =
+        move.performMove(
+            new games.strategy.engine.data.MoveDescription(
+                units, new games.strategy.engine.data.Route(a, b)));
+    assertThat(error.orElse(""), error.isEmpty(), is(true));
+    move.end();
+    goTo(movePrefix + "Battle", 3);
+    final var battle =
+        (games.strategy.triplea.delegate.battle.BattleDelegate) data.getDelegate("battle");
+    battle.setDelegateBridgeAndPlayer(bridge);
+    battle.start();
+    for (final var e : battle.getBattleListing().getBattlesMap().entrySet()) {
+      if (e.getValue().contains(b)) {
+        battle.fightBattle(b, false, e.getKey());
+      }
+    }
+    battle.end();
+  }
+
+  @Test
+  void aSubAttackingBattleshipsFiresOnceThenTheBattleEnds() {
+    usEndTurn(2);
+    final var pair = emptySeaPair();
+    final var sub = type("submarine").create(1, player("Germans"));
+    final var battleships = type("battleship").create(2, player("British"));
+    data.performChange(
+        games.strategy.engine.data.changefactory.ChangeFactory.addUnits(pair[0], sub));
+    data.performChange(
+        games.strategy.engine.data.changefactory.ChangeFactory.addUnits(pair[1], battleships));
+    attack("Germans", sub, pair[0], pair[1], "german");
+
+    // the sub is still there beside the battleships; one round only: one hit on a battleship
+    assertThat(pair[1].getUnitCollection().containsAll(sub), is(true));
+    assertThat(pair[1].getUnitCollection().containsAll(battleships), is(true));
+    assertThat(
+        battleships.stream().mapToInt(games.strategy.engine.data.Unit::getHits).sum(), is(1));
+    assertThat(
+        data.getBattleDelegate()
+            .getBattleTracker()
+            .getPendingBattleSitesWithoutBombing()
+            .contains(pair[1]),
+        is(false));
+  }
+
+  @Test
+  void battleshipsThatCannotHitASubRetreatAndTheSubStays() {
+    usEndTurn(2);
+    final var pair = emptySeaPair();
+    final var battleships = type("battleship").create(2, player("British"));
+    final var sub = type("submarine").create(1, player("Italians"));
+    data.performChange(
+        games.strategy.engine.data.changefactory.ChangeFactory.addUnits(pair[0], battleships));
+    data.performChange(
+        games.strategy.engine.data.changefactory.ChangeFactory.addUnits(pair[1], sub));
+    attack("British", battleships, pair[0], pair[1], "british");
+
+    assertThat(pair[1].getUnitCollection().containsAll(sub), is(true));
+    assertThat(pair[0].getUnitCollection().containsAll(battleships), is(true));
+  }
+
   @Test
   void mapLoadsAndStartsWithTheDutch() {
     final InitializationDelegate init = new InitializationDelegate();

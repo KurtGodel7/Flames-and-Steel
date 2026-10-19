@@ -18,6 +18,9 @@ public interface BattleActions {
    * Flames and Steel naval phases: remembers the units now waiting to die (victims of the destroyer
    * phase) so that they stay in the battle, and still fire, until the end of the round.
    */
+  /** Flames and Steel: the message a drawn battle ends with (default "Stalemate"). */
+  default void setDrawMessage(final String message) {}
+
   default void keepCurrentCasualtiesUntilRoundEnd() {}
 
   /** Like clearWaitingToDieAndDamagedChangesInto, but keeps the remembered casualties. */

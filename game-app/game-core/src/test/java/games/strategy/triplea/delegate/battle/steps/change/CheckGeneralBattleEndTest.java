@@ -294,6 +294,12 @@ class CheckGeneralBattleEndTest {
             .attackingUnits(List.of(attackerUnit))
             .defendingUnits(List.of(defenderUnit))
             .build();
+    // Flames and Steel's "battle ends when one side can't hit" rule is off without Sticky Hits
+    final var properties = battleState.getGameData().getProperties();
+    org.mockito.Mockito.doReturn(false).when(properties).get("Sticky Hits", false);
+    org.mockito.Mockito.doReturn(false)
+        .when(properties)
+        .get(CheckGeneralBattleEnd.ONE_SIDED_END, false);
 
     final CheckGeneralBattleEnd checkGeneralBattleEnd = givenCheckGeneralBattleEnd(battleState);
     checkGeneralBattleEnd.execute(executionStack, delegateBridge);

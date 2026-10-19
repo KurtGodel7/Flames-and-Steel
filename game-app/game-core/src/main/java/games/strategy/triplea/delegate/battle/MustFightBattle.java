@@ -150,6 +150,8 @@ public class MustFightBattle extends DependentBattle
   private List<String> offensiveAaTypes;
 
   private final List<Unit> attackingUnitsRetreated = new ArrayList<>();
+  // Flames and Steel: why a drawn battle ended, shown instead of "Stalemate" (null: stalemate)
+  private @Nullable String drawMessage;
   private final List<Unit> defendingUnitsRetreated = new ArrayList<>();
   // -1 would mean forever until one side is eliminated (the default is infinite)
   private final int maxRounds;
@@ -521,6 +523,11 @@ public class MustFightBattle extends DependentBattle
       }
     }
     killedDuringCurrentRound.clear();
+  }
+
+  @Override
+  public void setDrawMessage(final String message) {
+    drawMessage = message;
   }
 
   @Override
@@ -1418,10 +1425,17 @@ Round 10,000 reached in a battle. Something must be wrong. Please report this to
   private void nobodyWins(final IDelegateBridge bridge) {
     endBattle(bridge);
     whoWon = WhoWon.DRAW;
-    bridge.getDisplayChannelBroadcaster().battleEnd(battleId, "Stalemate");
-    bridge
-        .getHistoryWriter()
-        .addChildToEvent(defender.getName() + " and " + attacker.getName() + " reach a stalemate");
+    if (drawMessage != null) {
+      // Flames and Steel: the battle ended because one side can't hit the other
+      bridge.getDisplayChannelBroadcaster().battleEnd(battleId, drawMessage);
+      bridge.getHistoryWriter().addChildToEvent(drawMessage);
+    } else {
+      bridge.getDisplayChannelBroadcaster().battleEnd(battleId, "Stalemate");
+      bridge
+          .getHistoryWriter()
+          .addChildToEvent(
+              defender.getName() + " and " + attacker.getName() + " reach a stalemate");
+    }
     battleResultDescription = BattleRecord.BattleResultDescription.STALEMATE;
     showCasualties(bridge);
     if (!headless) {
