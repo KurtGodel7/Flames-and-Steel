@@ -183,9 +183,14 @@ public class CasualtySelector {
             costs,
             data,
             allowMultipleHitsPerUnit);
-    final List<Unit> sortedTargetsToPickFrom = defaultCasualtiesAndSortedTargets.getSecond();
     final boolean stickyHits =
         allowMultipleHitsPerUnit && Properties.getStickyHits(data.getProperties());
+    // Flames and Steel: the default keeps the last units able to hit an enemy type (request 12)
+    final List<Unit> sortedTargetsToPickFrom =
+        stickyHits
+            ? StickyHits.keepLastHitters(
+                defaultCasualtiesAndSortedTargets.getSecond(), combatValue.getEnemyUnits())
+            : defaultCasualtiesAndSortedTargets.getSecond();
     final CasualtyList defaultCasualties =
         stickyHits
             ? StickyHits.getDefaultCasualties(sortedTargetsToPickFrom, hitsRemaining)

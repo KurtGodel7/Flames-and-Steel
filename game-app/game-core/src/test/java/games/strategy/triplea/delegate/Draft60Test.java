@@ -391,6 +391,74 @@ class Draft60Test {
     assertThat(pair[0].getUnitCollection().containsAll(battleships), is(true));
   }
 
+  // --- request 12 section 3: default casualties keep the last units able to hit
+
+  // one hit: the default used to sink the destroyer, the only ship able to hit the sub
+  private static final int hitsForTest = 1;
+
+  @Test
+  void theDefaultKeepsTheDestroyerWhileEnemySubsRemain() {
+    final GamePlayer british = player("British");
+    final GamePlayer italians = player("Italians");
+    final var fleet = new java.util.ArrayList<games.strategy.engine.data.Unit>();
+    fleet.addAll(type("battleship").create(1, british));
+    fleet.addAll(type("cruiser").create(1, british));
+    final var destroyer = type("destroyer").create(1, british);
+    fleet.addAll(destroyer);
+    final var enemies = new java.util.ArrayList<games.strategy.engine.data.Unit>();
+    enemies.addAll(type("submarine").create(1, italians));
+    enemies.addAll(type("cruiser").create(1, italians));
+    final var bridge = bridge(british);
+    org.mockito.Mockito.when(
+            bridge
+                .getRemotePlayer()
+                .selectCasualties(
+                    org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.anyInt(),
+                    org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.anyBoolean(),
+                    org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.anyBoolean()))
+        .thenAnswer(
+            i ->
+                new games.strategy.triplea.delegate.data.CasualtyDetails(
+                    i.<games.strategy.triplea.delegate.data.CasualtyList>getArgument(10), true));
+    final var dice = org.mockito.Mockito.mock(DiceRoll.class);
+    org.mockito.Mockito.when(dice.getHits()).thenReturn(hitsForTest);
+    final var details =
+        games.strategy.triplea.delegate.battle.casualty.CasualtySelector.selectCasualties(
+            british,
+            fleet,
+            games.strategy.triplea.delegate.power.calculator.CombatValueBuilder.mainCombatValue()
+                .enemyUnits(enemies)
+                .friendlyUnits(fleet)
+                .side(games.strategy.triplea.delegate.battle.BattleState.Side.DEFENSE)
+                .gameSequence(data.getSequence())
+                .supportAttachments(data.getUnitTypeList().getSupportRules())
+                .lhtrHeavyBombers(false)
+                .gameDiceSides(data.getDiceSides())
+                .territoryEffects(List.of())
+                .build(),
+            territory("Sea Zone 148 Java Sea"),
+            bridge,
+            "test",
+            dice,
+            java.util.UUID.randomUUID(),
+            true,
+            hitsForTest,
+            true);
+    assertThat(details.getKilled().containsAll(destroyer), is(false));
+    assertThat(details.getKilled(), is(List.of()));
+  }
+
   @Test
   void mapLoadsAndStartsWithTheDutch() {
     final InitializationDelegate init = new InitializationDelegate();

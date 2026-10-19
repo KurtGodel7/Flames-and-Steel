@@ -164,6 +164,46 @@ public class StickyHits {
   }
 
   /**
+   * Flames and Steel (request 12 section 3): the order of loss with the units that alone can hit
+   * some enemy unit type still in the battle moved to the end, so the default never takes them
+   * before the rest (with enemy submarines present, destroyers go last). Otherwise the order is
+   * kept. A unit "can hit" a type when its own targeting allows it (a destroyer's help to the rest
+   * of the fleet doesn't count); Undersea War submarines can hit submarines.
+   */
+  public static List<Unit> keepLastHitters(
+      final List<Unit> orderOfLoss, final Collection<Unit> enemies) {
+    final List<games.strategy.engine.data.UnitType> enemyTypes =
+        enemies.stream()
+            .filter(Matches.unitIsNotInfrastructure())
+            .map(Unit::getType)
+            .distinct()
+            .toList();
+    final Set<Unit> keep = new HashSet<>();
+    for (final games.strategy.engine.data.UnitType enemy : enemyTypes) {
+      final List<Unit> hitters = orderOfLoss.stream().filter(u -> canHit(u, enemy)).toList();
+      if (!hitters.isEmpty() && hitters.size() < orderOfLoss.size()) {
+        keep.addAll(hitters);
+      }
+    }
+    if (keep.isEmpty()) {
+      return orderOfLoss;
+    }
+    final List<Unit> result = new ArrayList<>();
+    orderOfLoss.stream().filter(u -> !keep.contains(u)).forEach(result::add);
+    orderOfLoss.stream().filter(keep::contains).forEach(result::add);
+    return result;
+  }
+
+  private static boolean canHit(final Unit unit, final games.strategy.engine.data.UnitType enemy) {
+    if (games.strategy.triplea.delegate.battle.UnderseaWar.mayHitSubs(unit)
+        && games.strategy.triplea.delegate.battle.UnderseaWar.isSub(enemy)) {
+      return true;
+    }
+    return !unit.getUnitAttachment().getCanNotTarget().contains(enemy)
+        && !enemy.getUnitAttachment().getCanNotBeTargetedBy().contains(unit.getType());
+  }
+
+  /**
    * Default casualties under sticky hits: already-damaged units first, then the rest in the given
    * order of loss, each unit taking hits until destroyed before the next is hit.
    */
