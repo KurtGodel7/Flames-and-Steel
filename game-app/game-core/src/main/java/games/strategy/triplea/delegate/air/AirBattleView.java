@@ -32,6 +32,8 @@ public final class AirBattleView {
   private GamePlayer attacker;
   private GamePlayer defender;
   private final UUID id = UUID.randomUUID();
+  // each roll's plain-words line, by the dice the window shows (identity: two rolls may be equal)
+  private final Map<DiceRoll, String> captions = new java.util.IdentityHashMap<>();
 
   private AirBattleView(final IDelegateBridge bridge) {
     this.bridge = bridge;
@@ -82,6 +84,33 @@ public final class AirBattleView {
    * Moves the window to a step and shows the roll there. Returns the dice as the window shows them.
    */
   public DiceRoll showDice(final AirCombat.Roll roll, final GamePlayer roller, final String step) {
+    return showDice(roll, roller, step, roller.getName());
+  }
+
+  /**
+   * As {@link #showDice(AirCombat.Roll, GamePlayer, String)}, with the roll in plain words above
+   * the dice, e.g. "AA guns fire at 2: rolled 4, miss".
+   *
+   * @param who who fires, e.g. "AA guns" or "Germans"
+   */
+  public DiceRoll showDice(
+      final AirCombat.Roll roll, final GamePlayer roller, final String step, final String who) {
+    final DiceRoll diceRoll = sendDice(roll, roller, step);
+    final String caption = AirCombat.describeRoll(who, roll, bridge.getData().getDiceSides());
+    captions.put(diceRoll, caption);
+    bridge.getDisplayChannelBroadcaster().battleStepText(id, step, List.of(caption), true, "");
+    return diceRoll;
+  }
+
+  /**
+   * Moves the window to a step and shows only these lines there (no earlier step's dice), with an
+   * optional line for the casualties area.
+   */
+  public void showText(final String step, final List<String> lines, final String summary) {
+    bridge.getDisplayChannelBroadcaster().battleStepText(id, step, lines, false, summary);
+  }
+
+  private DiceRoll sendDice(final AirCombat.Roll roll, final GamePlayer roller, final String step) {
     final int sides = bridge.getData().getDiceSides();
     final int remainder = roll.power() % sides;
     final List<Die> dice = new ArrayList<>();
@@ -116,6 +145,11 @@ public final class AirBattleView {
         .getDisplayChannelBroadcaster()
         .casualtyNotification(
             id, step, dice, hitPlayer, new ArrayList<>(killed), new ArrayList<>(damaged), Map.of());
+    // the casualty notice redraws the dice; put their plain-words line back above them
+    final String caption = captions.get(dice);
+    if (caption != null) {
+      bridge.getDisplayChannelBroadcaster().battleStepText(id, step, List.of(caption), true, "");
+    }
     // nobody controls the neutral player (neutral garrisons), so it is never asked to confirm
     if ((autoCalculated || hitPlayer.isAi()) && isControlled(hitPlayer)) {
       bridge.getRemotePlayer(hitPlayer).confirmOwnCasualties(id, "Press space to continue");

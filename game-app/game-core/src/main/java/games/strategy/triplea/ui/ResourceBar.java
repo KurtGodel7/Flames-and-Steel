@@ -71,12 +71,14 @@ public class ResourceBar extends JPanel implements GameDataChangeListener {
               final GamePlayer player;
               final IntegerMap<Resource> resourceIncomes;
               final String peace;
+              final int bombed;
               try (GameData.Unlocker ignored = gameData.acquireReadLock()) {
                 player = gameData.getSequence().getStep().getPlayerId();
                 if (player == null) {
                   return;
                 }
                 resourceIncomes = AbstractEndTurnDelegate.findEstimatedIncome(player, gameData);
+                bombed = player.getTechAttachment().getBombedThisRound();
                 // Flames and Steel: say so when the nation is at peace on fixed income
                 peace =
                     Peacetime.isAtPeace(player)
@@ -103,6 +105,10 @@ public class ResourceBar extends JPanel implements GameDataChangeListener {
                       final int income = resourceIncomes.getInt(resource);
                       final var text = new StringBuilder(IStat.DECIMAL_FORMAT.format(quantity));
                       text.append(" (").append(income >= 0 ? "+" : "").append(income).append(")");
+                      // Flames and Steel (request 15): PUs lost to this round's bombing raids
+                      if (bombed > 0 && resource.getName().equals(Constants.PUS)) {
+                        text.append(" (−").append(bombed).append(" from bombing this round)");
+                      }
                       final JLabel label =
                           uiContext.getResourceImageFactory().getLabel(resource, text.toString());
                       label.setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 6));

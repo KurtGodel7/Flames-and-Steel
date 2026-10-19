@@ -16,6 +16,7 @@
 6,games.strategy.engine.display.IDisplay,listBattleSteps,java.util.UUID,java.util.List
 13,games.strategy.engine.display.IDisplay,shutDown
 5,games.strategy.engine.display.IDisplay,gotoBattleStep,java.util.UUID,java.lang.String
+14,games.strategy.engine.display.IDisplay,battleStepText,java.util.UUID,java.lang.String,java.util.List,boolean,java.lang.String
 12,games.strategy.engine.display.IDisplay,showBattle,java.util.UUID,games.strategy.engine.data.Territory,java.lang.String,java.util.Collection,java.util.Collection,java.util.Collection,java.util.Collection,java.util.Collection,java.util.Map,games.strategy.engine.data.GamePlayer,games.strategy.engine.data.GamePlayer,boolean,games.strategy.triplea.delegate.battle.IBattle$BattleType,java.util.Collection
 11,games.strategy.engine.display.IDisplay,reportMessageToPlayers,java.util.Collection,java.util.Collection,java.lang.String,java.lang.String
 4,games.strategy.engine.display.IDisplay,deadUnitNotification,java.util.UUID,games.strategy.engine.data.GamePlayer,java.util.Collection,java.util.Map

@@ -102,4 +102,12 @@ public class HeadlessDisplay implements IDisplay {
 
   @Override
   public void gotoBattleStep(final UUID battleId, final String step) {}
+
+  @Override
+  public void battleStepText(
+      final UUID battleId,
+      final String step,
+      final List<String> lines,
+      final boolean keepDice,
+      final String summary) {}
 }

@@ -7,7 +7,6 @@ import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.changefactory.ChangeFactory;
 import games.strategy.engine.message.IRemote;
 import games.strategy.triplea.Constants;
-import games.strategy.triplea.attachments.AirUnitAttachment;
 import games.strategy.triplea.attachments.AirZoneAttachment;
 import games.strategy.triplea.attachments.AirZoneAttachment.ZoneType;
 import games.strategy.triplea.attachments.ApcAttachment;
@@ -54,6 +53,8 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
   private Map<GamePlayer, List<TargetAssignment>> pending = new LinkedHashMap<>();
   // the window of the air battle being fought, closed if that battle fails
   private transient AirBattleView currentView;
+  // this strike step's bombing raids, for the summary at its end
+  private final transient List<Raid> raids = new ArrayList<>();
 
   @Override
   public void start() {
@@ -271,6 +272,8 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
   private void resolveStrikes() {
     final List<Strike> strikes = buildStrikes();
     pending.clear();
+    raids.clear();
+    clearBombedThisRound();
     if (strikes.isEmpty()) {
       return;
     }
@@ -286,6 +289,7 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
         safely(strikeName(strike), () -> fightStrike(strike, bombed));
       }
     }
+    reportRaids();
   }
 
   private static String strikeName(final Strike strike) {
@@ -378,7 +382,7 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
     if (!aaGuns.isEmpty()) {
       final String text = "AA fire in " + t.getName();
       final Roll roll = fire(aaGuns, AirCombat::aaPower, text);
-      final DiceRoll dice = view.showDice(roll, AirCombat.chooser(aaGuns), aaFire);
+      final DiceRoll dice = view.showDice(roll, AirCombat.chooser(aaGuns), aaFire, "AA guns");
       AirCombat.takeHits(
           bridge, view, aaCasualties, strike.zone(), strike.survivors(), aaGuns, roll, dice, text);
     }
@@ -387,8 +391,7 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
       return;
     }
     if (kind == TargetKind.STRATEGIC) {
-      view.gotoStep(strikeStep);
-      view.end(strategicBombing(strike, bombed));
+      view.end(strategicBombing(strike, bombed, targets, view, strikeStep));
       return;
     }
     // 2. the strike
@@ -413,7 +416,8 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
       if (!hit.all().isEmpty() && !strike.survivors().isEmpty()) {
         final String backText = "Ships in " + t.getName() + " fire back";
         final Roll back = fire(hit.all(), AirCombat::shipFireBackPower, backText);
-        final DiceRoll backDice = view.showDice(back, AirCombat.chooser(hit.all()), fireBack);
+        final DiceRoll backDice =
+            view.showDice(back, AirCombat.chooser(hit.all()), fireBack, "Ships");
         AirCombat.takeHits(
             bridge,
             view,
@@ -435,46 +439,159 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
             + (lost > 0 ? "; " + lost + " aircraft lost" : ""));
   }
 
-  /** Bombs the target and returns the result for the battle window. */
-  private String strategicBombing(final Strike strike, final IntegerMap<Territory> bombed) {
+  /** One strategic bombing raid's result, for the air phase summary. */
+  record Raid(GamePlayer attacker, Territory territory, GamePlayer victim, int loss) {
+    String describe() {
+      return AirCombat.adjective(attacker)
+          + " bombed "
+          + territory.getName()
+          + ": "
+          + victim.getName()
+          + " "
+          + MINUS
+          + loss
+          + " PUs";
+    }
+  }
+
+  private static final String MINUS = "−";
+
+  /**
+   * Bombs the target: PUs off its owner, at most twice the territory's value per round over all
+   * raids on it. Shows each bomber's damage and the total in the battle window's bombing step and
+   * returns the result for the window's last line.
+   */
+  private String strategicBombing(
+      final Strike strike,
+      final IntegerMap<Territory> bombed,
+      final List<Unit> targets,
+      final AirBattleView view,
+      final String step) {
     final Territory t = strike.target().territory();
     final GamePlayer victim = t.getOwner();
-    final int damage =
-        strike.survivors().stream()
-            .mapToInt(
-                u ->
-                    AirUnitAttachment.get(u.getType())
-                        .map(AirUnitAttachment::getBombingDamage)
-                        .orElse(0))
-            .sum();
+    final GamePlayer attacker = AirCombat.chooser(strike.survivors());
+    final String targetName =
+        t.getName()
+            + (targets.isEmpty()
+                ? ""
+                : " "
+                    + String.join(
+                        " and ",
+                        targets.stream()
+                            .map(u -> AirCombat.unitName(u.getType()))
+                            .distinct()
+                            .toList()));
+    final List<String> lines = new ArrayList<>();
+    int damage = 0;
+    for (final Unit bomber : strike.survivors()) {
+      final int d = AirCombat.bombingDamage(bomber);
+      damage += d;
+      lines.add(
+          AirCombat.adjective(bomber.getOwner())
+              + " "
+              + AirCombat.unitName(bomber.getType())
+              + " bombs "
+              + targetName
+              + ": "
+              + d
+              + " PUs");
+    }
     final Resource pus = getData().getResourceList().getResourceOrThrow(Constants.PUS);
-    final int capLeft = Math.max(0, AirCombat.bombingCap(t) - bombed.getInt(t));
-    final int loss = Math.min(Math.min(damage, capLeft), victim.getResources().getQuantity(pus));
+    final int cap = AirCombat.bombingCap(t);
+    final int capLeft = Math.max(0, cap - bombed.getInt(t));
+    final int before = victim.getResources().getQuantity(pus);
+    final int loss = Math.min(Math.min(damage, capLeft), before);
+    if (damage > capLeft) {
+      lines.add(
+          damage
+              + " PUs of damage, capped at "
+              + capLeft
+              + " (2 × the territory's value"
+              + (capLeft < cap ? "; " + (cap - capLeft) + " already bombed this round" : "")
+              + ")");
+    }
+    if (loss < Math.min(damage, capLeft)) {
+      lines.add(victim.getName() + " had only " + before + " PUs");
+    }
+    lines.add(
+        victim.getName()
+            + " lose "
+            + loss
+            + " PUs (raid cap "
+            + cap
+            + "): "
+            + before
+            + " → "
+            + (before - loss)
+            + " PUs");
     bombed.add(t, loss);
+    final Raid raid = new Raid(attacker, t, victim, loss);
+    raids.add(raid);
     bridge
         .getHistoryWriter()
         .addChildToEvent(
-            MyFormatter.unitsToText(strike.survivors())
-                + " bomb "
-                + t.getName()
-                + " for "
+            raid.describe()
+                + " ("
                 + damage
-                + " damage: "
-                + victim.getName()
-                + " loses "
-                + loss
-                + MyFormatter.pluralize(" PU", loss)
-                + (damage > capLeft ? " (limit " + AirCombat.bombingCap(t) + " per round)" : ""));
+                + " damage, raid cap "
+                + cap
+                + (damage > capLeft ? ", capped at " + capLeft : "")
+                + "; "
+                + before
+                + " → "
+                + (before - loss)
+                + " PUs)");
     if (loss > 0) {
       bridge.addChange(ChangeFactory.changeResourcesChange(victim, pus, -loss));
+      final var tech = victim.getTechAttachment();
+      bridge.addChange(
+          ChangeFactory.attachmentPropertyChange(
+              tech, tech.getBombedThisRound() + loss, "bombedThisRound"));
     }
-    return damage
-        + " damage: "
-        + victim.getName()
-        + " loses "
-        + loss
-        + MyFormatter.pluralize(" PU", loss)
-        + (damage > capLeft ? " (limit " + AirCombat.bombingCap(t) + " per round)" : "");
+    view.showText(step, lines, "Bombing damage: " + victim.getName() + " " + MINUS + loss + " PUs");
+    return victim.getName() + " lose " + loss + " PUs";
+  }
+
+  /**
+   * Clears last round's bombing figures, so the PUs display only counts this round's raids. Called
+   * as the strike step starts, before any raid.
+   */
+  private void clearBombedThisRound() {
+    for (final GamePlayer p : getData().getPlayerList().getPlayers()) {
+      final var tech = p.getTechAttachment();
+      if (tech.getBombedThisRound() != 0) {
+        bridge.addChange(ChangeFactory.attachmentPropertyChange(tech, 0, "bombedThisRound"));
+      }
+    }
+  }
+
+  /** At the end of the strikes: every raid with its damage, and the total per nation. */
+  private void reportRaids() {
+    if (raids.isEmpty()) {
+      return;
+    }
+    final Map<GamePlayer, Integer> totals = new LinkedHashMap<>();
+    raids.forEach(r -> totals.merge(r.victim(), r.loss(), Integer::sum));
+    final List<String> lines = new ArrayList<>(raids.stream().map(Raid::describe).toList());
+    totals.forEach(
+        (victim, loss) ->
+            lines.add(
+                "Total: "
+                    + victim.getName()
+                    + " "
+                    + MINUS
+                    + loss
+                    + " PUs from bombing this round"));
+    bridge.getHistoryWriter().startEvent("Strategic bombing this round");
+    lines.forEach(line -> bridge.getHistoryWriter().addChildToEvent(line));
+    bridge
+        .getDisplayChannelBroadcaster()
+        .reportMessageToAll(
+            "<html>" + String.join("<br>", lines) + "</html>",
+            "Strategic bombing this round",
+            false,
+            false,
+            false);
   }
 
   private List<Strike> buildStrikes() {

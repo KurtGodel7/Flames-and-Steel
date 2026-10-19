@@ -50,6 +50,9 @@ public class TechAttachment extends DefaultAttachment {
   // Flames and Steel research centres.
   // Number of research centres this player has.
   @Getter private int researchCenters = 0;
+  // Flames and Steel (request 15): PUs the nation lost to strategic bombing in this round's air
+  // phase, shown beside its PUs; set by the air strike step, which clears it first each round
+  @Getter private int bombedThisRound = 0;
   // Stars (breakthroughs) gained so far, by tech name. Starting stars are set in the XML.
   private @Nullable IntegerMap<String> researchStars = null;
   // Per-nation star counts that override the tech's own researchStarsRequired, by tech name.
@@ -345,6 +348,18 @@ public class TechAttachment extends DefaultAttachment {
     researchCenters = 0;
   }
 
+  private void setBombedThisRound(final String value) {
+    bombedThisRound = getInt(value);
+  }
+
+  private void setBombedThisRound(final Integer value) {
+    bombedThisRound = value;
+  }
+
+  private void resetBombedThisRound() {
+    bombedThisRound = 0;
+  }
+
   private void setResearchStars(final String value) throws GameParseException {
     final String[] s = splitOnColon(value);
     if (s.length != 2) {
@@ -551,6 +566,13 @@ public class TechAttachment extends DefaultAttachment {
                   this::setShipyards,
                   this::getShipyards,
                   this::resetShipyards));
+      case "bombedThisRound" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setBombedThisRound,
+                  this::setBombedThisRound,
+                  this::getBombedThisRound,
+                  this::resetBombedThisRound));
       case "researchCenters" ->
           Optional.of(
               MutableProperty.of(

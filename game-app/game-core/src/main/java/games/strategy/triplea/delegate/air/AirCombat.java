@@ -31,6 +31,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 import lombok.experimental.UtilityClass;
@@ -323,6 +324,37 @@ public class AirCombat {
   /** The result of a low luck roll: hits, and the one die rolled for the remainder (if any). */
   public record Roll(int hits, int[] dice, int power) {}
 
+  /**
+   * A low luck roll in plain words (request 15): "AA guns fire at 2: rolled 4, miss", "Germans fire
+   * at 12: 2 sure hits", "Germans fire at 9: 1 sure hit, then rolled 2 at 3, hit: 2 hits". Dice
+   * read 1 to 6 as on screen; the die hits when it is at or below the remainder.
+   */
+  public static String describeRoll(final String who, final Roll roll, final int sides) {
+    final int sure = roll.power() / sides;
+    final int remainder = roll.power() % sides;
+    final String start = who + " fire at " + roll.power() + ": ";
+    final int die = roll.dice().length == 0 ? -1 : roll.dice()[0] + 1;
+    if (sure == 0) {
+      return die < 0
+          ? start + "no dice, no hits"
+          : start + "rolled " + die + ", " + (roll.hits() > 0 ? "hit" : "miss");
+    }
+    final StringBuilder text =
+        new StringBuilder(start + sure + MyFormatter.pluralize(" sure hit", sure));
+    if (die >= 0) {
+      text.append(", then rolled ")
+          .append(die)
+          .append(" at ")
+          .append(remainder)
+          .append(", ")
+          .append(die <= remainder ? "hit" : "miss")
+          .append(": ")
+          .append(roll.hits())
+          .append(MyFormatter.pluralize(" hit", roll.hits()));
+    }
+    return text.toString();
+  }
+
   /** Low luck: every full die's worth of power is a hit; the remainder is rolled with one die. */
   public static Roll lowLuck(
       final IDelegateBridge bridge,
@@ -482,6 +514,37 @@ public class AirCombat {
       return shipFireBackPower(unit);
     }
     return 0;
+  }
+
+  /**
+   * PUs one aircraft's strategic bombing destroys: its type's bombingDamage plus the owner's tech
+   * bombingBonus for the type.
+   */
+  public static int bombingDamage(final Unit unit) {
+    final int base =
+        AirUnitAttachment.get(unit.getType()).map(AirUnitAttachment::getBombingDamage).orElse(0);
+    if (base <= 0) {
+      return 0;
+    }
+    return Math.max(
+        0, base + unit.getData().getTechTracker().getBombingBonus(unit.getOwner(), unit.getType()));
+  }
+
+  /**
+   * A unit type in running text: "strategicBomber" becomes "strategic bomber"; renamed types keep
+   * their names ("Special Production Center").
+   */
+  public static String unitName(final UnitType type) {
+    if (games.strategy.triplea.formatter.UnitNames.isRenamed(type.getName())) {
+      return games.strategy.triplea.formatter.UnitNames.of(type);
+    }
+    return type.getName().replaceAll("(?<=[a-z0-9])(?=[A-Z])", " ").toLowerCase(Locale.ROOT);
+  }
+
+  /** "German" for the Germans, "British" for the British. */
+  public static String adjective(final GamePlayer player) {
+    final String name = player.getName();
+    return name.endsWith("ns") ? name.substring(0, name.length() - 1) : name;
   }
 
   /** Twice the territory's value: the most PUs one round of strategic bombing can destroy there. */

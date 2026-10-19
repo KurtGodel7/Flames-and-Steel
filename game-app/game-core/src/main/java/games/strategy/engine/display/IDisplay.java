@@ -270,6 +270,19 @@ public interface IDisplay extends IChannelSubscriber {
     }
   }
 
+  /**
+   * Flames and Steel (request 15): moves the battle window to a step and shows text for it, e.g.
+   * "AA guns fire at 2: rolled 4, miss" or what a bombing raid did.
+   *
+   * @param keepDice true to put the lines above the dice just shown for this step; false to replace
+   *     whatever the dice area showed (an earlier step's dice)
+   * @param summary shown in the window's casualties area (e.g. "Bombing damage: Germans -5 PUs"),
+   *     or empty for none
+   */
+  @RemoteActionCode(14)
+  void battleStepText(
+      UUID battleId, String step, List<String> lines, boolean keepDice, String summary);
+
   @RemoteActionCode(5)
   void gotoBattleStep(UUID battleId, String step);
 

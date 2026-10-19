@@ -155,6 +155,11 @@ class StatPanel extends JPanel implements GameDataChangeListener {
           for (int i = 0; i < stats.length; i++) {
             double value = stats[i].getValue(player, gameDataSync, uiContext.getMapData());
             collectedData[row][i + 1] = IStat.DECIMAL_FORMAT.format(value);
+            // Flames and Steel (request 15): "125 (-5 from bombing this round)"
+            final int bombed = player.getTechAttachment().getBombedThisRound();
+            if (stats[i] instanceof PuStat && bombed > 0) {
+              collectedData[row][i + 1] += " (−" + bombed + " from bombing this round)";
+            }
           }
           row++;
         }

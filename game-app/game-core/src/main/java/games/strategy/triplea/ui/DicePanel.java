@@ -74,6 +74,28 @@ public class DicePanel extends JPanel {
     return "<font color='" + LookAndFeel.getLookAndFeelColorRed() + "'>" + hitsString + "</font>";
   }
 
+  /**
+   * Flames and Steel (request 15): text for a step, above the dice just shown (keepDice) or in
+   * place of whatever was shown, so a step never shows an earlier step's dice.
+   */
+  void setLines(final List<String> lines, final boolean keepDice) {
+    if (!keepDice) {
+      removeAll();
+    }
+    int index = 0;
+    for (final String line : lines) {
+      final GridBagConstraints constraints = new GridBagConstraints();
+      constraints.fill = GridBagConstraints.HORIZONTAL;
+      constraints.weightx = 1;
+      constraints.gridx = 0;
+      add(new JLabel("<html><b>" + line + "</b></html>"), constraints, keepDice ? index++ : -1);
+    }
+    if (!keepDice) {
+      addBottomSpacing();
+    }
+    SwingComponents.redraw(this);
+  }
+
   private void add(final JComponent component) {
     final GridBagConstraints constraints = new GridBagConstraints();
     constraints.fill = GridBagConstraints.HORIZONTAL;

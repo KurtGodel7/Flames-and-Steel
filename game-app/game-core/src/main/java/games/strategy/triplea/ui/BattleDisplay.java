@@ -715,6 +715,23 @@ public class BattleDisplay extends JPanel {
     casualties.setVisible(false);
   }
 
+  /**
+   * Flames and Steel (request 15): an air phase step's own text, e.g. "AA guns fire at 2: rolled 4,
+   * miss" above its dice, or a bombing raid's result in place of the last step's dice.
+   */
+  void stepText(
+      final String step, final List<String> lines, final boolean keepDice, final String summary) {
+    setStep(step);
+    dicePanel.setLines(lines, keepDice);
+    casualties.setVisible(false);
+    if (!summary.isEmpty()) {
+      casualtiesInstantPanelDefender.remove(labelNoneDefender);
+      casualtiesInstantPanelDefender.add(new JLabel(summary));
+      casualtiesInstantPanelDefender.revalidate();
+      casualtiesInstantPanelDefender.repaint();
+    }
+  }
+
   void battleInfo(final String message, final String step) {
     messageLabel.setText(message);
     setStep(step);

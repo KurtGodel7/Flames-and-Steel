@@ -186,6 +186,18 @@ public final class BattlePanel extends ActionPanel {
         });
   }
 
+  /** Flames and Steel (request 15): text for one step of an air phase battle. */
+  public void showStepText(
+      final String step, final List<String> lines, final boolean keepDice, final String summary) {
+    final List<String> copy = List.copyOf(lines);
+    SwingUtilities.invokeLater(
+        () -> {
+          if (battleDisplay != null) {
+            battleDisplay.stepText(step, copy, keepDice, summary);
+          }
+        });
+  }
+
   public void showDice(final DiceRoll dice, final String step) {
     SwingUtilities.invokeLater(
         () -> {

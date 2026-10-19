@@ -123,6 +123,16 @@ public class TripleADisplay implements IDisplay {
   }
 
   @Override
+  public void battleStepText(
+      final UUID battleId,
+      final String step,
+      final List<String> lines,
+      final boolean keepDice,
+      final String summary) {
+    ui.getBattlePanel().showStepText(step, lines, keepDice, summary);
+  }
+
+  @Override
   public void gotoBattleStep(final UUID battleId, final String step) {
     ui.getBattlePanel().gotoStep(step);
   }
