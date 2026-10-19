@@ -551,22 +551,10 @@ public final class AirTargetPanel extends ActionPanel {
         return name + " cannot attack " + kindName(target.kind()).toLowerCase() + "." + narrow;
       }
       if (!AirCombat.mayAttack(player, selectedZone, type, target)) {
-        // a target must be within half the bomber's range of a place it can land
-        final int reach = reach(player, type);
-        final java.util.OptionalInt distance =
-            AirRange.landingDistance(player, selectedZone, type, territory, reach + 6);
+        // a target must be within half the bomber's range (rounded down) of a place it can land
         return "Out of range: "
-            + territory.getName()
-            + (distance.isPresent()
-                ? " is " + distance.getAsInt() + " steps from the nearest "
-                : " is more than " + (reach + 6) + " steps from any ")
-            + player.getName()
-            + " landing spot; a "
-            + name
-            + " strikes up to "
-            + reach
-            + (reach == 1 ? " step" : " steps")
-            + " from one (half its range of "
+            + AirRange.outOfRangeText(player, selectedZone, type, territory)
+            + " (half its range of "
             + rangeInForce(player, type)
             + ", rounded down)."
             + narrow;
@@ -578,10 +566,6 @@ public final class AirTargetPanel extends ActionPanel {
   /** The range a bomber of this type flies at: its own (with the owner's techs). */
   private int rangeInForce(final GamePlayer player, final UnitType type) {
     return AirRange.range(type, player);
-  }
-
-  private int reach(final GamePlayer player, final UnitType type) {
-    return rangeInForce(player, type) / 2;
   }
 
   private static String kindName(final TargetKind kind) {
@@ -712,11 +696,10 @@ public final class AirTargetPanel extends ActionPanel {
       targetsPanel.revalidate();
       return;
     }
-    final List<String> reaches = new ArrayList<>();
+    // request 17: how far each picked type strikes, and from where
     for (final UnitType type : selected.keySet()) {
-      reaches.add(ResearchView.displayName(type.getName()) + " " + reach(player, type));
+      targetsPanel.add(leftAligned(new JLabel(AirRange.reachText(player, selectedZone, type))));
     }
-    targetsPanel.add(leftAligned(new JLabel("Reach: " + String.join(", ", reaches))));
     if (selected.size() > 1) {
       final JPanel only = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
       only.add(new JLabel("See one type's own reach:"));

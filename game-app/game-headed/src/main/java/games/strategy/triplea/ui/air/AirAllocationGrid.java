@@ -1556,6 +1556,8 @@ final class AirAllocationGrid extends JDialog {
         + total
         + (total == 1 ? " target: " : " targets: ")
         + String.join(", ", parts)
+        + "<br>"
+        + games.strategy.triplea.delegate.air.AirRange.reachText(host.player(), column, row.type())
         + "<br><font size=-2>Each target is one territory or sea zone your "
         + plural(row.type(), 2)
         + "<br>here could strike this round.</font></html>";
@@ -1577,7 +1579,9 @@ final class AirAllocationGrid extends JDialog {
         + zoneName(column)
         + " for your "
         + plural(row.type(), 2)
-        + " to attack this round. They can still stop there on the way somewhere else.";
+        + " to attack this round. They can still stop there on the way somewhere else. ("
+        + games.strategy.triplea.delegate.air.AirRange.reachText(host.player(), column, row.type())
+        + ".)";
   }
 
   private static List<AirMove> adjust(

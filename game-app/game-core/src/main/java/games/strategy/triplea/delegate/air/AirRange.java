@@ -29,6 +29,96 @@ public class AirRange {
   }
 
   /**
+   * How far from a landing spot an aircraft of this range may strike: half its range, rounded down
+   * (range 3 reaches 1, range 4 reaches 2, range 8 reaches 4). The same for land and carriers.
+   */
+  public static int reach(final int range) {
+    return range / 2;
+  }
+
+  /**
+   * How far this nation's aircraft of this type strike from the front, in plain words (request 17):
+   * "Torpedo bombers: 1 zone from your carriers", "Dive bombers: 1 step from your land or
+   * carriers".
+   */
+  public static String reachText(
+      final GamePlayer player, final Territory zone, final UnitType type) {
+    final String name = pluralName(type);
+    final String from = landingSpots(zone, type, false);
+    if (from.isEmpty()) {
+      return name + ": cannot strike from an ocean front (only carrier aircraft can)";
+    }
+    final int reach = reach(range(type, player));
+    return name + ": " + reach + unit(zone, reach) + " from your " + from;
+  }
+
+  /**
+   * Why a target is out of range, in plain words (request 17): "Sea Zone 225: 2 zones from your
+   * nearest carrier; torpedo bombers reach 1".
+   */
+  public static String outOfRangeText(
+      final GamePlayer player, final Territory zone, final UnitType type, final Territory target) {
+    final String name = pluralName(type).toLowerCase(java.util.Locale.ROOT);
+    final String from = landingSpots(zone, type, true);
+    if (from.isEmpty()) {
+      return target.getName()
+          + ": "
+          + reachText(player, zone, type).toLowerCase(java.util.Locale.ROOT);
+    }
+    final int reach = reach(range(type, player));
+    final int look = reach + 6;
+    final OptionalInt distance = landingDistance(player, zone, type, target, look);
+    return target.getName()
+        + ": "
+        + (distance.isPresent()
+            ? distance.getAsInt()
+                + distanceUnit(zone, target, distance.getAsInt())
+                + " from your nearest "
+                + from
+            : "more than " + look + distanceUnit(zone, target, look) + " from any " + from)
+        + "; "
+        + name
+        + " reach "
+        + reach;
+  }
+
+  /**
+   * Where aircraft striking from this front may land: carriers in ocean fronts, land in land
+   * fronts, both in coastal fronts (carriers only for carrier aircraft); empty when none (a
+   * non-carrier type in an ocean front).
+   */
+  private static String landingSpots(final Territory zone, final UnitType type, final boolean one) {
+    final boolean carrierType = type.getUnitAttachment().getCarrierCost() > 0;
+    final String carrier = one ? "carrier" : "carriers";
+    return switch (AirZoneAttachment.get(zone).orElseThrow().getZoneType()) {
+      case OCEAN -> carrierType ? carrier : "";
+      case COASTAL -> carrierType ? "land or " + carrier : (one ? "landing territory" : "land");
+      default -> one ? "landing territory" : "land";
+    };
+  }
+
+  /**
+   * " zone"/" zones" in ocean fronts (all sea), " step"/" steps" (borders, land or sea) elsewhere.
+   */
+  private static String unit(final Territory zone, final int n) {
+    final boolean ocean = AirZoneAttachment.get(zone).orElseThrow().getZoneType() == ZoneType.OCEAN;
+    return (ocean ? " zone" : " step") + (n == 1 ? "" : "s");
+  }
+
+  /**
+   * As {@link #unit}, but "steps" whenever the target is land (the last step reaches the shore).
+   */
+  private static String distanceUnit(final Territory zone, final Territory target, final int n) {
+    return target.isWater() ? unit(zone, n) : " step" + (n == 1 ? "" : "s");
+  }
+
+  /** "Torpedo bombers", "Superfortresses". */
+  private static String pluralName(final UnitType type) {
+    final String name = AirAllocation.typeName(type);
+    return name + (name.endsWith("s") ? "es" : "s");
+  }
+
+  /**
    * Whether the nation has a landing spot in the front: a land territory there it (or a nation
    * whose land it may use) owns, or one of its own carriers in one of the front's sea zones.
    */
@@ -49,7 +139,7 @@ public class AirRange {
       final int range,
       final Territory target) {
     final GameMap map = target.getData().getMap();
-    final int reach = range / 2;
+    final int reach = reach(range);
     final ZoneType zoneType = AirZoneAttachment.get(zone).orElseThrow().getZoneType();
     final boolean jet =
         AirUnitAttachment.get(type).map(AirUnitAttachment::isFleetCarrierOnly).orElse(false);
@@ -108,7 +198,7 @@ public class AirRange {
     }
     final GameMap map = places.iterator().next().getData().getMap();
     for (final Territory place : places) {
-      final Set<Territory> around = new HashSet<>(map.getNeighbors(place, range / 2));
+      final Set<Territory> around = new HashSet<>(map.getNeighbors(place, reach(range)));
       around.add(place);
       if (around.stream().anyMatch(t -> isLandLandingSpot(player, t))) {
         return true;
