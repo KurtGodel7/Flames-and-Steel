@@ -160,6 +160,7 @@ public final class AirMapMode implements MapOverlay {
       final GameData data,
       final Consumer<String> status) {
     this.uiContext = uiContext;
+    placer.setTiles(name -> uiContext.getResourceLoader().loadBufferedImage(name));
     this.mapPanel = mapPanel;
     this.fixedWidth = 0;
     this.status = status;
@@ -315,6 +316,7 @@ public final class AirMapMode implements MapOverlay {
   /** Without a map panel: for drawing tests only (switched on, no hover). */
   AirMapMode(final UiContext uiContext, final GameData data, final int mapWidth) {
     this.uiContext = uiContext;
+    placer.setTiles(name -> uiContext.getResourceLoader().loadBufferedImage(name));
     this.mapPanel = null;
     this.fixedWidth = mapWidth;
     this.status = text -> {};
@@ -344,6 +346,8 @@ public final class AirMapMode implements MapOverlay {
     }
     data = newData;
     data.addDataChangeListener(changeListener);
+    // request 22: the box map (land, photo cards, plaque) is built in the background
+    placer.prepare(uiContext.getMapData(), newData);
     data.addGameDataEventListener(
         GameDataEvent.GAME_STEP_CHANGED, () -> SwingUtilities.invokeLater(this::stepChanged));
     zoneArea = Map.of();
@@ -589,6 +593,9 @@ public final class AirMapMode implements MapOverlay {
     boxStackRect.clear();
     pendingSpot.clear();
     dockX = 0;
+    dockRowBottom = 0;
+    dockRowHeight = 0;
+    dockDepth = 0;
     panelRect.clear();
     panelTitle.clear();
     stackRect.clear();
@@ -648,10 +655,22 @@ public final class AirMapMode implements MapOverlay {
           });
       paintLinks(g, paintData);
       paintHoverLink(g, mapData);
-      for (final Territory zone : zoneArea.keySet()) {
-        paintPanel(g, paintData, mapData, zone, anchor.get(zone), false);
+      // request 22: the acting nation's boxes first (and first on the dock), then the others
+      paintDockBar(g);
+      for (final boolean acting : new boolean[] {true, false}) {
+        for (final Territory zone : zoneArea.keySet()) {
+          if (isActingZone(zone) == acting) {
+            paintPanel(g, paintData, mapData, zone, anchor.get(zone), false);
+          }
+        }
+        bombAnchor.forEach(
+            (zone, at) -> {
+              if (isActingZone(zone) == acting) {
+                paintPanel(g, paintData, mapData, zone, at, true);
+              }
+            });
       }
-      bombAnchor.forEach((zone, at) -> paintPanel(g, paintData, mapData, zone, at, true));
+      lastDockDepth = dockDepth;
     }
   }
 
@@ -800,24 +819,98 @@ public final class AirMapMode implements MapOverlay {
    * Where a docked box goes this paint: left to right along the bottom of the visible map (the
    * whole map when there is no map panel, as in previews).
    */
-  private @Nullable Rectangle dockSpot(final int width, final int height) {
-    final Rectangle view;
-    if (mapPanel != null && mapPanel.getWidth() > 0) {
-      final double scale = mapPanel.getScale();
-      view =
-          new Rectangle(
-              mapPanel.getXOffset(),
-              mapPanel.getYOffset(),
-              (int) (mapPanel.getWidth() / scale),
-              (int) (mapPanel.getHeight() / scale));
-    } else {
-      final java.awt.Dimension size = uiContext.getMapData().getMapDimensions();
-      view = new Rectangle(0, 0, size.width, size.height);
+  private @Nullable Rectangle dockSpot(final int width, final int height, final int slot) {
+    final Rectangle view = view();
+    // request 22: a full row continues on a row above it
+    if (dockX > 0 && 10 + dockX + slot > view.width - 10) {
+      dockRowBottom += dockRowHeight + 10;
+      dockX = 0;
+      dockRowHeight = 0;
     }
     final Rectangle r =
-        new Rectangle(view.x + 10 + dockX, view.y + view.height - height - 10, width, height);
-    dockX += width + 12;
+        new Rectangle(
+            view.x + 10 + dockX + (slot - width) / 2,
+            view.y + view.height - 10 - dockRowBottom - height,
+            width,
+            height);
+    dockX += slot + 12;
+    dockRowHeight = Math.max(dockRowHeight, height);
+    dockDepth = Math.max(dockDepth, view.y + view.height - r.y);
     return r;
+  }
+
+  // the docked rows this paint: the bottom of the current row above the view's bottom, its height,
+  // and how far up the dock reaches (kept for drawing the dock's bar under the next paint's boxes)
+  private int dockRowBottom;
+  private int dockRowHeight;
+  private int dockDepth;
+  private int lastDockDepth;
+
+  // request 22: a box briefly outlined after "Choose targets", until this time
+  private volatile @Nullable Territory flashZone;
+  private volatile long flashUntil;
+
+  /** Outlines the zone's box for a moment, so the player sees which box the group is in. */
+  public void flash(final Territory zone) {
+    flashZone = zone;
+    flashUntil = System.currentTimeMillis() + 1600;
+    repaint();
+    final javax.swing.Timer timer = new javax.swing.Timer(1700, e -> repaint());
+    timer.setRepeats(false);
+    timer.start();
+  }
+
+  /** For tests: the box placer. */
+  BoxPlacer placer() {
+    return placer;
+  }
+
+  /** Where the zone's box was drawn last (empty for a docked box, which stays in view). */
+  public Optional<Rectangle> boxOnMap(final Territory zone) {
+    if (placer.isDocked(zone)) {
+      return Optional.empty();
+    }
+    return Optional.ofNullable(panelRect.get(zone));
+  }
+
+  /** The visible part of the map, in map pixels (the whole map without a map panel). */
+  private Rectangle view() {
+    if (mapPanel != null && mapPanel.getWidth() > 0) {
+      final double scale = mapPanel.getScale();
+      return new Rectangle(
+          mapPanel.getXOffset(),
+          mapPanel.getYOffset(),
+          (int) (mapPanel.getWidth() / scale),
+          (int) (mapPanel.getHeight() / scale));
+    }
+    final java.awt.Dimension size = uiContext.getMapData().getMapDimensions();
+    return new Rectangle(0, 0, size.width, size.height);
+  }
+
+  /** Request 22: the dock is a bar along the bottom of the view, with its own label. */
+  private void paintDockBar(final Graphics2D g) {
+    if (lastDockDepth <= 0) {
+      return;
+    }
+    final Rectangle view = view();
+    final int top = view.y + view.height - lastDockDepth - 26;
+    g.setColor(new Color(20, 24, 30, 215));
+    g.fillRect(view.x, top, view.width, view.y + view.height - top);
+    g.setColor(new Color(255, 255, 255, 120));
+    g.drawLine(view.x, top, view.x + view.width, top);
+    g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
+    g.setColor(new Color(220, 220, 220));
+    g.drawString(
+        "Air fronts with no room on the map (drag a box onto the map to place it yourself)",
+        view.x + 12,
+        top + 16);
+  }
+
+  /** Whether the nation acting now has aircraft in the zone (true when no nation is acting). */
+  private boolean isActingZone(final Territory zone) {
+    final GamePlayer player = actingPlayer;
+    return player == null
+        || stacks.getOrDefault(zone, List.of()).stream().anyMatch(gr -> gr.owner().equals(player));
   }
 
   /**
@@ -1006,6 +1099,65 @@ public final class AirMapMode implements MapOverlay {
   }
 
   /** One zone's aircraft: a dark panel with the zone's name and each nation's stacks. */
+  private static final String DOGFIGHT_LABEL = "Dogfight";
+
+  // height of one carrier line at the bottom of an ocean front's box
+  private static final int CARRIER_LINE = 18;
+
+  /** A flag (item null) or an aircraft stack in a box, by its x offset and its row. */
+  private record Placed(@Nullable Item item, GamePlayer owner, int dx, int row) {}
+
+  /** A box's size and what goes where in it. */
+  private record Layout(int width, int height, List<Placed> placed) {}
+
+  /**
+   * Lays out a box's stacks. With rowPerNation each nation starts a new row (the usual shape);
+   * otherwise nations follow one another along rows of up to perRow stacks, which makes a flatter
+   * box. A nation's flag starts each of its rows.
+   */
+  private static Layout layout(
+      final List<List<Item>> groups,
+      final boolean rowPerNation,
+      final int perRow,
+      final int cell,
+      final int rowHeight,
+      final int titleWidth,
+      final int titleHeight,
+      final int below) {
+    final int limit = 6 + FLAG_WIDTH + perRow * cell;
+    final List<Placed> placed = new ArrayList<>();
+    int x = 6;
+    int row = 0;
+    int right = 0;
+    boolean first = true;
+    for (final List<Item> group : groups) {
+      final GamePlayer owner = group.get(0).owner();
+      if (!first && (rowPerNation || x + FLAG_WIDTH + cell > limit)) {
+        row++;
+        x = 6;
+      }
+      placed.add(new Placed(null, owner, x - 2, row));
+      x += FLAG_WIDTH;
+      for (final Item item : group) {
+        if (x + cell > limit) {
+          row++;
+          x = 6;
+          placed.add(new Placed(null, owner, x - 2, row));
+          x += FLAG_WIDTH;
+        }
+        placed.add(new Placed(item, owner, x, row));
+        x += cell;
+        right = Math.max(right, x);
+      }
+      first = false;
+    }
+    final int rows = groups.isEmpty() ? 0 : row + 1;
+    return new Layout(
+        Math.max(titleWidth + 12, right + 8),
+        titleHeight + rows * rowHeight + 6 + below,
+        List.copyOf(placed));
+  }
+
   private void paintPanel(
       final Graphics2D g,
       final GameData paintData,
@@ -1013,6 +1165,10 @@ public final class AirMapMode implements MapOverlay {
       final Territory zone,
       final Point at,
       final boolean bomb) {
+    // request 22: while a nation picks targets, bombing zones it has nothing in are hidden
+    if (markUnassigned && bomb && !isActingZone(zone)) {
+      return;
+    }
     final UnitImageFactory images = uiContext.getUnitImageFactory();
     final int w = images.getUnitImageWidth();
     final int h = images.getUnitImageHeight();
@@ -1021,22 +1177,42 @@ public final class AirMapMode implements MapOverlay {
     final FontMetrics fm = g.getFontMetrics();
     final int titleHeight = fm.getHeight() + 2;
     final List<List<Item>> groups = items(paintData, zone);
-    int rows = 0;
-    int maxPerRow = 0;
-    for (final List<Item> group : groups) {
-      final int n = group.size();
-      rows += (n + ICONS_PER_ROW - 1) / ICONS_PER_ROW;
-      maxPerRow = Math.max(maxPerRow, Math.min(n, ICONS_PER_ROW));
-    }
     final int cell = w + 16;
-    final int width = Math.max(fm.stringWidth(title) + 12, 14 + FLAG_WIDTH + maxPerRow * cell);
-    final int height =
-        titleHeight + rows * (h + 4 + AirDraw.hitBarRoom(images.getScaleFactor())) + 6;
+    final int rowHeight = h + 4 + AirDraw.hitBarRoom(images.getScaleFactor());
+    final boolean contested = isContested(zone, stacks.getOrDefault(zone, List.of()));
+    // request 22: nothing hangs outside the box: "Dogfight" sits in the title bar and an ocean
+    // front's carrier lines at the bottom of the box
+    final int titleWidth =
+        fm.stringWidth(title) + (contested ? fm.stringWidth(DOGFIGHT_LABEL) + 16 : 0);
+    final List<String> carrierLines =
+        AirZoneAttachment.get(zone).orElseThrow().getZoneType() == ZoneType.OCEAN
+            ? AirZoneOverlay.carrierLines(paintData, zone)
+            : List.of();
+    final int below = carrierLines.size() * CARRIER_LINE;
+    // request 22: the usual shape (a row per nation) first, then flatter ones that share rows,
+    // so a box can fit a narrow sea such as the Mediterranean
+    final List<Layout> layouts = new ArrayList<>();
+    layouts.add(
+        layout(groups, true, ICONS_PER_ROW, cell, rowHeight, titleWidth, titleHeight, below));
+    for (final int perRow : new int[] {ICONS_PER_ROW, 7, 10}) {
+      layouts.add(layout(groups, false, perRow, cell, rowHeight, titleWidth, titleHeight, below));
+    }
     // request 9 item 4: placed clear of what the player acts on, or where the player dragged it
-    final Point centre = placer.centreFor(zone, at, width, height, mapData, paintData);
+    final BoxPlacer.Placement placement =
+        placer.place(
+            zone,
+            at,
+            layouts.stream().map(l -> new java.awt.Dimension(l.width(), l.height())).toList(),
+            mapData,
+            paintData);
+    final Layout chosen = layouts.get(placement.shape());
+    final int width = chosen.width();
+    final int height = chosen.height();
     // request 20: a front with no clear sea near it docks at the bottom of the visible map
-    final @Nullable Rectangle docked = placer.isDocked(zone) ? dockSpot(width, height) : null;
-    final Rectangle r = docked != null ? docked : BoxPlacer.box(centre, width, height);
+    final @Nullable String[] status = markUnassigned ? targetStatus(zone, groups) : null;
+    final int slot = status == null ? width : Math.max(width, fm.stringWidth(status[0]) + 14);
+    final @Nullable Rectangle docked = placer.isDocked(zone) ? dockSpot(width, height, slot) : null;
+    final Rectangle r = docked != null ? docked : BoxPlacer.box(placement.centre(), width, height);
     final @Nullable Point mouse = mouseMapPoint;
     final boolean mouseInside = mouse != null && r.contains(mouse);
     if (altHeld && !mouseInside) {
@@ -1059,10 +1235,12 @@ public final class AirMapMode implements MapOverlay {
     if (fadedBox) {
       // the mouse is on a territory under the box: fade it so the territory shows
       g.setComposite(java.awt.AlphaComposite.getInstance(java.awt.AlphaComposite.SRC_OVER, 0.3f));
+    } else if (!isActingZone(zone)) {
+      // request 22: other nations' fronts are faded while a nation acts
+      g.setComposite(java.awt.AlphaComposite.getInstance(java.awt.AlphaComposite.SRC_OVER, 0.45f));
     }
     g.setColor(PANEL_BACK);
     g.fillRoundRect(r.x, r.y, r.width, r.height, 10, 10);
-    final boolean contested = isContested(zone, stacks.getOrDefault(zone, List.of()));
     if (bomb) {
       g.setColor(bombColor(paintData, mapData, zone));
       g.setStroke(dashed(3f));
@@ -1071,20 +1249,31 @@ public final class AirMapMode implements MapOverlay {
       g.setStroke(new BasicStroke(contested ? 4f : 2.5f));
     }
     g.drawRoundRect(r.x, r.y, r.width, r.height, 10, 10);
+    if (zone.equals(flashZone) && System.currentTimeMillis() < flashUntil) {
+      g.setColor(Color.YELLOW);
+      g.setStroke(new BasicStroke(5f));
+      g.drawRoundRect(r.x - 4, r.y - 4, r.width + 8, r.height + 8, 14, 14);
+    }
     g.setColor(Color.WHITE);
     g.drawString(title, r.x + 6, r.y + fm.getAscent() + 2);
+    if (contested) {
+      g.setColor(DOGFIGHT);
+      g.drawString(
+          DOGFIGHT_LABEL,
+          r.x + r.width - fm.stringWidth(DOGFIGHT_LABEL) - 8,
+          r.y + fm.getAscent() + 2);
+    }
     record(new Rectangle(r.x, r.y, r.width, titleHeight), new Hit(zone, List.of(), false, null));
-    int y = r.y + titleHeight;
     boolean unassigned = false;
-    for (final List<Item> group : groups) {
-      int col = 0;
-      paintFlag(g, group.get(0).owner(), r.x + 4, y + h / 2 - 5);
-      for (final Item item : group) {
-        if (col == ICONS_PER_ROW) {
-          col = 0;
-          y += h + 4 + AirDraw.hitBarRoom(images.getScaleFactor());
-        }
-        final int x = r.x + 6 + FLAG_WIDTH + col * cell;
+    for (final Placed placed : chosen.placed()) {
+      final int y = r.y + titleHeight + placed.row() * rowHeight;
+      if (placed.item() == null) {
+        paintFlag(g, placed.owner(), r.x + placed.dx(), y + h / 2 - 5);
+        continue;
+      }
+      final Item item = placed.item();
+      {
+        final int x = r.x + placed.dx();
         final java.awt.Composite oldComposite = g.getComposite();
         if (faded(item)) {
           g.setComposite(
@@ -1102,18 +1291,14 @@ public final class AirMapMode implements MapOverlay {
             new Hit(zone, item.units(), item.moved(), greyed(zone, item)));
         stackRect.putIfAbsent(
             stackKey(zone, item.owner(), item.type()), new Rectangle(x + 5, y, w, h));
-        col++;
       }
-      y += h + 4 + AirDraw.hitBarRoom(images.getScaleFactor());
     }
     pendingSpot.put(zone, new Point(r.x + 6, r.y + r.height + 6));
-    if (contested) {
-      AirDraw.tag(g, "Dogfight", r.x + r.width / 2, r.y - 10, DOGFIGHT);
-    }
     // request 20: in the target step, the box says what its strike aircraft are waiting for
-    final @Nullable String[] status = markUnassigned ? targetStatus(zone, groups) : null;
+    // (request 22: on the box's top edge, so it hangs no further over the map than that)
+    // (status worked out above, so a docked box can leave room for its tag)
     if (status != null) {
-      final int tagY = r.y - (contested ? 28 : 10);
+      final int tagY = r.y;
       final Color color =
           unassigned ? UNASSIGNED : status[0].startsWith("All") ? ASSIGNED : Color.LIGHT_GRAY;
       AirDraw.tag(g, status[0], r.x + r.width / 2, tagY, color);
@@ -1122,13 +1307,11 @@ public final class AirMapMode implements MapOverlay {
           new Rectangle(r.x + r.width / 2 - tagWidth / 2, tagY - 9, tagWidth, 18),
           new Hit(zone, List.of(), false, status[1]));
     }
-    final ZoneType type = AirZoneAttachment.get(zone).orElseThrow().getZoneType();
-    if (type == ZoneType.OCEAN) {
-      int ly = r.y + r.height + 12;
-      for (final String line : AirZoneOverlay.carrierLines(paintData, zone)) {
-        AirDraw.tag(g, line, r.x + r.width / 2, ly, Color.WHITE);
-        ly += 18;
-      }
+    // an ocean front's carrier room, at the bottom of the box
+    int ly = r.y + r.height - below - 4 + CARRIER_LINE / 2 + 2;
+    for (final String line : carrierLines) {
+      AirDraw.tag(g, line, r.x + r.width / 2, ly, Color.WHITE);
+      ly += CARRIER_LINE;
     }
     g.setComposite(panelComposite);
     if (fadedBox) {

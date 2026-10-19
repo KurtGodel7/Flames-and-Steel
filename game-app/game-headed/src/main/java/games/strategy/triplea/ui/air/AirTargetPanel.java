@@ -32,6 +32,7 @@ import java.awt.Graphics2D;
 import java.awt.Insets;
 import java.awt.Point;
 import java.awt.Polygon;
+import java.awt.Rectangle;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -746,6 +747,9 @@ public final class AirTargetPanel extends ActionPanel {
                           + (free < count ? "; " + free + " without a target" : "")
                           + "."));
               final JButton choose = smallButton("Choose targets");
+              choose.setToolTipText(
+                  "Picks the whole group, shows its box and targets, and flashes the box. Same as"
+                      + " Ctrl-clicking the group's icon in its box.");
               choose.addActionListener(e -> chooseGroup(player, zone, type));
               row.add(choose);
             }
@@ -779,8 +783,24 @@ public final class AirTargetPanel extends ActionPanel {
     selectedZone = zone;
     selected.clear();
     selected.put(type, free);
-    if (frame.getAirMapMode() != null) {
-      frame.getAirMapMode().scrollTarget(zone).ifPresent(p -> getMap().centerOnPoint(p));
+    final AirMapMode mode = frame.getAirMapMode();
+    if (mode != null) {
+      // request 22: bring the box and the targets in reach into view together, and flash the box
+      Rectangle view = mode.boxOnMap(zone).orElse(null);
+      try (GameData.Unlocker ignored = getData().acquireReadLock()) {
+        for (final Target target : AirCombat.getTargets(player, zone, type)) {
+          final Rectangle r = frame.getUiContext().getMapData().getBoundingRect(target.territory());
+          if (r != null) {
+            view = view == null ? new Rectangle(r) : view.union(r);
+          }
+        }
+      }
+      if (view != null) {
+        getMap().centerOnPoint(new Point((int) view.getCenterX(), (int) view.getCenterY()));
+      } else {
+        mode.scrollTarget(zone).ifPresent(p -> getMap().centerOnPoint(p));
+      }
+      mode.flash(zone);
     }
     selectionChanged();
   }
