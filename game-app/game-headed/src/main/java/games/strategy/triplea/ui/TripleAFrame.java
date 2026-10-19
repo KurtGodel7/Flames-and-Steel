@@ -452,7 +452,8 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
       allNations.addActionListener(e -> airMapMode.setFilter(null));
       filterGroup.add(allNations);
       nationFilter.add(allNations);
-      for (final GamePlayer nation : data.getPlayerList().getPlayers()) {
+      for (final GamePlayer nation :
+          games.strategy.triplea.delegate.TurnlessPlayers.withTurns(data)) {
         final JToggleButton button =
             new JToggleButton(new ImageIcon(uiContext.getFlagImageFactory().getSmallFlag(nation)));
         button.setFocusable(false);

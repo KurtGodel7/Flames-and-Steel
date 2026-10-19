@@ -232,7 +232,9 @@ public abstract class SetupPanel extends JPanel implements SetupModel {
               data.getProperties(),
               new PlayerTypes(HeadedPlayerTypes.getPlayerTypes()));
       playerRows.add(selector);
-      if (!player.isHidden()) {
+      // Flames and Steel: a player that never takes a turn (the Dutch) is not shown as a seat
+      if (!player.isHidden()
+          && !games.strategy.triplea.delegate.TurnlessPlayers.isTurnless(player)) {
         selector.layout(++gridY, panel);
         selector.setResourceModifiersVisible(false);
       }

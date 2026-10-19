@@ -78,7 +78,12 @@ public class PlayerSelectorRow implements PlayerCountrySelection {
     if (previousSelection.equalsIgnoreCase(PlayerTypes.PLAYER_TYPE_DEFAULT_LABEL)) {
       previousSelection = HeadedPlayerTypes.HUMAN_PLAYER.getLabel();
     }
-    if (List.of(this.playerTypesProvider.getAvailablePlayerLabels()).contains(previousSelection)) {
+    if (games.strategy.triplea.delegate.TurnlessPlayers.isTurnless(player)) {
+      // Flames and Steel: a player that never takes a turn (the Dutch) is never a seat
+      this.playerTypes.setSelectedItem(PlayerTypes.DOES_NOTHING_PLAYER_LABEL);
+      this.playerTypes.setEnabled(false);
+    } else if (List.of(this.playerTypesProvider.getAvailablePlayerLabels())
+        .contains(previousSelection)) {
       this.playerTypes.setSelectedItem(previousSelection);
     } else {
       setDefaultPlayerType();
@@ -242,13 +247,17 @@ public class PlayerSelectorRow implements PlayerCountrySelection {
   }
 
   void setPlayerType(final String playerType) {
-    if (enabled && !player.isHidden()) {
+    if (enabled
+        && !player.isHidden()
+        && !games.strategy.triplea.delegate.TurnlessPlayers.isTurnless(player)) {
       playerTypes.setSelectedItem(playerType);
     }
   }
 
   void setDefaultPlayerType() {
-    if (player.isDefaultTypeAi()) {
+    if (games.strategy.triplea.delegate.TurnlessPlayers.isTurnless(player)) {
+      playerTypes.setSelectedItem(PlayerTypes.DOES_NOTHING_PLAYER_LABEL);
+    } else if (player.isDefaultTypeAi()) {
       playerTypes.setSelectedItem(PlayerTypes.PRO_AI.getLabel());
     } else if (player.isDefaultTypeDoesNothing()) {
       playerTypes.setSelectedItem(PlayerTypes.DOES_NOTHING_PLAYER_LABEL);

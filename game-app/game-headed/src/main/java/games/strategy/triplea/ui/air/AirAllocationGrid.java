@@ -128,6 +128,8 @@ final class AirAllocationGrid extends JDialog {
   private final Map<String, Integer> targetCount = new HashMap<>();
   private final Map<String, Map<TargetKind, Integer>> targetKinds = new HashMap<>();
   private final Map<String, Integer> neutralTargets = new HashMap<>();
+  // land targets held by players that never take a turn, e.g. "3 Dutch" (request 12)
+  private final Map<String, String> turnlessTargets = new HashMap<>();
   private final Deque<List<AirMove>> undo = new ArrayDeque<>();
   // per row: the columns it sent aircraft to, most recent last (the Staying cell's + pulls back)
   private final Map<Row, Deque<Territory>> sentOrder = new HashMap<>();
@@ -242,6 +244,7 @@ final class AirAllocationGrid extends JDialog {
             final Map<TargetKind, Integer> kinds = AirCombat.countTargetsByKind(player, zone, type);
             targetKinds.put(key(type, zone), kinds);
             neutralTargets.put(key(type, zone), AirCombat.countNeutralTargets(player, zone, type));
+            turnlessTargets.put(key(type, zone), turnlessText(player, zone, type));
             targetCount.put(
                 key(type, zone), kinds.values().stream().mapToInt(Integer::intValue).sum());
           }
@@ -1503,6 +1506,21 @@ final class AirAllocationGrid extends JDialog {
     return note;
   }
 
+  /** "3 Dutch": land targets held by players that never take a turn, or "". */
+  private static String turnlessText(
+      final GamePlayer player, final Territory zone, final UnitType type) {
+    final Map<String, Integer> byOwner = new java.util.TreeMap<>();
+    for (final AirCombat.Target t : AirCombat.getTargets(player, zone, type)) {
+      final GamePlayer owner = t.territory().getOwner();
+      if (t.kind() == TargetKind.LAND
+          && games.strategy.triplea.delegate.TurnlessPlayers.isTurnless(owner)) {
+        byOwner.merge(owner.getName(), 1, Integer::sum);
+      }
+    }
+    return String.join(
+        ", ", byOwner.entrySet().stream().map(e -> e.getValue() + " " + e.getKey()).toList());
+  }
+
   /**
    * "7 targets: 3 land, 4 sea (2 with subs)" or "5 targets: 5 factories/SPCs". Each target is one
    * territory or sea zone the type could strike.
@@ -1518,7 +1536,15 @@ final class AirAllocationGrid extends JDialog {
     final List<String> parts = new ArrayList<>();
     final int neutral = neutralTargets.getOrDefault(key(row.type(), column), 0);
     if (land > 0) {
-      parts.add(land + " land" + (neutral > 0 ? " (" + neutral + " neutral)" : ""));
+      final String turnless = turnlessTargets.getOrDefault(key(row.type(), column), "");
+      final List<String> held = new ArrayList<>();
+      if (neutral > 0) {
+        held.add(neutral + " neutral");
+      }
+      if (!turnless.isEmpty()) {
+        held.add(turnless);
+      }
+      parts.add(land + " land" + (held.isEmpty() ? "" : " (" + String.join(", ", held) + ")"));
     }
     if (sea > 0) {
       parts.add(sea + " sea" + (subs > 0 ? " (" + subs + " with subs)" : ""));
