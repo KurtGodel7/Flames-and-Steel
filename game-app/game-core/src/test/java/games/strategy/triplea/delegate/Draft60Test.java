@@ -544,6 +544,18 @@ class Draft60Test {
   }
 
   @Test
+  void theMapSetsTheBritishFactoryArea() {
+    final GamePlayer british = player("British");
+    Assumptions.assumeTrue(FactoryArea.of(british).isPresent(), "map without a factory area");
+    assertThat(FactoryArea.of(british).orElseThrow().size(), is(43));
+    assertThat(FactoryArea.allows(british, territory("London")), is(true));
+    assertThat(
+        FactoryArea.reason(british),
+        is(
+            "Britain may build factories only in the Isles, Canada, India, Australia and South Africa"));
+  }
+
+  @Test
   void mapLoadsAndStartsWithTheDutch() {
     final InitializationDelegate init = new InitializationDelegate();
     init.initialize("initDelegate", "Initializing Delegates");
