@@ -1237,6 +1237,10 @@ public final class AirMapMode implements MapOverlay {
             layouts.stream().map(l -> new java.awt.Dimension(l.width(), l.height())).toList(),
             mapData,
             paintData);
+    // request 24: while a nation picks targets, the dock holds only boxes it has aircraft in
+    if (markUnassigned && placer.isDocked(zone) && !isActingZone(zone)) {
+      return;
+    }
     final Layout chosen = layouts.get(placement.shape());
     final int width = chosen.width();
     final int height = chosen.height();

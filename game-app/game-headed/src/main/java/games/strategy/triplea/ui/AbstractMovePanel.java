@@ -15,7 +15,6 @@ import java.util.List;
 import java.util.Set;
 import javax.annotation.Nullable;
 import javax.swing.Box;
-import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -45,6 +44,7 @@ public abstract class AbstractMovePanel extends ActionPanel {
   private final JButton cancelMoveButton =
       new JButtonBuilder().title("Cancel").actionListener(this::cancelMove).build();
   private final JButton doneButton = createDoneButton();
+  private final PinnedLayout pinned = new PinnedLayout();
   private final JButton undoAllButton =
       new JButtonBuilder().title("Undo All").actionListener(this::undoAll).build();
 
@@ -250,8 +250,7 @@ public abstract class AbstractMovePanel extends ActionPanel {
     super.display(gamePlayer);
     SwingUtilities.invokeLater(
         () -> {
-          removeAll();
-          add(movedUnitsPanel(gamePlayer, actionLabel));
+          movedUnitsPanel(gamePlayer, actionLabel);
           refresh.run();
         });
   }
@@ -262,12 +261,17 @@ public abstract class AbstractMovePanel extends ActionPanel {
 
   protected abstract boolean setCancelButton();
 
-  private JPanel movedUnitsPanel(final GamePlayer gamePlayer, final String actionLabel) {
-    final JPanel movedUnitsPanel = new JPanel();
-    movedUnitsPanel.setLayout(new BoxLayout(movedUnitsPanel, BoxLayout.Y_AXIS));
+  /**
+   * Flames and Steel (request 24): the heading and the Done, Undo all and Cancel buttons are pinned
+   * at the top; everything below them scrolls, so the buttons stay on screen however long it gets.
+   */
+  private void movedUnitsPanel(final GamePlayer gamePlayer, final String actionLabel) {
+    // asked first: a subclass may add its components to this panel before they are moved below
+    final List<Component> additional = getAdditionalButtons();
+    pinned.install(this);
 
     this.actionLabel.setText(gamePlayer.getName() + actionLabel);
-    movedUnitsPanel.add(SwingComponents.leftBox(this.actionLabel));
+    pinned.top().add(SwingComponents.leftBox(this.actionLabel));
 
     final JPanel buttonsPanel = new JPanel();
     if (setCancelButton()) {
@@ -275,14 +279,13 @@ public abstract class AbstractMovePanel extends ActionPanel {
     }
     buttonsPanel.add(doneButton);
     buttonsPanel.add(undoAllButton);
-    movedUnitsPanel.add(buttonsPanel);
+    pinned.top().add(buttonsPanel);
 
     // Add any additional buttons on their own lines, since their text may be
     // arbitrarily long.
-    getAdditionalButtons().forEach(movedUnitsPanel::add);
-    movedUnitsPanel.add(undoableMovesPanel);
-    movedUnitsPanel.add(Box.createGlue());
-    return movedUnitsPanel;
+    additional.forEach(pinned::add);
+    pinned.add(undoableMovesPanel);
+    pinned.add(Box.createGlue());
   }
 
   protected final void setUp(final PlayerBridge bridge) {

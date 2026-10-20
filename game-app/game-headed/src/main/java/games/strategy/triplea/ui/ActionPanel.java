@@ -129,7 +129,8 @@ public abstract class ActionPanel extends JPanel {
 
   protected JButton createDoneButton() {
     return new JButtonBuilder()
-        .title("Done")
+        // Flames and Steel (request 24): the button shows its shortcut
+        .title("Done (Ctrl+Enter)")
         .actionListener(this::performDone)
         .toolTip(ActionButtonsPanel.DONE_BUTTON_TOOLTIP)
         .build();

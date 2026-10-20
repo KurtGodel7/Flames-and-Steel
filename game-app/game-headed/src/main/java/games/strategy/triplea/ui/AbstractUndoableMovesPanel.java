@@ -108,6 +108,9 @@ public abstract class AbstractUndoableMovesPanel extends JPanel {
         };
     scroll.setBorder(null);
     scroll.getVerticalScrollBar().setUnitIncrement(scrollIncrementFinal);
+    // Flames and Steel (request 24): inside a step panel's scrolling list, the wheel scrolls that
+    // list
+    PinnedLayout.passWheelToOuter(scroll);
     if (scrollBarPreviousValue != null) {
       scroll.getVerticalScrollBar().setValue(scrollBarPreviousValue);
       scrollBarPreviousValue = null;

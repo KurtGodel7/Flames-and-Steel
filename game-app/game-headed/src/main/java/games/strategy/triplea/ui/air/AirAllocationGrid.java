@@ -188,9 +188,16 @@ final class AirAllocationGrid extends JDialog {
             refresh();
           }
         });
-    final JButton done = new JButton("Done");
+    final JButton done = new JButton("Done (Ctrl+Enter)");
     done.setFont(done.getFont().deriveFont(Font.BOLD));
     done.addActionListener(e -> host.done());
+    // request 24: the same shortcut as the Actions panel's Done
+    getRootPane()
+        .registerKeyboardAction(
+            e -> host.done(),
+            javax.swing.KeyStroke.getKeyStroke(
+                java.awt.event.KeyEvent.VK_ENTER, java.awt.event.InputEvent.CTRL_DOWN_MASK),
+            javax.swing.JComponent.WHEN_IN_FOCUSED_WINDOW);
     final JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 6));
     buttons.add(undoButton);
     buttons.add(reset);

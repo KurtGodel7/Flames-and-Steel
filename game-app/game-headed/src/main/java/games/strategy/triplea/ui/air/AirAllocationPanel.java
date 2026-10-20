@@ -13,6 +13,7 @@ import games.strategy.triplea.image.UnitImageFactory.ImageKey;
 import games.strategy.triplea.ui.ActionPanel;
 import games.strategy.triplea.ui.DefaultMapSelectionListener;
 import games.strategy.triplea.ui.MouseDetails;
+import games.strategy.triplea.ui.PinnedLayout;
 import games.strategy.triplea.ui.TripleAFrame;
 import games.strategy.triplea.ui.panels.map.MapOverlay;
 import games.strategy.triplea.ui.panels.map.MapSelectionListener;
@@ -553,8 +554,12 @@ public final class AirAllocationPanel extends ActionPanel {
 
   // ---- the side panel
 
+  // request 24: the pinned heading and buttons, and the scrolling list of moves
+  private final PinnedLayout layout = new PinnedLayout();
+
   private void rebuild(final GamePlayer player) {
-    removeAll();
+    // request 24: heading and buttons pinned at the top, the moves scroll
+    layout.install(this);
     actionLabel.setText(
         AirSelection.wrap(
             player.getName()
@@ -570,12 +575,26 @@ public final class AirAllocationPanel extends ActionPanel {
                 + " move, and Undo puts them back.<br>Enemies see these moves only at the"
                 + " reveal"
                 + (stage == Stage.FIGHTERS ? "; the bombers' moves are already revealed." : ".")));
-    add(leftAligned(actionLabel));
+    layout.top().add(leftAligned(actionLabel));
 
     final JButton showGrid = new JButton("Allocation window");
     showGrid.setToolTipText("Reopen the allocation grid");
     showGrid.addActionListener(e -> openGrid());
-    add(leftAligned(showGrid));
+
+    final JButton undoAll = new JButton("Undo all");
+    undoAll.setEnabled(!staged.isEmpty());
+    undoAll.addActionListener(
+        e -> {
+          staged.clear();
+          clearSelection();
+          selectionChanged();
+          movesChanged();
+        });
+    final JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+    buttons.add(undoAll);
+    buttons.add(createDoneButton());
+    layout.top().add(leftAligned(buttons));
+    layout.top().add(leftAligned(showGrid));
 
     movesPanel.removeAll();
     movesPanel.add(Box.createVerticalStrut(6));
@@ -608,23 +627,9 @@ public final class AirAllocationPanel extends ActionPanel {
       movesPanel.add(Box.createVerticalStrut(6));
       movesPanel.add(leftAligned(new JLabel("Allies' moves so far are drawn dashed.")));
     }
-    add(movesPanel);
+    layout.add(movesPanel);
 
-    final JButton undoAll = new JButton("Undo all");
-    undoAll.setEnabled(!staged.isEmpty());
-    undoAll.addActionListener(
-        e -> {
-          staged.clear();
-          clearSelection();
-          selectionChanged();
-          movesChanged();
-        });
-    add(Box.createVerticalStrut(6));
-    final JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-    buttons.add(undoAll);
-    buttons.add(createDoneButton());
-    add(leftAligned(buttons));
-    add(Box.createVerticalGlue());
+    layout.add(Box.createVerticalGlue());
     refresh.run();
   }
 
