@@ -20,7 +20,6 @@ import games.strategy.triplea.delegate.power.calculator.CombatValue;
 import games.strategy.triplea.formatter.MyFormatter;
 import games.strategy.triplea.util.UnitCategory;
 import games.strategy.triplea.util.UnitSeparator;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -114,41 +113,24 @@ public class CasualtySelector {
 
     // Sticky hits: hits that must go to already-damaged units are applied without asking.
     final StickyHits.ForcedHits forced = StickyHits.getForcedHits(targetsToPickFrom, hitsRemaining);
-    final List<Unit> choosable = new ArrayList<>(targetsToPickFrom);
-    choosable.removeAll(forced.killed());
-    choosable.removeAll(forced.damaged());
-    final int hitsToChoose = hitsRemaining - forced.hitsUsed();
-    if (hitsToChoose <= 0 || choosable.isEmpty()) {
+    if (hitsRemaining - forced.hitsUsed() <= 0
+        || forced.killed().size() >= targetsToPickFrom.size()) {
       return new CasualtyDetails(forced.killed(), forced.damaged(), true);
     }
-    final String choiceText =
-        forced.hitsUsed() == 0
-            ? text
-            : text
-                + " ("
-                + forced.hitsUsed()
-                + MyFormatter.pluralize(" hit", forced.hitsUsed())
-                + " applied to damaged units: "
-                + MyFormatter.unitsToTextNoOwner(forced.killed())
-                + ")";
-    final CasualtyDetails chosen =
-        selectCasualtiesFrom(
-            player,
-            choosable,
-            combatValue,
-            battleSite,
-            bridge,
-            choiceText,
-            dice,
-            battleId,
-            headLess,
-            hitsToChoose,
-            allowMultipleHitsPerUnit);
-    final List<Unit> killed = new ArrayList<>(forced.killed());
-    killed.addAll(chosen.getKilled());
-    final List<Unit> damaged = new ArrayList<>(forced.damaged());
-    damaged.addAll(chosen.getDamaged());
-    return new CasualtyDetails(killed, damaged, chosen.getAutoCalculated());
+    // Otherwise the owner orders all the targets (request 23): the damaged units stay locked at the
+    // head of the order, so the dialog shows every hit, and are hit first whatever comes back.
+    return selectCasualtiesFrom(
+        player,
+        targetsToPickFrom,
+        combatValue,
+        battleSite,
+        bridge,
+        text,
+        dice,
+        battleId,
+        headLess,
+        hitsRemaining,
+        allowMultipleHitsPerUnit);
   }
 
   private static CasualtyDetails selectCasualtiesFrom(

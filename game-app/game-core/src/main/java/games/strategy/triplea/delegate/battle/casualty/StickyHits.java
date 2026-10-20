@@ -71,7 +71,7 @@ public class StickyHits {
     return new ForcedHits(killed, damaged, hits - hitsLeft);
   }
 
-  private static int hitPointsLeft(final Unit unit) {
+  public static int hitPointsLeft(final Unit unit) {
     return Unit.maxHitPoints(unit) - unit.getHits();
   }
 
@@ -204,29 +204,82 @@ public class StickyHits {
   }
 
   /**
-   * Default casualties under sticky hits: already-damaged units first, then the rest in the given
-   * order of loss, each unit taking hits until destroyed before the next is hit.
+   * Default casualties under sticky hits: already-damaged units first (the most damaged first),
+   * then the rest in the given order of loss, each unit taking hits until destroyed before the next
+   * is hit.
    */
   public static CasualtyList getDefaultCasualties(final List<Unit> orderOfLoss, final int hits) {
-    final List<Unit> order = new ArrayList<>();
-    orderOfLoss.stream().filter(u -> u.getHits() > 0).forEach(order::add);
-    orderOfLoss.stream().filter(u -> u.getHits() == 0).forEach(order::add);
-    final CasualtyList casualties = new CasualtyList();
+    return toCasualtyList(allocate(damagedFirst(orderOfLoss), hits));
+  }
+
+  /** What one unit gets from a set of hits taken in order (request 23). */
+  public record Allocation(Unit unit, int hitsTaken, boolean killed) {
+    /** Hit points the unit has left after these hits. */
+    public int hitPointsLeftAfter() {
+      return hitPointsLeft(unit) - hitsTaken;
+    }
+  }
+
+  /**
+   * The hits taken down the order: each unit takes hits until it is destroyed, then the next one
+   * starts, so only the last unit hit can be left damaged. Units the hits don't reach are left out.
+   */
+  public static List<Allocation> allocate(final List<Unit> order, final int hits) {
+    final List<Allocation> result = new ArrayList<>();
     int hitsLeft = hits;
     for (final Unit unit : order) {
       if (hitsLeft <= 0) {
         break;
       }
-      final int hitPointsLeft = Unit.maxHitPoints(unit) - unit.getHits();
-      final int taken = Math.min(hitsLeft, hitPointsLeft);
-      // a unit listed as damaged and then killed takes all its remaining hit points
-      for (int i = 0; i < Math.min(taken, hitPointsLeft - 1); i++) {
-        casualties.addToDamaged(unit);
-      }
-      if (taken == hitPointsLeft) {
-        casualties.addToKilled(unit);
-      }
+      final int left = hitPointsLeft(unit);
+      final int taken = Math.min(hitsLeft, left);
+      result.add(new Allocation(unit, taken, taken == left));
       hitsLeft -= taken;
+    }
+    return result;
+  }
+
+  /**
+   * The order with the units damaged earlier (they must take hits first) moved to the front, the
+   * most damaged first; the other units keep their order.
+   */
+  public static List<Unit> damagedFirst(final List<Unit> order) {
+    final List<Unit> result = new ArrayList<>(lockedFirst(order));
+    order.stream().filter(u -> u.getHits() == 0).forEach(result::add);
+    return result;
+  }
+
+  /** The units damaged earlier, in the order they must take hits: the most damaged first. */
+  public static List<Unit> lockedFirst(final Collection<Unit> units) {
+    return units.stream()
+        .filter(u -> u.getHits() > 0)
+        .sorted(Comparator.comparingInt(StickyHits::hitPointsLeft))
+        .toList();
+  }
+
+  /**
+   * Whether the owner's choice is an order of hits (some unit can take a hit without being
+   * destroyed) rather than a plain pick of units.
+   */
+  public static boolean choiceIsAnOrder(final Collection<Unit> units) {
+    return units.stream().anyMatch(u -> hitPointsLeft(u) > 1);
+  }
+
+  /**
+   * Casualties as the engine lists them: a destroyed unit is listed once as killed and once as
+   * damaged for each other hit point it had left; a surviving unit once as damaged per hit.
+   */
+  public static CasualtyList toCasualtyList(final List<Allocation> allocations) {
+    final CasualtyList casualties = new CasualtyList();
+    for (final Allocation allocation : allocations) {
+      final int damagedEntries =
+          allocation.killed() ? allocation.hitsTaken() - 1 : allocation.hitsTaken();
+      for (int i = 0; i < damagedEntries; i++) {
+        casualties.addToDamaged(allocation.unit());
+      }
+      if (allocation.killed()) {
+        casualties.addToKilled(allocation.unit());
+      }
     }
     return casualties;
   }

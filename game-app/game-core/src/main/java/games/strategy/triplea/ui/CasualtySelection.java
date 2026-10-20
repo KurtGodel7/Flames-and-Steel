@@ -5,6 +5,7 @@ import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.Unit;
 import games.strategy.triplea.Properties;
 import games.strategy.triplea.delegate.Matches;
+import games.strategy.triplea.delegate.battle.casualty.StickyHits;
 import games.strategy.triplea.delegate.data.CasualtyDetails;
 import games.strategy.triplea.delegate.data.CasualtyList;
 import games.strategy.triplea.util.UnitOwner;
@@ -20,6 +21,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import javax.swing.BorderFactory;
+import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JOptionPane;
 import javax.swing.JScrollPane;
@@ -35,6 +37,9 @@ import javax.swing.JScrollPane;
  */
 public class CasualtySelection {
   @VisibleForTesting public UnitChooser chooser;
+
+  /** Flames and Steel sticky hits: the order of hits, shown instead of the chooser (request 23). */
+  @VisibleForTesting public StickyHitOrderPanel orderPanel;
 
   private final int hitsToTake;
   private final GamePlayer player;
@@ -60,27 +65,39 @@ public class CasualtySelection {
 
     this.isEditMode = isEditMode;
 
-    final boolean movementForAirUnitsOnly =
-        playerMayChooseToDistributeHitsToUnitsWithDifferentMovement(selectFrom);
-
-    chooser =
-        new UnitChooser(
-            selectFrom,
-            defaultCasualties,
-            dependents,
-            Properties.getPartialAmphibiousRetreat(player.getData().getProperties()),
-            movementForAirUnitsOnly,
-            allowMultipleHitsPerUnit,
-            uiContext);
-    chooser.setTitle(title);
-
-    if (isEditMode) {
-      chooser.disableMax();
+    final JComponent content;
+    if (!isEditMode
+        && allowMultipleHitsPerUnit
+        && Properties.getStickyHits(player.getData().getProperties())
+        && StickyHits.choiceIsAnOrder(selectFrom)) {
+      orderPanel =
+          new StickyHitOrderPanel(
+              List.copyOf(selectFrom), dependents, hitsToTake, title, player, uiContext);
+      content = orderPanel;
     } else {
-      chooser.setMax(hitsToTake);
+      final boolean movementForAirUnitsOnly =
+          playerMayChooseToDistributeHitsToUnitsWithDifferentMovement(selectFrom);
+
+      chooser =
+          new UnitChooser(
+              selectFrom,
+              defaultCasualties,
+              dependents,
+              Properties.getPartialAmphibiousRetreat(player.getData().getProperties()),
+              movementForAirUnitsOnly,
+              allowMultipleHitsPerUnit,
+              uiContext);
+      chooser.setTitle(title);
+
+      if (isEditMode) {
+        chooser.disableMax();
+      } else {
+        chooser.setMax(hitsToTake);
+      }
+      content = chooser;
     }
 
-    final JScrollPane chooserScrollPane = new JScrollPane(chooser);
+    final JScrollPane chooserScrollPane = new JScrollPane(content);
     chooserScrollPane.setBorder(BorderFactory.createEmptyBorder(1, 1, 1, 1));
     optionPane =
         new JOptionPane(chooserScrollPane, JOptionPane.PLAIN_MESSAGE, JOptionPane.OK_CANCEL_OPTION);
@@ -118,6 +135,9 @@ public class CasualtySelection {
       return Optional.empty();
     }
 
+    if (orderPanel != null) {
+      return Optional.of(orderPanel.getCasualtyDetails());
+    }
     final List<Unit> killed = chooser.getSelected(false);
     final List<Unit> damaged = chooser.getSelectedDamagedMultipleHitPointUnits();
     if (!isEditMode && (killed.size() + damaged.size() != hitsToTake)) {
