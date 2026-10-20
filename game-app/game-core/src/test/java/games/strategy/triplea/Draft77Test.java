@@ -56,7 +56,7 @@ class Draft77Test {
             Map.entry("earlyJet", 14),
             Map.entry("jet", 20),
             Map.entry("superfortress", 45),
-            Map.entry("flyingWing", 27),
+            Map.entry("flyingWing", 25),
             Map.entry("typeXXI", 23),
             Map.entry("fleetCarrier", 28));
     // the calculator, the battle window and the AI all take their values from here
@@ -81,6 +81,27 @@ class Draft77Test {
     assertThat(Apcs.describeRate(type("typeXXI")), is("1 per turn"));
     assertThat(Apcs.describeRate(type("fleetCarrier")), is("1 every 2 turns"));
     assertThat(Apcs.describeRate(type("superfortress")), is("1 every 2 turns"));
+    // later draft 77: the flying wing comes one per turn
+    assertThat(Apcs.describeRate(type("flyingWing")), is("1 per turn"));
+  }
+
+  @Test
+  void sovietModernFightersAndRadiosNeedsTwoStars() {
+    final GamePlayer russians = data.getPlayerList().getPlayerId("Russians");
+    final games.strategy.triplea.delegate.TechAdvance tech =
+        data.getTechnologyFrontier().getTechs().stream()
+            .filter(t -> t.getName().equals("ModernFightersAndRadios"))
+            .findFirst()
+            .orElseThrow();
+    assertThat(
+        games.strategy.triplea.delegate.research.ResearchCenters.getStarsRequired(russians, tech),
+        is(2));
+  }
+
+  @Test
+  void longRangeRaidPropertiesAreSet() {
+    assertThat(data.getProperties().get("FS Long Range Raid Units", ""), is("flyingWing"));
+    assertThat(data.getProperties().get("FS Long Range Raid To", ""), is("Air - Bomb USA"));
   }
 
   @Test

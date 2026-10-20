@@ -14,6 +14,7 @@ import games.strategy.triplea.delegate.air.AirCombat.Target;
 import games.strategy.triplea.delegate.air.AirCombat.TargetAssignment;
 import games.strategy.triplea.delegate.air.AirCombat.TargetKind;
 import games.strategy.triplea.delegate.air.AirRange;
+import games.strategy.triplea.delegate.air.LongRangeRaid;
 import games.strategy.triplea.formatter.MyFormatter;
 import games.strategy.triplea.image.UnitImageFactory.ImageKey;
 import games.strategy.triplea.ui.ActionPanel;
@@ -631,6 +632,11 @@ public final class AirTargetPanel extends ActionPanel {
       if (!AirCombat.mayAttack(type, target.kind())) {
         return name + " cannot attack " + kindName(target.kind()).toLowerCase() + "." + narrow;
       }
+      // request 26: a long-range raid bombs only the listed territories
+      if (LongRangeRaid.isRaidZone(player, type, selectedZone)
+          && !LongRangeRaid.isTarget(getData(), territory)) {
+        return LongRangeRaid.refusal(getData(), territory) + narrow;
+      }
       if (!AirCombat.mayAttack(player, selectedZone, type, target)) {
         // a target must be within half the bomber's range (rounded down) of a place it can land
         return "Out of range: "
@@ -1041,7 +1047,19 @@ public final class AirTargetPanel extends ActionPanel {
     }
     // request 17: how far each picked type strikes, and from where
     for (final UnitType type : selected.keySet()) {
-      targetsPanel.add(leftAligned(new JLabel(AirRange.reachText(player, selectedZone, type))));
+      targetsPanel.add(
+          leftAligned(
+              new JLabel(
+                  LongRangeRaid.isRaidZone(player, type, selectedZone)
+                      // request 26: no range limit, only the listed factories
+                      ? AirSelection.wrap(
+                          LongRangeRaid.LABEL
+                              + ": "
+                              + ResearchView.displayName(type.getName())
+                              + "s may bomb factories in "
+                              + String.join(", ", LongRangeRaid.targets(getData()))
+                              + ".")
+                      : AirRange.reachText(player, selectedZone, type))));
     }
     if (selected.size() > 1) {
       final JPanel only = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));

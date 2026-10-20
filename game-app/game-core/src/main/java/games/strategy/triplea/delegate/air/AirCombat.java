@@ -209,6 +209,11 @@ public class AirCombat {
     if (!mayAttack(type, target.kind())) {
       return false;
     }
+    // request 26: a long-range raid bombs only the listed factories, and range doesn't apply
+    if (LongRangeRaid.isRaidZone(player, type, zone)) {
+      return target.kind() == TargetKind.STRATEGIC
+          && LongRangeRaid.isTarget(player.getData(), target.territory());
+    }
     final int range = AirRange.range(type, player);
     return AirRange.canReach(player, zone, type, range, target.territory());
   }

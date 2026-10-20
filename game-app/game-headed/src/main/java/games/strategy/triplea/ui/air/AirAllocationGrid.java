@@ -15,6 +15,7 @@ import games.strategy.triplea.delegate.air.AirAllocation.CarrierLoad;
 import games.strategy.triplea.delegate.air.AirAllocation.Stage;
 import games.strategy.triplea.delegate.air.AirCombat;
 import games.strategy.triplea.delegate.air.AirCombat.TargetKind;
+import games.strategy.triplea.delegate.air.LongRangeRaid;
 import games.strategy.triplea.image.UnitImageFactory.ImageKey;
 import games.strategy.triplea.ui.UiContext;
 import games.strategy.triplea.ui.mapdata.MapData;
@@ -1077,7 +1078,7 @@ final class AirAllocationGrid extends JDialog {
   }
 
   private Optional<String> problem(final Row row, final Territory column) {
-    if (!AirAllocation.canMove(row.from(), column)) {
+    if (!AirAllocation.canMove(host.player(), row.type(), row.from(), column)) {
       return Optional.of(farReason(row, column));
     }
     return entry.get(key(row.type(), column));
@@ -1503,6 +1504,32 @@ final class AirAllocationGrid extends JDialog {
       note.setFont(note.getFont().deriveFont(Font.BOLD, 10f));
       note.setForeground(AMBER);
       note.setToolTipText(noTargetsText(row, column));
+    } else if (LongRangeRaid.allowsMove(host.player(), row.type(), row.from(), column)) {
+      // request 26: the Amerika Bomber's raid, straight from its launch box
+      note =
+          new TipLabel(
+              "<html><center><b>"
+                  + LongRangeRaid.LABEL
+                  + "</b><br>"
+                  + targets
+                  + (targets == 1 ? " target" : " targets")
+                  + "</center></html>");
+      note.setFont(note.getFont().deriveFont(10f));
+      note.setForeground(TEXT);
+      note.setToolTipText(
+          "<html><b>"
+              + LongRangeRaid.LABEL
+              + "</b>: straight from "
+              + zoneName(row.from())
+              + ", beyond normal range.<br>Factories it may bomb now: "
+              + String.join(
+                  ", ",
+                  AirCombat.getTargets(host.player(), column, row.type()).stream()
+                      .map(t -> t.territory().getName())
+                      .toList())
+              + ".<br>Only factories in these territories can be raided: "
+              + String.join(", ", LongRangeRaid.targets(host.data()))
+              + ".</html>");
     } else {
       note = new TipLabel(targets + (targets == 1 ? " target" : " targets"));
       note.setFont(note.getFont().deriveFont(10f));
@@ -1767,7 +1794,10 @@ final class AirAllocationGrid extends JDialog {
       final List<Territory> reach = new ArrayList<>();
       // a hovered far front: the fronts on the way to it are shown too, outlined dashed
       final List<Territory> route =
-          row != null && row == hoverRow && hoverColumn != null
+          row != null
+                  && row == hoverRow
+                  && hoverColumn != null
+                  && !LongRangeRaid.allowsMove(host.player(), row.type(), row.from(), hoverColumn)
               ? routeZones(row.from(), hoverColumn)
               : List.of();
       if (row != null) {

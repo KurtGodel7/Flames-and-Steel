@@ -18,6 +18,7 @@ import games.strategy.triplea.delegate.air.AirCombat.Roll;
 import games.strategy.triplea.delegate.air.AirCombat.Target;
 import games.strategy.triplea.delegate.air.AirCombat.TargetAssignment;
 import games.strategy.triplea.delegate.air.AirCombat.TargetKind;
+import games.strategy.triplea.delegate.air.LongRangeRaid;
 import games.strategy.triplea.delegate.remote.IAirCombatDelegate;
 import games.strategy.triplea.formatter.MyFormatter;
 import java.io.Serial;
@@ -64,6 +65,7 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
       fightDogfights();
     } else if (step.startsWith("airStrikes")) {
       resolveStrikes();
+      returnRaiders();
     }
   }
 
@@ -313,8 +315,45 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
 
   private static String strikeName(final Strike strike) {
     return strike.target().kind() == TargetKind.STRATEGIC
-        ? "Strategic bombing of " + strike.target().territory().getName()
+        ? "Strategic bombing of " + strike.target().territory().getName() + raidTag(strike)
         : "Air strike on " + strike.target().describe();
+  }
+
+  /** Request 26: " (long-range raid)" for a raid by long-range raiders, else "". */
+  private static String raidTag(final Strike strike) {
+    return strike.aircraft().stream()
+            .anyMatch(u -> LongRangeRaid.isRaidZone(u.getOwner(), u.getType(), strike.zone()))
+        ? " (" + LongRangeRaid.LABEL.toLowerCase(java.util.Locale.ROOT) + ")"
+        : "";
+  }
+
+  /**
+   * Request 26: after the strikes, long-range raiders in the raid zone fly back to the box they
+   * were launched from.
+   */
+  private void returnRaiders() {
+    final java.util.Optional<Territory> from = LongRangeRaid.from(getData());
+    final java.util.Optional<Territory> to = LongRangeRaid.to(getData());
+    if (from.isEmpty() || to.isEmpty()) {
+      return;
+    }
+    final List<Unit> raiders =
+        to.get()
+            .getUnitCollection()
+            .getMatches(u -> LongRangeRaid.isRaider(u.getOwner(), u.getType()));
+    if (raiders.isEmpty()) {
+      return;
+    }
+    bridge
+        .getHistoryWriter()
+        .startEvent(
+            MyFormatter.unitsToText(raiders)
+                + " fly back from "
+                + to.get().getName()
+                + " to "
+                + from.get().getName(),
+            raiders);
+    bridge.addChange(ChangeFactory.moveUnits(to.get(), from.get(), raiders));
   }
 
   /**
@@ -390,7 +429,7 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
     }
     final String title =
         kind == TargetKind.STRATEGIC
-            ? "Strategic bombing of " + t.getName()
+            ? "Strategic bombing of " + t.getName() + raidTag(strike)
             : "Air strike on " + strike.target().describe();
     final AirBattleView view =
         AirBattleView.show(

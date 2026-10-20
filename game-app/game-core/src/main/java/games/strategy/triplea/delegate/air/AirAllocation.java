@@ -67,7 +67,9 @@ public class AirAllocation {
       final GamePlayer player, final Territory from, final UnitType type, final GameMap map) {
     final List<Territory> result = new ArrayList<>();
     for (final Territory to : AirZoneAttachment.getAirZones(map)) {
-      if (!to.equals(from) && canMove(from, to) && entryProblem(player, type, to).isEmpty()) {
+      if (!to.equals(from)
+          && canMove(player, type, from, to)
+          && entryProblem(player, type, to).isEmpty()) {
         result.add(to);
       }
     }
@@ -77,6 +79,15 @@ public class AirAllocation {
   /** An aircraft moves at most one box a round, to a box listed as adjacent. */
   public static boolean canMove(final Territory from, final Territory to) {
     return AirZoneAttachment.get(from).orElseThrow().getAdjacentZones().contains(to);
+  }
+
+  /**
+   * As {@link #canMove(Territory, Territory)}, and also a long-range raid ({@link LongRangeRaid}):
+   * the raiding types fly from their launch box straight to the raid zone.
+   */
+  public static boolean canMove(
+      final GamePlayer player, final UnitType type, final Territory from, final Territory to) {
+    return canMove(from, to) || LongRangeRaid.allowsMove(player, type, from, to);
   }
 
   /** Whether the box lets this nation in at all (its players list). */
@@ -151,7 +162,7 @@ public class AirAllocation {
     if (from.equals(to)) {
       return Optional.of("The aircraft are already in " + zoneName(to) + ".");
     }
-    if (!canMove(from, to)) {
+    if (!canMove(player, unitType, from, to)) {
       return Optional.of("Two boxes away: needs two rounds.");
     }
     final Optional<String> entry = entryProblem(player, unitType, to);
@@ -205,7 +216,7 @@ public class AirAllocation {
       if (move.from().equals(move.to())) {
         return Optional.of("An aircraft must move to a different box.");
       }
-      if (!canMove(move.from(), move.to())) {
+      if (!canMove(player, move.unitType(), move.from(), move.to())) {
         return Optional.of(
             zoneName(move.from())
                 + " to "
