@@ -92,7 +92,12 @@ public final class ApcProductionDialog {
                 Object shown = value;
                 if (value instanceof UnitType) {
                   final UnitType type = (UnitType) value;
-                  shown = type.getName() + " (" + Apcs.describeRate(type) + ")";
+                  // request 25: names in words, e.g. "Type XXI (1 per turn)"
+                  shown =
+                      games.strategy.triplea.ui.research.ResearchView.displayName(type.getName())
+                          + " ("
+                          + Apcs.describeRate(type)
+                          + ")";
                 }
                 return super.getListCellRendererComponent(
                     list, shown, index, isSelected, cellHasFocus);

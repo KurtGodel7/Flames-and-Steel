@@ -52,7 +52,9 @@ class MainDefenseCombatValue implements CombatValue {
 
   @Override
   public RollCalculator getRoll() {
-    return new MainDefenseRoll(rollSupportFromFriends.copy(), rollSupportFromEnemies.copy());
+    return new MainDefenseRoll(
+        rollSupportFromFriends.copy().allocateInTypeOrder(friendUnits),
+        rollSupportFromEnemies.copy().allocateInTypeOrder(friendUnits));
   }
 
   @Override
@@ -61,8 +63,8 @@ class MainDefenseCombatValue implements CombatValue {
         gameSequence,
         gameDiceSides,
         territoryEffects,
-        strengthSupportFromFriends.copy(),
-        strengthSupportFromEnemies.copy());
+        strengthSupportFromFriends.copy().allocateInTypeOrder(friendUnits),
+        strengthSupportFromEnemies.copy().allocateInTypeOrder(friendUnits));
   }
 
   @Override

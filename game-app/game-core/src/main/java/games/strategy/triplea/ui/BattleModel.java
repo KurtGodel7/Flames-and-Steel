@@ -7,13 +7,13 @@ import games.strategy.engine.data.TerritoryEffect;
 import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.UnitType;
 import games.strategy.triplea.Properties;
+import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.air.AirCombat;
 import games.strategy.triplea.delegate.battle.BattleState;
 import games.strategy.triplea.delegate.battle.IBattle;
 import games.strategy.triplea.delegate.power.calculator.CombatValue;
 import games.strategy.triplea.delegate.power.calculator.CombatValueBuilder;
 import games.strategy.triplea.delegate.power.calculator.PowerStrengthAndRolls;
-import games.strategy.triplea.delegate.power.calculator.TotalPowerAndTotalRolls;
 import games.strategy.triplea.image.HitPointBar;
 import games.strategy.triplea.image.UnitImageFactory;
 import games.strategy.triplea.util.UnitCategory;
@@ -21,6 +21,8 @@ import games.strategy.triplea.util.UnitSeparator;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import javax.swing.ImageIcon;
 import javax.swing.JLabel;
 import javax.swing.table.DefaultTableModel;
@@ -120,7 +122,7 @@ final class BattleModel extends DefaultTableModel {
       columns.add(i, new ArrayList<>());
     }
     final List<Unit> units = new ArrayList<>(this.units);
-    final TotalPowerAndTotalRolls unitPowerAndRollsMap;
+    final PowerStrengthAndRolls unitPowerAndRollsMap;
     final boolean isAirPreBattleOrPreRaid = battleType.isAirBattle();
     // Flames and Steel air phase battles show their own values (dogfight, strike, AA, fire back)
     final java.util.function.ToIntFunction<Unit> airZoneStrength;
@@ -163,29 +165,42 @@ final class BattleModel extends DefaultTableModel {
                       AirCombat.displayStrength(u, dogfight, airBattleEnemies))
               : null;
     }
+    // Flames and Steel (request 25): ships supported by other ships (battleship support) are
+    // marked, e.g. "+1 Battleship"
+    final Map<Unit, String> shipSupport =
+        airZoneStrength != null ? Map.of() : shipSupport(unitPowerAndRollsMap);
     final List<UnitCategory> unitCategories =
         UnitSeparator.getSortedUnitCategories(units, gameData, uiContext.getMapData());
     for (final UnitCategory category : unitCategories) {
-      final int[] shift = new int[gameData.getDiceSides() + 1];
+      // per value rolled at, per support mark ("" for none): how many units
+      final List<Map<String, Integer>> shift = new ArrayList<>();
+      for (int i = 0; i <= gameData.getDiceSides(); i++) {
+        shift.add(new java.util.TreeMap<>());
+      }
       for (final Unit current : category.getUnits()) {
         final int strength =
             airZoneStrength != null
                 ? airZoneStrength.applyAsInt(current)
                 : unitPowerAndRollsMap.getStrength(current);
-        shift[strength]++;
+        shift.get(strength).merge(shipSupport.getOrDefault(current, ""), 1, Integer::sum);
       }
       for (int i = 0; i <= gameData.getDiceSides(); i++) {
-        if (shift[i] > 0) {
-          columns
-              .get(i)
-              .add(
-                  new TableData(
-                      UnitImageFactory.ImageKey.of(category),
-                      shift[i],
-                      uiContext,
-                      category.getDamaged(),
-                      category.getHitPoints()));
-        }
+        final int value = i;
+        shift
+            .get(i)
+            .forEach(
+                (support, count) ->
+                    columns
+                        .get(value)
+                        .add(
+                            new TableData(
+                                UnitImageFactory.ImageKey.of(category),
+                                count,
+                                uiContext,
+                                category.getDamaged(),
+                                category.getHitPoints(),
+                                support,
+                                value)));
       }
       // TODO Kev determine if we need to identify if the unit is hit/disabled
     }
@@ -208,6 +223,40 @@ final class BattleModel extends DefaultTableModel {
     }
   }
 
+  /**
+   * Request 25: for each ship supported by other ships, the support in words, e.g. "+1 Battleship"
+   * or "+1 Yamato Battleship".
+   */
+  static Map<Unit, String> shipSupport(final PowerStrengthAndRolls power) {
+    final Map<Unit, Map<String, Integer>> bySupporter = new java.util.HashMap<>();
+    power
+        .getUnitSupportPowerMap()
+        .forEach(
+            (supporter, supported) -> {
+              if (!Matches.unitIsSea().test(supporter)) {
+                return;
+              }
+              for (final Unit unit : supported.keySet()) {
+                if (Matches.unitIsSea().test(unit) && supported.getInt(unit) != 0) {
+                  bySupporter
+                      .computeIfAbsent(unit, k -> new java.util.TreeMap<>())
+                      .merge(
+                          StickyHitOrderPanel.name(supporter.getType()),
+                          supported.getInt(unit),
+                          Integer::sum);
+                }
+              }
+            });
+    final Map<Unit, String> result = new java.util.HashMap<>();
+    bySupporter.forEach(
+        (unit, bonuses) -> {
+          final List<String> parts = new ArrayList<>();
+          bonuses.forEach((name, bonus) -> parts.add((bonus > 0 ? "+" : "") + bonus + " " + name));
+          result.put(unit, String.join(", ", parts));
+        });
+    return result;
+  }
+
   @Override
   public boolean isCellEditable(final int row, final int column) {
     return false;
@@ -221,6 +270,10 @@ final class BattleModel extends DefaultTableModel {
     private ImageIcon icon;
     private int hits;
     private int hitPoints;
+    // request 25: e.g. "+1 Battleship" for ships supported by a battleship, or ""
+    private String support = "";
+    // the value these units roll at
+    private int value;
 
     private UiContext uiContext;
 
@@ -231,17 +284,46 @@ final class BattleModel extends DefaultTableModel {
         final int count,
         final UiContext uiContext,
         final int hits,
-        final int hitPoints) {
+        final int hitPoints,
+        final String support,
+        final int value) {
+      this.support = support;
+      this.value = value;
       this.player = imageKey.getPlayer();
       this.count = count;
       this.unitType = imageKey.getType();
       // Flames and Steel: units with 2+ hit points carry their hit-point bar
-      this.icon =
+      final ImageIcon plain =
           HitPointBar.withBar(
               uiContext.getUnitImageFactory().getIcon(imageKey), hitPoints, hits, 1.0);
+      // request 25: supported ships carry a green "+1" badge (the tooltip says from what)
+      this.icon = support.isEmpty() ? plain : withSupportBadge(plain, support.split(" ")[0]);
       this.hits = hits;
       this.hitPoints = hitPoints;
       this.uiContext = uiContext;
+    }
+
+    /** The icon with a small green badge, e.g. "+1", in its top left corner. */
+    static ImageIcon withSupportBadge(final ImageIcon icon, final String badge) {
+      final int width = Math.max(1, icon.getIconWidth());
+      final int height = Math.max(1, icon.getIconHeight());
+      final java.awt.image.BufferedImage image =
+          new java.awt.image.BufferedImage(
+              width, height, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+      final java.awt.Graphics2D g = image.createGraphics();
+      g.drawImage(icon.getImage(), 0, 0, null);
+      g.setRenderingHint(
+          java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+      g.setFont(new java.awt.Font(java.awt.Font.SANS_SERIF, java.awt.Font.BOLD, 12));
+      final java.awt.FontMetrics fm = g.getFontMetrics();
+      final int w = fm.stringWidth(badge) + 8;
+      final int h = fm.getHeight();
+      g.setColor(new java.awt.Color(0x2E, 0x7D, 0x32));
+      g.fillRoundRect(0, 0, w, h, 8, 8);
+      g.setColor(java.awt.Color.WHITE);
+      g.drawString(badge, 4, fm.getAscent());
+      g.dispose();
+      return new ImageIcon(image);
     }
 
     void updateStamp(final JLabel stamp) {
@@ -251,13 +333,28 @@ final class BattleModel extends DefaultTableModel {
         stamp.setToolTipText(null);
       } else {
         // Flames and Steel: multi-hit units say what they have left, e.g. "x1  3/5"
-        stamp.setText(
+        final String text =
             "x"
                 + count
-                + (hitPoints > 1 ? "  " + Math.max(0, hitPoints - hits) + "/" + hitPoints : ""));
+                + (hitPoints > 1 ? "  " + Math.max(0, hitPoints - hits) + "/" + hitPoints : "");
+        stamp.setText(text);
         stamp.setIcon(icon);
         MapUnitTooltipManager.setUnitTooltip(
             stamp, unitType, player, count, hits, hitPoints, uiContext);
+        if (!support.isEmpty()) {
+          stamp.setToolTipText(
+              "<html><b>"
+                  + support
+                  + " support:</b> "
+                  + (count == 1 ? "this ship rolls" : "these ships roll")
+                  + " at "
+                  + value
+                  + ".<br>"
+                  + Objects.toString(stamp.getToolTipText(), "")
+                      .replaceFirst("(?i)^<html>", "")
+                      .replaceFirst("(?i)</html>$", "")
+                  + "</html>");
+        }
       }
     }
   }

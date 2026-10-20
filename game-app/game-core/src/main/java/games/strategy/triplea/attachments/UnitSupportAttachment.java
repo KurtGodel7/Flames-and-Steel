@@ -158,7 +158,8 @@ public class UnitSupportAttachment extends DefaultAttachment {
   }
 
   private void setUnitType(final String names) throws GameParseException {
-    unitType = new HashSet<>();
+    // Flames and Steel (request 25): kept in the XML's order, which naval support fills in
+    unitType = new java.util.LinkedHashSet<>();
     for (final String element : splitOnColon(names)) {
       unitType.add(getUnitTypeOrThrow(element));
     }
