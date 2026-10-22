@@ -124,7 +124,8 @@ class DogfightValuesTest {
     final IDelegateBridge bridge = bridge(japanese);
     final IDelegateHistoryWriter history = mock(IDelegateHistoryWriter.class);
     when(bridge.getHistoryWriter()).thenReturn(history);
-    advanceToStep(bridge, "airDogfights");
+    // request 27: the air battle is fought in the strike step
+    advanceToStep(bridge, "airStrikes");
     final AirCombatDelegate delegate = (AirCombatDelegate) data.getDelegate("airCombat");
     delegate.setDelegateBridgeAndPlayer(bridge);
     delegate.start();
@@ -132,8 +133,8 @@ class DogfightValuesTest {
 
     final ArgumentCaptor<String> lines = ArgumentCaptor.forClass(String.class);
     verify(history, atLeastOnce()).addChildToEvent(lines.capture());
-    // 3 + 1 + 1 + 1 = 6 (at strike values it would have been 3 + 6 + 3 + 3 = 15)
-    assertThat(lines.getAllValues(), hasItem("Japanese fire with total value 6: 1 hit"));
+    // request 27: only fighters dogfight: the Japanese fighter's 3, not 3 + 1 + 1 + 1
+    assertThat(lines.getAllValues(), hasItem("Japanese fire with total value 3: 0 hits"));
     assertThat(lines.getAllValues(), hasItem("Chinese fire with total value 3: 0 hits"));
   }
 

@@ -167,14 +167,6 @@ class LongRangeRaidTest {
     add(bombUsa, "fighter", americans);
     final AirCombatDelegate delegate = (AirCombatDelegate) data.getDelegate("airCombat");
 
-    // US fighters in Bomb USA intercept: a dogfight there
-    final IDelegateBridge dogfights = bridge(germans);
-    advanceToStep(dogfights, "airDogfights");
-    delegate.setDelegateBridgeAndPlayer(dogfights);
-    delegate.start();
-    delegate.end();
-    assertThat(history, hasItem("Dogfight in Air - Bomb USA"));
-
     final IDelegateBridge targets = bridge(germans);
     advanceToStep(targets, "germanAirTargets");
     delegate.setDelegateBridgeAndPlayer(targets);
@@ -205,6 +197,11 @@ class LongRangeRaidTest {
     delegate.start();
     delegate.end();
 
+    // request 27: the targets came first; then US fighters in Bomb USA intercept (3, missed)
+    // and the wing fires back (air defense 4, missed)
+    assertThat(history, hasItem("Air battle in Air - Bomb USA"));
+    assertThat(history, hasItem("Americans fire with total value 3: 0 hits"));
+    assertThat(history, hasItem("Germans fire with total value 4: 0 hits"));
     // bombing damage 6 off the US cash, within Detroit's cap
     assertThat(americans.getResources().getQuantity("PUs"), is(before - 6));
     assertThat(

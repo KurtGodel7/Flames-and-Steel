@@ -1131,7 +1131,7 @@ public final class AirMapMode implements MapOverlay {
   }
 
   /** One zone's aircraft: a dark panel with the zone's name and each nation's stacks. */
-  private static final String DOGFIGHT_LABEL = "Dogfight";
+  private static final String DOGFIGHT_LABEL = "Air battle";
 
   // height of one carrier line at the bottom of an ocean front's box
   private static final int CARRIER_LINE = 18;

@@ -147,7 +147,7 @@ public final class AirZoneOverlay implements MapOverlay {
     for (final Territory zone : contested) {
       outline(g, mapData, zone, DOGFIGHT, 4f);
       final Rectangle box = mapData.getBoundingRect(zone);
-      AirDraw.tag(g, "Dogfight", box.x + box.width - 45, box.y + 30, DOGFIGHT);
+      AirDraw.tag(g, "Air battle", box.x + box.width - 55, box.y + 30, DOGFIGHT);
     }
   }
 

@@ -5,7 +5,6 @@ import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.Unit;
 import games.strategy.triplea.Properties;
 import games.strategy.triplea.delegate.Matches;
-import games.strategy.triplea.delegate.battle.casualty.StickyHits;
 import games.strategy.triplea.delegate.data.CasualtyDetails;
 import games.strategy.triplea.delegate.data.CasualtyList;
 import games.strategy.triplea.util.UnitOwner;
@@ -21,10 +20,12 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import javax.swing.BorderFactory;
+import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JOptionPane;
 import javax.swing.JScrollPane;
+import javax.swing.UIManager;
 
 /**
  * drives the casualty selection process:
@@ -38,8 +39,15 @@ import javax.swing.JScrollPane;
 public class CasualtySelection {
   @VisibleForTesting public UnitChooser chooser;
 
-  /** Flames and Steel sticky hits: the order of hits, shown instead of the chooser (request 23). */
-  @VisibleForTesting public StickyHitOrderPanel orderPanel;
+  /**
+   * Flames and Steel sticky hits (request 28): one row per unit type, hits given by clicking, the
+   * sticky rule applied by itself; shown instead of the chooser when some unit has more than one
+   * hit point. Battles of one-hit-point units keep the stock chooser.
+   */
+  @VisibleForTesting public StickyCasualtyPanel stickyPanel;
+
+  /** The OK button of the sticky hit dialog, enabled once the choice is complete (request 28). */
+  @VisibleForTesting public JButton okButton;
 
   private final int hitsToTake;
   private final GamePlayer player;
@@ -69,11 +77,11 @@ public class CasualtySelection {
     if (!isEditMode
         && allowMultipleHitsPerUnit
         && Properties.getStickyHits(player.getData().getProperties())
-        && StickyHits.choiceIsAnOrder(selectFrom)) {
-      orderPanel =
-          new StickyHitOrderPanel(
-              List.copyOf(selectFrom), dependents, hitsToTake, title, player, uiContext);
-      content = orderPanel;
+        && selectFrom.stream().anyMatch(u -> Unit.maxHitPoints(u) > 1)) {
+      stickyPanel =
+          new StickyCasualtyPanel(
+              List.copyOf(selectFrom), hitsToTake, defaultCasualties, title, player, uiContext);
+      content = stickyPanel;
     } else {
       final boolean movementForAirUnitsOnly =
           playerMayChooseToDistributeHitsToUnitsWithDifferentMovement(selectFrom);
@@ -99,8 +107,28 @@ public class CasualtySelection {
 
     final JScrollPane chooserScrollPane = new JScrollPane(content);
     chooserScrollPane.setBorder(BorderFactory.createEmptyBorder(1, 1, 1, 1));
-    optionPane =
-        new JOptionPane(chooserScrollPane, JOptionPane.PLAIN_MESSAGE, JOptionPane.OK_CANCEL_OPTION);
+    if (stickyPanel != null) {
+      // request 28: OK only once every hit is given and the choice is legal
+      final JButton ok = new JButton(UIManager.getString("OptionPane.okButtonText"));
+      final JButton cancel = new JButton(UIManager.getString("OptionPane.cancelButtonText"));
+      optionPane =
+          new JOptionPane(
+              chooserScrollPane,
+              JOptionPane.PLAIN_MESSAGE,
+              JOptionPane.OK_CANCEL_OPTION,
+              null,
+              new Object[] {ok, cancel},
+              ok);
+      ok.addActionListener(e -> optionPane.setValue(JOptionPane.OK_OPTION));
+      cancel.addActionListener(e -> optionPane.setValue(JOptionPane.CANCEL_OPTION));
+      ok.setEnabled(stickyPanel.isComplete());
+      stickyPanel.addChangeListener(() -> ok.setEnabled(stickyPanel.isComplete()));
+      okButton = ok;
+    } else {
+      optionPane =
+          new JOptionPane(
+              chooserScrollPane, JOptionPane.PLAIN_MESSAGE, JOptionPane.OK_CANCEL_OPTION);
+    }
 
     dialog = optionPane.createDialog(dialogParent, player.getName() + " select casualties");
   }
@@ -135,8 +163,10 @@ public class CasualtySelection {
       return Optional.empty();
     }
 
-    if (orderPanel != null) {
-      return Optional.of(orderPanel.getCasualtyDetails());
+    if (stickyPanel != null) {
+      return stickyPanel.isComplete()
+          ? Optional.of(stickyPanel.getCasualtyDetails())
+          : Optional.empty();
     }
     final List<Unit> killed = chooser.getSelected(false);
     final List<Unit> damaged = chooser.getSelectedDamagedMultipleHitPointUnits();

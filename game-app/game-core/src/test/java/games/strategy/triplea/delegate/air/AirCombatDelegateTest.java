@@ -32,6 +32,7 @@ import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.GameStep;
 import games.strategy.engine.data.Territory;
+import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.UnitType;
 import games.strategy.engine.delegate.IDelegateBridge;
 import games.strategy.engine.player.Player;
@@ -69,6 +70,8 @@ class AirCombatDelegateTest {
   private UnitType fighter;
   private UnitType bomber;
   private AirCombatDelegate delegate;
+  // the remainder die every roll gets: 0 always hits, 5 always misses
+  private int die = 0;
 
   @BeforeEach
   void setUp() {
@@ -117,16 +120,243 @@ class AirCombatDelegateTest {
     assertThat(AirCombat.lowLuck(bridge, germans, 8, "").hits(), is(1)); // 1 + die 3 >= 2
   }
 
+  // ---- request 27: dogfight (fighters only), interception, aborts, AA on aborted bombers
+
   @Test
-  void dogfightLastsTwoRoundsAndEveryAircraftFires() {
-    addTo(front, fighter.create(2, british)); // 2 x 3 = 6: one sure hit
-    addTo(front, bomber.create(3, germans)); // 3 x 1 = 3: remainder die 0 hits
+  void bombersAreNeverDogfightCasualties() {
+    noInterception();
+    addTo(front, fighter.create(2, british)); // 6: one hit a round
+    addTo(front, fighter.create(1, germans)); // 3: one hit a round
+    addTo(front, bomber.create(3, germans));
 
-    runStep("airDogfights", germans);
+    runStep("airStrikes", germans);
 
-    // round 1: one German bomber and one British fighter fall; round 2: the same again
-    assertThat(count(front, germans), is(1));
-    assertThat(count(front, british), is(0));
+    // round 1: the German fighter falls (never a bomber), one British fighter falls; round 2:
+    // the Germans have no fighters left, so the dogfight ends
+    assertThat(count(front, germans, fighter), is(0));
+    assertThat(count(front, germans, bomber), is(3));
+    assertThat(count(front, british, fighter), is(1));
+  }
+
+  @Test
+  void theDogfightRoundsAreAGameProperty() {
+    noInterception();
+    addTo(front, fighter.create(2, british));
+    addTo(front, fighter.create(2, germans));
+
+    gameData.getProperties().set(AirCombat.DOGFIGHT_ROUNDS, 1);
+    runStep("airStrikes", germans);
+    assertThat(count(front, germans, fighter), is(1));
+    assertThat(count(front, british, fighter), is(1));
+
+    gameData.getProperties().set(AirCombat.DOGFIGHT_ROUNDS, 2);
+    addTo(front, fighter.create(1, british));
+    addTo(front, fighter.create(1, germans));
+    runStep("airStrikes", germans);
+    assertThat(count(front, germans, fighter), is(0));
+    assertThat(count(front, british, fighter), is(0));
+  }
+
+  @Test
+  void everySurvivingFighterInterceptsDamagedOrNot() {
+    die = 5; // remainder dice miss: hits are exactly value / 6
+    hitPoints(fighter, 2);
+    air(fighter, "interception", "2");
+    air(bomber, "airDefenseRolls", "0");
+    final List<Unit> fighters = fighter.create(3, british);
+    fighters.get(0).setHits(1); // damaged: still intercepts
+    addTo(front, fighters);
+    addTo(front, bomber.create(6, germans));
+
+    runStep("airStrikes", germans);
+
+    // 3 x 2 = 6: one hit (two fighters alone would make 4: none); no share of the force
+    assertThat(count(front, germans, bomber), is(5));
+  }
+
+  @Test
+  void bombersFireBackAtInterceptors() {
+    die = 5;
+    air(fighter, "interception", "1"); // 1: no hit
+    air(bomber, "airDefense", "1"); // 6 x 1 = 6: one hit
+    addTo(front, fighter.create(1, british));
+    addTo(front, bomber.create(6, germans));
+
+    runStep("airStrikes", germans);
+
+    assertThat(count(front, british, fighter), is(0));
+    assertThat(count(front, germans, bomber), is(6));
+  }
+
+  @Test
+  void aSideWithoutBombersDrawsNoInterceptionFire() {
+    air(bomber, "airDefense", "6");
+    addTo(front, fighter.create(2, british)); // 6: one hit
+    addTo(front, fighter.create(1, germans)); // 3: one hit
+    gameData.getProperties().set(AirCombat.DOGFIGHT_ROUNDS, 1);
+
+    runStep("airStrikes", germans);
+
+    // the dogfight only: the British have no bombers, the Germans none to intercept
+    assertThat(count(front, germans, fighter), is(0));
+    assertThat(count(front, british, fighter), is(1));
+  }
+
+  @Test
+  void aDamagedBomberAbortsAndHealsAfterTheAirPhase() {
+    hitPoints(bomber, 2);
+    air(bomber, "airDefenseRolls", "0");
+    addTo(front, fighter.create(1, british)); // interception 3: one hit
+    final List<Unit> bombers = bomber.create(1, germans);
+    addTo(front, bombers);
+    addTo(karelia, infantry(gameData).create(3, russians(gameData)));
+
+    strike(germans, new TargetAssignment(front, bomber, 1, land(karelia)));
+
+    assertThat(count(karelia, russians(gameData)), is(3)); // aborted: no strike
+    assertThat(count(front, germans, bomber), is(1));
+    assertThat(bombers.get(0).getHits(), is(0)); // healed at the end of the air phase
+  }
+
+  @Test
+  void aBomberDamagedByAaAbortsItsLandStrike() {
+    hitPoints(bomber, 2);
+    addTo(front, bomber.create(1, germans));
+    addTo(karelia, infantry(gameData).create(3, russians(gameData)));
+    addTo(karelia, aaGun(gameData).create(1, russians(gameData)));
+
+    strike(germans, new TargetAssignment(front, bomber, 1, land(karelia)));
+
+    assertThat(count(front, germans, bomber), is(1)); // damaged, not destroyed
+    assertThat(count(karelia, russians(gameData)), is(4)); // and it made no strike
+  }
+
+  @Test
+  void aBomberDamagedByAaAbortsItsBombingRun() {
+    hitPoints(bomber, 2);
+    final int startPus = germans.getResources().getQuantity(Constants.PUS);
+    addTo(bombGermany, bomber.create(2, british));
+    addTo(germany, aaGun(gameData).create(1, germans)); // one hit
+
+    strike(
+        british,
+        new TargetAssignment(bombGermany, bomber, 2, new Target(germany, TargetKind.STRATEGIC)));
+
+    // one bomber damaged by AA and aborted: only the other bombs, for 5
+    assertThat(germans.getResources().getQuantity(Constants.PUS), is(startPus - 5));
+  }
+
+  @Test
+  void interceptorsInABombingZoneTurnBombersBack() {
+    hitPoints(bomber, 2);
+    air(bomber, "airDefenseRolls", "0");
+    final int startPus = germans.getResources().getQuantity(Constants.PUS);
+    addTo(bombGermany, bomber.create(2, british));
+    addTo(bombGermany, fighter.create(1, germans)); // interception 3: one hit
+
+    strike(
+        british,
+        new TargetAssignment(bombGermany, bomber, 2, new Target(germany, TargetKind.STRATEGIC)));
+
+    assertThat(germans.getResources().getQuantity(Constants.PUS), is(startPus - 5));
+    assertThat(count(bombGermany, british, bomber), is(2));
+  }
+
+  @Test
+  void targetsCannotBeChangedOnceTheFightingStarts() {
+    addTo(front, bomber.create(1, germans));
+    addTo(karelia, infantry(gameData).create(1, russians(gameData)));
+    final IDelegateBridge bridge = bridge(germans);
+    advanceToStep(bridge, "airStrikes");
+    delegate.setDelegateBridgeAndPlayer(bridge);
+
+    assertThat(
+        delegate.assignTargets(List.of(new TargetAssignment(front, bomber, 1, land(karelia)))),
+        is(notNullValue()));
+  }
+
+  @Test
+  void aaHitsTheBomberAbortedInInterceptionFirst() {
+    hitPoints(bomber, 2);
+    air(bomber, "airDefenseRolls", "0");
+    air(fighter, "interception", "1"); // one hit: one bomber damaged and aborted
+    addTo(front, fighter.create(1, british));
+    addTo(front, bomber.create(2, germans));
+    addTo(karelia, infantry(gameData).create(3, russians(gameData)));
+    addTo(karelia, aaGun(gameData).create(1, russians(gameData))); // one hit
+
+    strike(germans, new TargetAssignment(front, bomber, 2, land(karelia)));
+
+    // the AA hit finished the aborted bomber; the undamaged one struck (4: one hit)
+    assertThat(count(front, germans, bomber), is(1));
+    assertThat(count(karelia, russians(gameData)), is(3)); // 3 infantry - 1, plus the AA gun
+  }
+
+  @Test
+  void aaHitsOnlyTheBombersAssignedToItsTarget() {
+    hitPoints(bomber, 2);
+    air(fighter, "interceptionRolls", "0"); // an air battle, but no interception hits
+    final Territory archangel = territory("Archangel", gameData);
+    removeFrom(archangel, archangel.getUnits());
+    zone(front, "coveredTerritories", karelia.getName() + ":" + archangel.getName());
+    addTo(front, fighter.create(1, british));
+    final List<Unit> bombers = bomber.create(2, germans);
+    // damaged earlier; the first strike takes undamaged bombers first, so it goes to Archangel
+    bombers.get(1).setHits(1);
+    addTo(front, bombers);
+    addTo(karelia, infantry(gameData).create(3, russians(gameData)));
+    addTo(karelia, aaGun(gameData).create(1, russians(gameData)));
+    addTo(archangel, infantry(gameData).create(3, russians(gameData)));
+
+    strike(
+        germans,
+        new TargetAssignment(front, bomber, 1, land(karelia)),
+        new TargetAssignment(front, bomber, 1, land(archangel)));
+
+    // the Karelia AA hit its own undamaged bomber, which aborted; the damaged bomber sent to
+    // Archangel was out of that AA's reach: both survive, neither strikes
+    assertThat(count(front, germans, bomber), is(2));
+    assertThat(count(karelia, russians(gameData)), is(4));
+    assertThat(count(archangel, russians(gameData)), is(3));
+  }
+
+  @Test
+  void aBomberWithNoTargetFacesNoAa() {
+    addTo(front, bomber.create(1, germans));
+    addTo(karelia, aaGun(gameData).create(1, russians(gameData)));
+
+    runStep("airStrikes", germans);
+
+    assertThat(count(front, germans, bomber), is(1));
+  }
+
+  @Test
+  void stickyDamageCarriesFromTheDogfightIntoInterception() {
+    gameData.getProperties().set(AirCombat.DOGFIGHT_ROUNDS, 1);
+    hitPoints(fighter, 2);
+    hitPoints(bomber, 5);
+    addTo(front, fighter.create(2, germans));
+    addTo(front, fighter.create(1, british)); // dogfight 3: one German fighter damaged
+    addTo(front, bomber.create(1, british)); // fires back at 1: one hit
+
+    runStep("airStrikes", germans);
+
+    // the return-fire hit had to go to the fighter damaged in the dogfight: it is destroyed
+    assertThat(count(front, germans, fighter), is(1));
+  }
+
+  private void noInterception() {
+    air(fighter, "interceptionRolls", "0");
+    air(bomber, "airDefenseRolls", "0");
+  }
+
+  private void hitPoints(final UnitType type, final int hitPoints) {
+    set(type.getUnitAttachment(), "hitPoints", String.valueOf(hitPoints));
+  }
+
+  private static int count(final Territory t, final GamePlayer owner, final UnitType type) {
+    return t.getUnitCollection()
+        .countMatches(Matches.unitIsOwnedBy(owner).and(Matches.unitIsOfType(type)));
   }
 
   @Test
@@ -337,7 +567,7 @@ class AirCombatDelegateTest {
   /** A bridge whose remainder dice always roll 0 and whose players take the offered casualties. */
   private IDelegateBridge bridge(final GamePlayer player) {
     final IDelegateBridge bridge = newDelegateBridge(player);
-    when(bridge.getRandom(anyInt(), any(), any(), anyString())).thenReturn(0);
+    when(bridge.getRandom(anyInt(), any(), any(), anyString())).thenReturn(die);
     when(bridge
             .getRemotePlayer()
             .selectCasualties(

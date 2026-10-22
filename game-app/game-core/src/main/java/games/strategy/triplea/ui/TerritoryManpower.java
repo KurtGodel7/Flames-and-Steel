@@ -41,7 +41,15 @@ public final class TerritoryManpower {
       return Optional.empty();
     }
     final Map<GamePlayer, Integer> receivers =
-        TriggerAttachment.getEachOwnershipResource(territory, RESOURCE);
+        new java.util.LinkedHashMap<>(
+            TriggerAttachment.getEachOwnershipResource(territory, RESOURCE));
+    // request 28: China collects the value of Chinese homeland it owns
+    final int chinese =
+        games.strategy.triplea.delegate.ChineseLiberation.homelandManpower(
+            territory, territory.getOwner());
+    if (chinese > 0) {
+      receivers.put(territory.getOwner(), chinese);
+    }
     final int amount = receivers.values().stream().mapToInt(Integer::intValue).max().orElse(0);
     return amount > 0 ? Optional.of(new Info(amount, receivers)) : Optional.empty();
   }

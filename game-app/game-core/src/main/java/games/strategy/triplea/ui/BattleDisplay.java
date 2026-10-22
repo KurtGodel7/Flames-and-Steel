@@ -132,11 +132,11 @@ public class BattleDisplay extends JPanel {
     this.mapPanel = mapPanel;
     this.uiContext = mapPanel.getUiContext();
 
-    // Flames and Steel: an air phase battle on an air front is a dogfight
+    // Flames and Steel: an air phase battle on an air front is the dogfight and interception
     final boolean dogfight = battleType.isAirBattle() && AirCombat.isDogfight(territory);
     final String battleStr =
         dogfight
-            ? "  (Dogfight: aircraft fire at dogfight values)"
+            ? "  (Air battle: dogfight between fighters, then interception of bombers)"
             : (battleType == BattleType.NORMAL)
                 ? ""
                 : String.format("  (%s)", battleType.toDisplayText());

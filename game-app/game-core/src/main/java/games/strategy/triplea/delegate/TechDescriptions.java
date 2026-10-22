@@ -31,9 +31,24 @@ public class TechDescriptions {
     final IntegerMap<UnitType> movement = ability.getMovementBonus();
     final IntegerMap<UnitType> dogfight = ability.getDogfightBonus();
     final IntegerMap<UnitType> dogfightRolls = ability.getDogfightRollsBonus();
+    final IntegerMap<UnitType> interception = ability.getInterceptionBonus();
+    final IntegerMap<UnitType> interceptionRolls = ability.getInterceptionRollsBonus();
+    final IntegerMap<UnitType> airDefense = ability.getBomberAirDefenseBonus();
+    final IntegerMap<UnitType> airDefenseRolls = ability.getBomberAirDefenseRollsBonus();
     final Set<UnitType> types = new LinkedHashSet<>();
     for (final IntegerMap<UnitType> map :
-        List.of(attack, defense, attackRolls, defenseRolls, movement, dogfight, dogfightRolls)) {
+        List.of(
+            attack,
+            defense,
+            attackRolls,
+            defenseRolls,
+            movement,
+            dogfight,
+            dogfightRolls,
+            interception,
+            interceptionRolls,
+            airDefense,
+            airDefenseRolls)) {
       types.addAll(map.keySet());
     }
     final List<String> clauses = new ArrayList<>();
@@ -55,8 +70,26 @@ public class TechDescriptions {
                 + " extra dogfight "
                 + dice(dogfightRolls.getInt(type)));
       }
+      // request 27: interception (fighters) and air defense (bombers) are separate values
+      airValue(clauses, interception.getInt(type), interceptionRolls.getInt(type), "interception", plural);
+      airValue(clauses, airDefense.getInt(type), airDefenseRolls.getInt(type), "air defense", plural);
     }
     return clauses.isEmpty() ? "" : capitalize(String.join("; ", clauses)) + ".";
+  }
+
+  private static void airValue(
+      final List<String> clauses,
+      final int bonus,
+      final int rolls,
+      final String what,
+      final String plural) {
+    if (bonus != 0) {
+      clauses.add(signed(bonus) + " " + what + " value for " + plural);
+    }
+    if (rolls != 0) {
+      clauses.add(
+          capitalize(plural) + " roll " + count(rolls) + " extra " + what + " " + dice(rolls));
+    }
   }
 
   private static void bonus(

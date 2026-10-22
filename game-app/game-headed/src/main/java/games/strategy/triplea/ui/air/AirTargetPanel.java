@@ -15,6 +15,7 @@ import games.strategy.triplea.delegate.air.AirCombat.TargetAssignment;
 import games.strategy.triplea.delegate.air.AirCombat.TargetKind;
 import games.strategy.triplea.delegate.air.AirRange;
 import games.strategy.triplea.delegate.air.LongRangeRaid;
+import games.strategy.triplea.delegate.air.TargetSplit;
 import games.strategy.triplea.formatter.MyFormatter;
 import games.strategy.triplea.image.UnitImageFactory.ImageKey;
 import games.strategy.triplea.ui.ActionPanel;
@@ -158,7 +159,7 @@ public final class AirTargetPanel extends ActionPanel {
                             : !AirCombat.isBomber(unit)
                                 ? ResearchView.displayName(unit.getType().getName())
                                     + " (grey): fighters don't make strikes; they fight in the"
-                                    + " dogfight only."
+                                    + " dogfight and intercept enemy bombers."
                                 : AirRange.reachText(player, zone, unit.getType())
                                     + " (grey): no targets in reach from "
                                     + AirAllocation.zoneName(zone)
@@ -394,6 +395,9 @@ public final class AirTargetPanel extends ActionPanel {
   private void assign(final Target target) {
     for (final UnitType type : selected.keySet()) {
       final int count = selected.getInt(type);
+      if (count <= 0) {
+        continue; // request 28: a group kept in view after all its bombers have targets
+      }
       boolean merged = false;
       for (int i = 0; i < staged.size(); i++) {
         final TargetAssignment a = staged.get(i);
@@ -753,6 +757,8 @@ public final class AirTargetPanel extends ActionPanel {
       final JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
       row.add(new JLabel(icon(player, a.unitType())));
       row.add(new JLabel(describe(a)));
+      // request 28: one bomber more or fewer against this target
+      row.add(counter(player, a.zone(), a.unitType(), a.target(), false));
       final JButton undo = smallButton("Undo");
       undo.addActionListener(
           e -> {
@@ -875,7 +881,7 @@ public final class AirTargetPanel extends ActionPanel {
       final int count = all.getInt(type);
       final String why;
       if (!isBomberType(zone, type)) {
-        why = "dogfight only";
+        why = "dogfight and interception";
       } else if (AirCombat.getTargets(player, zone, type).isEmpty()) {
         why = "nothing in reach";
       } else {
@@ -942,7 +948,9 @@ public final class AirTargetPanel extends ActionPanel {
       final JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
       row.add(Box.createHorizontalStrut(10));
       if (!isBomberType(zone, type)) {
-        row.add(new JLabel(name + "fighters don't make strikes; they fight in the dogfight."));
+        row.add(
+            new JLabel(
+                name + "fighters don't make strikes; they dogfight and intercept enemy bombers."));
       } else {
         final int targets = AirCombat.getTargets(player, zone, type).size();
         final int free = left.getInt(type);
@@ -1038,6 +1046,83 @@ public final class AirTargetPanel extends ActionPanel {
         + a.target().describe();
   }
 
+  /**
+   * Request 28: "[−] 2 [+]", how many bombers of the type in the zone go against the target. + takes
+   * one that has no target yet (never more than there are), − gives one back.
+   *
+   * @param keepGroup whether the group stays picked after a change (the targets list), or the
+   *     panel goes on as after an Undo (the strikes list)
+   */
+  private JPanel counter(
+      final GamePlayer player,
+      final Territory zone,
+      final UnitType type,
+      final Target target,
+      final boolean keepGroup) {
+    final JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
+    final int now = TargetSplit.count(staged, zone, type, target);
+    final int free;
+    try (GameData.Unlocker ignored = getData().acquireReadLock()) {
+      free = TargetSplit.unassigned(player, staged, zone, type);
+    }
+    final JButton minus = smallButton("−");
+    minus.setEnabled(now > 0);
+    minus.setToolTipText("One " + typeName(type, 1) + " fewer against " + target.describe());
+    minus.addActionListener(e -> adjust(player, zone, type, target, -1, keepGroup));
+    final JLabel count = new JLabel(String.valueOf(now));
+    count.setToolTipText(now + " " + typeName(type, now) + " sent; " + free + " without a target");
+    final JButton plus = smallButton("+");
+    plus.setEnabled(free > 0);
+    plus.setToolTipText(
+        free > 0
+            ? "One more " + typeName(type, 1) + " against " + target.describe()
+            : "Every " + typeName(type, 1) + " in " + AirAllocation.zoneName(zone) + " has a target");
+    plus.addActionListener(e -> adjust(player, zone, type, target, 1, keepGroup));
+    panel.add(minus);
+    panel.add(count);
+    panel.add(plus);
+    return panel;
+  }
+
+  private void adjust(
+      final GamePlayer player,
+      final Territory zone,
+      final UnitType type,
+      final Target target,
+      final int delta,
+      final boolean keepGroup) {
+    final List<TargetAssignment> changed;
+    try (GameData.Unlocker ignored = getData().acquireReadLock()) {
+      final int there =
+          (int)
+              AirCombat.getBombers(player, zone).stream()
+                  .filter(u -> u.getType().equals(type))
+                  .count();
+      changed = TargetSplit.adjust(staged, zone, type, target, delta, there);
+    }
+    staged.clear();
+    staged.addAll(changed);
+    if (!keepGroup || !zone.equals(selectedZone)) {
+      clearSelection();
+    } else {
+      // the picked count can't be more than the bombers still without a target
+      final IntegerMap<UnitType> free = available(player, zone);
+      for (final UnitType picked : List.copyOf(selected.keySet())) {
+        if (free.getInt(picked) <= 0) {
+          selected.removeKey(picked);
+        } else if (selected.getInt(picked) > free.getInt(picked)) {
+          selected.put(picked, free.getInt(picked));
+        }
+      }
+      if (selected.isEmpty()) {
+        // the group is done; keep the zone so the counters stay in view
+        selected.put(type, 0);
+      }
+    }
+    selectionChanged();
+    strikesChanged();
+  }
+
   /** The reach of each picked type, "only" buttons for mixed picks, and the targets in reach. */
   private void fillTargets(final GamePlayer player) {
     targetsPanel.removeAll();
@@ -1079,12 +1164,22 @@ public final class AirTargetPanel extends ActionPanel {
     }
     final List<Target> legal =
         targets.entrySet().stream().filter(Map.Entry::getValue).map(Map.Entry::getKey).toList();
+    // request 28: how many of each type still have no target
+    final List<String> unassigned = new ArrayList<>();
+    for (final UnitType type : selected.keySet()) {
+      final int free = TargetSplit.unassigned(player, staged, selectedZone, type);
+      unassigned.add(free + " " + typeName(type, free));
+    }
+    targetsPanel.add(leftAligned(new JLabel("Unassigned: " + String.join(", ", unassigned))));
     targetsPanel.add(
         leftAligned(
             new JLabel(
                 legal.isEmpty()
                     ? "No target in reach of all of them."
-                    : "Targets in reach (" + legal.size() + "):")));
+                    : "Targets in reach ("
+                        + legal.size()
+                        + "). Attack sends all picked; − and + send one at a time."
+                        + " Targets are final for the round.")));
     try (GameData.Unlocker ignored = getData().acquireReadLock()) {
       for (final Target target : legal) {
         final JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
@@ -1098,6 +1193,14 @@ public final class AirTargetPanel extends ActionPanel {
         text.setToolTipText(describe(player, target));
         row.add(text);
         targetsPanel.add(leftAligned(row));
+        // request 28: a count per picked type against this target
+        for (final UnitType type : selected.keySet()) {
+          final JPanel counterRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+          counterRow.add(Box.createHorizontalStrut(24));
+          counterRow.add(new JLabel(ResearchView.displayName(type.getName()) + ":"));
+          counterRow.add(counter(player, selectedZone, type, target, true));
+          targetsPanel.add(leftAligned(counterRow));
+        }
       }
     }
     targetsPanel.revalidate();
@@ -1110,7 +1213,21 @@ public final class AirTargetPanel extends ActionPanel {
    */
   private String targetLabel(final GamePlayer player, final Target target) {
     if (target.kind() != TargetKind.SURFACE && target.kind() != TargetKind.SUBS) {
-      return target.describe();
+      // request 27: targets are final before the dogfight, so the AA waiting there is shown now
+      final List<Unit> aa =
+          target
+              .territory()
+              .getUnitCollection()
+              .getMatches(
+                  Matches.unitIsAaForAnything().and(u -> AirCombat.atWar(player, u.getOwner())));
+      return target.describe()
+          + (aa.isEmpty()
+              ? " · no AA"
+              : " · AA: "
+                  + aa.size()
+                  + (aa.size() == 1 ? " gun" : " guns")
+                  + ", fire at "
+                  + aa.stream().mapToInt(AirCombat::aaPower).sum());
     }
     final boolean subs = target.kind() == TargetKind.SUBS;
     final int count = AirCombat.getShipTargetUnits(player, target.territory(), subs).size();

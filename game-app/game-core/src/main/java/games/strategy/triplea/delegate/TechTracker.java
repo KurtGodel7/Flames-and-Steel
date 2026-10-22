@@ -81,6 +81,34 @@ public class TechTracker {
     return getCached(player, type, "getDogfightBonus", getter);
   }
 
+  /** Flames and Steel (request 27): added interception value from the nation's techs for this type. */
+  public int getInterceptionBonus(GamePlayer player, UnitType type) {
+    final Supplier<Integer> getter =
+        () -> getSumOfBonuses(TechAbilityAttachment::getInterceptionBonus, type, player);
+    return getCached(player, type, "getInterceptionBonus", getter);
+  }
+
+  /** Flames and Steel (request 27): added interception dice from the nation's techs for this type. */
+  public int getInterceptionRollsBonus(GamePlayer player, UnitType type) {
+    final Supplier<Integer> getter =
+        () -> getSumOfBonuses(TechAbilityAttachment::getInterceptionRollsBonus, type, player);
+    return getCached(player, type, "getInterceptionRollsBonus", getter);
+  }
+
+  /** Flames and Steel (request 27): added air defense value from the nation's techs for this type. */
+  public int getBomberAirDefenseBonus(GamePlayer player, UnitType type) {
+    final Supplier<Integer> getter =
+        () -> getSumOfBonuses(TechAbilityAttachment::getBomberAirDefenseBonus, type, player);
+    return getCached(player, type, "getBomberAirDefenseBonus", getter);
+  }
+
+  /** Flames and Steel (request 27): added air defense dice from the nation's techs for this type. */
+  public int getBomberAirDefenseRollsBonus(GamePlayer player, UnitType type) {
+    final Supplier<Integer> getter =
+        () -> getSumOfBonuses(TechAbilityAttachment::getBomberAirDefenseRollsBonus, type, player);
+    return getCached(player, type, "getBomberAirDefenseRollsBonus", getter);
+  }
+
   /** Flames and Steel: extra hit points from the nation's techs for its units of this type. */
   public int getHitPointBonus(GamePlayer player, UnitType type) {
     final Supplier<Integer> getter =

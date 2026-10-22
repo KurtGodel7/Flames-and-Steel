@@ -241,7 +241,7 @@ final class BattleModel extends DefaultTableModel {
                   bySupporter
                       .computeIfAbsent(unit, k -> new java.util.TreeMap<>())
                       .merge(
-                          StickyHitOrderPanel.name(supporter.getType()),
+                          games.strategy.triplea.delegate.battle.casualty.StickyCasualtyChoice.displayName(supporter.getType()),
                           supported.getInt(unit),
                           Integer::sum);
                 }

@@ -72,8 +72,24 @@ public class AirCombat {
     @Serial private static final long serialVersionUID = 5017718430628117731L;
   }
 
+  /** A bomber-type aircraft (request 27): every aircraft that is not a fighter-type. */
   public static boolean isBomber(final Unit unit) {
     return Matches.unitIsAir().test(unit) && !AirUnitAttachment.isFighter(unit);
+  }
+
+  /**
+   * A fighter-type aircraft (request 27): set by the unit type's airRole, not its name. Only
+   * fighter-types fight in the dogfight and intercept bombers.
+   */
+  public static boolean isFighterType(final Unit unit) {
+    return Matches.unitIsAir().test(unit) && AirUnitAttachment.isFighter(unit);
+  }
+
+  /** Game property: how many dogfight rounds each air battle has (request 27; default 2). */
+  public static final String DOGFIGHT_ROUNDS = "FS Dogfight Rounds";
+
+  public static int dogfightRounds(final GameData data) {
+    return Math.max(0, data.getProperties().get(DOGFIGHT_ROUNDS, 2));
   }
 
   /** The player's bombers in a zone that may still strike (not in the reserve). */
@@ -292,6 +308,88 @@ public class AirCombat {
         .orElse(0);
   }
 
+  /**
+   * Request 27: firing power of a fighter-type intercepting bombers: its interception value (the
+   * type's own plus the owner's techs, never below 1) times its interception dice.
+   */
+  public static int interceptionPower(final Unit unit) {
+    final int extraRolls =
+        unit.getData().getTechTracker().getInterceptionRollsBonus(unit.getOwner(), unit.getType());
+    return AirUnitAttachment.get(unit.getType())
+        .map(a -> interceptionValue(unit) * Math.max(0, a.getInterceptionRolls() + extraRolls))
+        .orElse(0);
+  }
+
+  /** The value an interceptor's dice hit at (request 27). */
+  public static int interceptionValue(final Unit unit) {
+    return interceptionValue(unit.getType(), unit.getOwner());
+  }
+
+  public static int interceptionValue(final UnitType type, final GamePlayer owner) {
+    final int bonus = type.getData().getTechTracker().getInterceptionBonus(owner, type);
+    return AirUnitAttachment.get(type).map(a -> Math.max(1, a.getInterception() + bonus)).orElse(0);
+  }
+
+  /**
+   * Request 27: firing power of a bomber-type firing back at interceptors: its air defense value
+   * (the type's own plus the owner's techs, at least 0) times its air defense dice.
+   */
+  public static int airDefensePower(final Unit unit) {
+    final int extraRolls =
+        unit.getData().getTechTracker().getBomberAirDefenseRollsBonus(unit.getOwner(), unit.getType());
+    return AirUnitAttachment.get(unit.getType())
+        .map(a -> airDefenseValue(unit) * Math.max(0, a.getAirDefenseRolls() + extraRolls))
+        .orElse(0);
+  }
+
+  /** The value a bomber's return-fire dice hit at (request 27); 0 means it does not fire back. */
+  public static int airDefenseValue(final Unit unit) {
+    return airDefenseValue(unit.getType(), unit.getOwner());
+  }
+
+  public static int airDefenseValue(final UnitType type, final GamePlayer owner) {
+    final int bonus = type.getData().getTechTracker().getBomberAirDefenseBonus(owner, type);
+    return AirUnitAttachment.get(type).map(a -> Math.max(0, a.getAirDefense() + bonus)).orElse(0);
+  }
+
+  /** {@link #dogfightValue(Unit)} for a type and owner (tooltips). */
+  public static int dogfightValue(final UnitType type, final GamePlayer owner) {
+    final int bonus = type.getData().getTechTracker().getDogfightBonus(owner, type);
+    return AirUnitAttachment.get(type).map(a -> Math.max(1, a.getDogfight() + bonus)).orElse(0);
+  }
+
+  /**
+   * Request 27: an aircraft type's air values in a line, for unit tooltips: "Fighter: dogfight 3,
+   * interception 3" or "Bomber: air defense 1, attack 3, strategic bombing 2".
+   */
+  public static String airValuesText(final UnitType type, final GamePlayer owner) {
+    final AirUnitAttachment air = AirUnitAttachment.get(type).orElse(null);
+    if (air == null || !type.getUnitAttachment().isAir()) {
+      return "";
+    }
+    if (air.isFighter()) {
+      return "Fighter-type: dogfight "
+          + dogfightValue(type, owner)
+          + ", interception "
+          + interceptionValue(type, owner);
+    }
+    final var ua = type.getUnitAttachment();
+    final int bombing =
+        air.getBombingDamage() <= 0
+            ? 0
+            : Math.max(
+                0,
+                air.getBombingDamage()
+                    + type.getData().getTechTracker().getBombingBonus(owner, type));
+    return "Bomber-type: air defense "
+        + airDefenseValue(type, owner)
+        + ", attack "
+        + ua.getAttack(owner)
+        + (air.isDoubleVsLand() ? " (doubled against land units)" : "")
+        + (air.isDoubleVsSurface() ? " (doubled against surface ships)" : "")
+        + (bombing > 0 ? ", strategic bombing " + bombing : "");
+  }
+
   /** Firing power of an aircraft attacking this kind of target. */
   public static int strikePower(final Unit unit, final TargetKind kind) {
     final var ua = unit.getUnitAttachment();
@@ -503,7 +601,9 @@ public class AirCombat {
       final Unit unit, final boolean dogfight, final Collection<Unit> enemies) {
     final boolean air = Matches.unitIsAir().test(unit);
     if (air && dogfight) {
-      return dogfightValue(unit);
+      // request 27: the air battle on a front shows fighters at their dogfight value and bombers
+      // at their air defense (return fire); the dice lines give the interception values
+      return isFighterType(unit) ? dogfightValue(unit) : airDefenseValue(unit);
     }
     if (air) {
       final boolean sea = enemies.stream().anyMatch(Matches.unitIsSea());

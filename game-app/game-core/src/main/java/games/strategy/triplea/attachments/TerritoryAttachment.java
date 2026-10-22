@@ -60,6 +60,8 @@ public class TerritoryAttachment extends DefaultAttachment {
   private boolean navalBase = false;
   private boolean airBase = false;
   private boolean kamikazeZone = false;
+  // Flames and Steel (request 28): historically Chinese land (incl. Manchuria, not Taiwan)
+  private boolean chineseHomeland = false;
   @Getter private int unitProduction = 0;
   private boolean blockadeZone = false;
   private @Nullable List<TerritoryEffect> territoryEffect = null;
@@ -683,6 +685,22 @@ public class TerritoryAttachment extends DefaultAttachment {
     airBase = false;
   }
 
+  /**
+   * Flames and Steel (request 28): historically Chinese land. Taken from the Axis by a Western ally
+   * it passes to China, whoever its original owner is.
+   */
+  public boolean getChineseHomeland() {
+    return chineseHomeland;
+  }
+
+  private void setChineseHomeland(final String value) {
+    chineseHomeland = getBool(value);
+  }
+
+  private void setChineseHomeland(final Boolean value) {
+    chineseHomeland = value;
+  }
+
   public boolean getKamikazeZone() {
     return kamikazeZone;
   }
@@ -926,6 +944,13 @@ public class TerritoryAttachment extends DefaultAttachment {
           Optional.of(
               MutableProperty.of(
                   this::setAirBase, this::setAirBase, this::getAirBase, this::resetAirBase));
+      case "chineseHomeland" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setChineseHomeland,
+                  this::setChineseHomeland,
+                  this::getChineseHomeland,
+                  () -> chineseHomeland = false));
       case "kamikazeZone" ->
           Optional.of(
               MutableProperty.of(

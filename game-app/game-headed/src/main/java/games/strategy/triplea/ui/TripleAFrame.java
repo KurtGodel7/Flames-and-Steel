@@ -2014,13 +2014,19 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
   private String getUnitInfo() {
     if (!mapPanel.getMouseHoverUnits().isEmpty()) {
       final Unit unit = mapPanel.getMouseHoverUnits().get(0);
+      // Flames and Steel (request 28): British and US units on Chinese land are sold to China
+      final String sale;
+      try (GameData.Unlocker ignored = data.acquireReadLock()) {
+        sale = games.strategy.triplea.delegate.ChineseLiberation.saleNote(unit, data);
+      }
       return MapUnitTooltipManager.getTooltipTextForUnit(
-          unit.getType(),
-          unit.getOwner(),
-          mapPanel.getMouseHoverUnits().size(),
-          unit.getHits(),
-          Unit.maxHitPoints(unit),
-          uiContext);
+              unit.getType(),
+              unit.getOwner(),
+              mapPanel.getMouseHoverUnits().size(),
+              unit.getHits(),
+              Unit.maxHitPoints(unit),
+              uiContext)
+          + (sale.isEmpty() ? "" : "<br /><b>" + sale + "</b>");
     }
     return "";
   }

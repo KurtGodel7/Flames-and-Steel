@@ -27,6 +27,7 @@ import games.strategy.triplea.attachments.TerritoryAttachment;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.Munitions;
 import games.strategy.triplea.delegate.OriginalOwnerTracker;
+import games.strategy.triplea.delegate.ChineseLiberation;
 import games.strategy.triplea.delegate.TechAdvance;
 import games.strategy.triplea.delegate.TechTracker;
 import games.strategy.triplea.delegate.TerritoryEffectHelper;
@@ -649,6 +650,17 @@ public class BattleTracker implements Serializable {
     // Flames and Steel (Yalta): an ally's conquest of a listed territory goes to the tech's owner
     if (isTerritoryOwnerAnEnemy && newOwner.equals(gamePlayer)) {
       newOwner = getAlliedConquestOwner(territory, gamePlayer, data).orElse(newOwner);
+    }
+    // Flames and Steel (request 28): Chinese land taken from the Axis by Britain or the US goes to
+    // China, whoever its original owner is and whoever holds China's capital
+    if (isTerritoryOwnerAnEnemy) {
+      final Optional<GamePlayer> china = ChineseLiberation.newOwnerOnCapture(territory, gamePlayer);
+      if (china.isPresent()) {
+        newOwner = china.get();
+        bridge
+            .getHistoryWriter()
+            .addChildToEvent(ChineseLiberation.liberatedText(territory, newOwner));
+      }
     }
     if (isTerritoryOwnerAnEnemy) {
       addChangeChangeOwnership(

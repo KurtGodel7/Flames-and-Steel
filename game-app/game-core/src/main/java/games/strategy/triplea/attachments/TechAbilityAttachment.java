@@ -79,6 +79,14 @@ public class TechAbilityAttachment extends DefaultAttachment {
   private @Nullable IntegerMap<UnitType> dogfightRollsBonus = null;
   // Flames and Steel: added to the unit type's dogfight value, e.g. "1:fighter"
   private @Nullable IntegerMap<UnitType> dogfightBonus = null;
+  // Flames and Steel (request 27): added to the unit type's interception value, e.g. "1:fighter"
+  private @Nullable IntegerMap<UnitType> interceptionBonus = null;
+  // Flames and Steel (request 27): extra interception dice, e.g. "1:fighter"
+  private @Nullable IntegerMap<UnitType> interceptionRollsBonus = null;
+  // Flames and Steel (request 27): added to the bomber type's air defense value, e.g. "1:fighter"
+  private @Nullable IntegerMap<UnitType> bomberAirDefenseBonus = null;
+  // Flames and Steel (request 27): extra air defense dice, e.g. "1:fighter"
+  private @Nullable IntegerMap<UnitType> bomberAirDefenseRollsBonus = null;
   // Flames and Steel (Yalta): territories that go to this tech's owner when an ally conquers them
   private @Nullable Set<Territory> alliedConquestTerritories = null;
   // Flames and Steel (Naval Wasserfall): ships hit from the air fire back at defense times this
@@ -224,6 +232,70 @@ public class TechAbilityAttachment extends DefaultAttachment {
   /** Multiplier for ships firing back at aircraft (Naval Wasserfall: 2); 0 if not set. */
   public int getAirFireBackMultiplier() {
     return airFireBackMultiplier;
+  }
+
+  private void setInterceptionBonus(final String value) throws GameParseException {
+    if (interceptionBonus == null) {
+      interceptionBonus = new IntegerMap<>();
+    }
+    applyCheckedValue("interceptionBonus", value, interceptionBonus::add);
+  }
+
+  private void setInterceptionBonus(final IntegerMap<UnitType> value) {
+    interceptionBonus = value;
+  }
+
+  /** Flames and Steel (request 27): added to the unit type's interception value, by unit type. */
+  public IntegerMap<UnitType> getInterceptionBonus() {
+    return getIntegerMapProperty(interceptionBonus);
+  }
+
+  private void setInterceptionRollsBonus(final String value) throws GameParseException {
+    if (interceptionRollsBonus == null) {
+      interceptionRollsBonus = new IntegerMap<>();
+    }
+    applyCheckedValue("interceptionRollsBonus", value, interceptionRollsBonus::put);
+  }
+
+  private void setInterceptionRollsBonus(final IntegerMap<UnitType> value) {
+    interceptionRollsBonus = value;
+  }
+
+  /** Flames and Steel (request 27): extra interception dice, by unit type. */
+  public IntegerMap<UnitType> getInterceptionRollsBonus() {
+    return getIntegerMapProperty(interceptionRollsBonus);
+  }
+
+  private void setBomberAirDefenseBonus(final String value) throws GameParseException {
+    if (bomberAirDefenseBonus == null) {
+      bomberAirDefenseBonus = new IntegerMap<>();
+    }
+    applyCheckedValue("bomberAirDefenseBonus", value, bomberAirDefenseBonus::add);
+  }
+
+  private void setBomberAirDefenseBonus(final IntegerMap<UnitType> value) {
+    bomberAirDefenseBonus = value;
+  }
+
+  /** Flames and Steel (request 27): added to the bomber type's air defense value, by unit type. */
+  public IntegerMap<UnitType> getBomberAirDefenseBonus() {
+    return getIntegerMapProperty(bomberAirDefenseBonus);
+  }
+
+  private void setBomberAirDefenseRollsBonus(final String value) throws GameParseException {
+    if (bomberAirDefenseRollsBonus == null) {
+      bomberAirDefenseRollsBonus = new IntegerMap<>();
+    }
+    applyCheckedValue("bomberAirDefenseRollsBonus", value, bomberAirDefenseRollsBonus::put);
+  }
+
+  private void setBomberAirDefenseRollsBonus(final IntegerMap<UnitType> value) {
+    bomberAirDefenseRollsBonus = value;
+  }
+
+  /** Flames and Steel (request 27): extra air defense dice, by unit type. */
+  public IntegerMap<UnitType> getBomberAirDefenseRollsBonus() {
+    return getIntegerMapProperty(bomberAirDefenseRollsBonus);
   }
 
   private void setDogfightBonus(final String value) throws GameParseException {
@@ -1005,6 +1077,34 @@ public class TechAbilityAttachment extends DefaultAttachment {
                   this::setAirFireBackMultiplier,
                   this::getAirFireBackMultiplier,
                   () -> airFireBackMultiplier = 0));
+      case "interceptionBonus" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setInterceptionBonus,
+                  this::setInterceptionBonus,
+                  this::getInterceptionBonus,
+                  () -> interceptionBonus = null));
+      case "interceptionRollsBonus" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setInterceptionRollsBonus,
+                  this::setInterceptionRollsBonus,
+                  this::getInterceptionRollsBonus,
+                  () -> interceptionRollsBonus = null));
+      case "bomberAirDefenseBonus" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setBomberAirDefenseBonus,
+                  this::setBomberAirDefenseBonus,
+                  this::getBomberAirDefenseBonus,
+                  () -> bomberAirDefenseBonus = null));
+      case "bomberAirDefenseRollsBonus" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setBomberAirDefenseRollsBonus,
+                  this::setBomberAirDefenseRollsBonus,
+                  this::getBomberAirDefenseRollsBonus,
+                  () -> bomberAirDefenseRollsBonus = null));
       case "dogfightBonus" ->
           Optional.of(
               MutableProperty.of(

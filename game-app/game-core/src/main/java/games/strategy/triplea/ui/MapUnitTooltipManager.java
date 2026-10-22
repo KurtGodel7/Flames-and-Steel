@@ -167,7 +167,12 @@ public final class MapUnitTooltipManager implements ActionListener {
                     + " HP"
                     + (hits > 0 ? " (heals at end of round)" : "")
                 : "");
-    return firstLine + uiContext.getTooltipProperties().getTooltip(unitType, player);
+    // Flames and Steel (request 27): the aircraft's air phase values
+    final String air =
+        games.strategy.triplea.delegate.air.AirCombat.airValuesText(unitType, player);
+    return firstLine
+        + (air.isEmpty() ? "" : air + "<br />")
+        + uiContext.getTooltipProperties().getTooltip(unitType, player);
   }
 
   /** The type's hit points for this owner, including hit point techs. */
