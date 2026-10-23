@@ -562,7 +562,7 @@ public final class AirAllocationPanel extends ActionPanel {
     layout.install(this);
     actionLabel.setText(
         AirSelection.wrap(
-            player.getName()
+            games.strategy.triplea.formatter.PlayerNames.display(player)
                 + (stage == Stage.BOMBERS
                     ? ": bomber allocation (fighters move in the next step)"
                     : ": fighter allocation (bombers have moved)")));

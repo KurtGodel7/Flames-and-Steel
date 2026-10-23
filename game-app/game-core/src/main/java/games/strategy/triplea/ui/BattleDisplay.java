@@ -1,5 +1,6 @@
 package games.strategy.triplea.ui;
 
+import games.strategy.triplea.formatter.PlayerNames;
 import static games.strategy.triplea.image.UnitImageFactory.ImageKey;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -141,9 +142,9 @@ public class BattleDisplay extends JPanel {
                 ? ""
                 : String.format("  (%s)", battleType.toDisplayText());
     this.description =
-        attacker.getName()
+        PlayerNames.display(attacker)
             + " attacks "
-            + defender.getName()
+            + PlayerNames.display(defender)
             + " in "
             + battleLocation.getName()
             + battleStr;
@@ -534,7 +535,10 @@ public class BattleDisplay extends JPanel {
           final boolean plural = isEditMode || (count > 1);
           final String countStr = isEditMode ? "" : "" + count;
           final String btnText =
-              hit.getName() + " select " + countStr + (plural ? " casualties" : " casualty");
+              PlayerNames.display(hit)
+                  + " select "
+                  + countStr
+                  + (plural ? " casualties" : " casualty");
           final var casualtySelection =
               new CasualtySelection(
                   selectFrom,
@@ -743,7 +747,7 @@ public class BattleDisplay extends JPanel {
   }
 
   static JComponent getPlayerComponent(final GamePlayer gamePlayer) {
-    final JLabel player = new JLabel(gamePlayer.getName());
+    final JLabel player = new JLabel(PlayerNames.display(gamePlayer));
     player.setBorder(new EmptyBorder(5, 5, 5, 5));
     player.setFont(player.getFont().deriveFont((float) 14));
     return player;

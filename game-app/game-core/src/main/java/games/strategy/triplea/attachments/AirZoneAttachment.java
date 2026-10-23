@@ -10,6 +10,7 @@ import games.strategy.engine.data.MutableProperty;
 import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.gameparser.GameParseException;
 import java.io.Serial;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -46,8 +47,10 @@ public class AirZoneAttachment extends DefaultAttachment {
   private @Nullable ZoneType zoneType = null;
   // nations that may put aircraft here; empty means any nation
   private @Nullable List<GamePlayer> players = null;
-  // BOMB zones: the nation being bombed
+  // BOMB zones: the nation being bombed (the first, if several)
   @Getter private @Nullable GamePlayer bombedPlayer = null;
+  // Flames and Steel (request 32): every nation bombed here, e.g. "AmericansPacific:Americans"
+  private @Nullable List<GamePlayer> bombedPlayers = null;
   // land territories and sea zones this zone covers (where its targets are)
   private @Nullable Set<Territory> coveredTerritories = null;
   // air boxes aircraft may move to in one round
@@ -153,18 +156,43 @@ public class AirZoneAttachment extends DefaultAttachment {
   }
 
   private void setBombedPlayer(final String value) throws GameParseException {
-    bombedPlayer =
-        getPlayerByName(value)
-            .orElseThrow(
-                () -> new GameParseException("bombedPlayer: no player " + value + thisErrorMsg()));
+    final List<GamePlayer> list = new ArrayList<>();
+    for (final String name : splitOnColon(value)) {
+      list.add(
+          getPlayerByName(name)
+              .orElseThrow(
+                  () ->
+                      new GameParseException("bombedPlayer: no player " + name + thisErrorMsg())));
+    }
+    bombedPlayers = list;
+    bombedPlayer = list.isEmpty() ? null : list.get(0);
   }
 
   private void setBombedPlayer(final GamePlayer value) {
     bombedPlayer = value;
+    bombedPlayers = value == null ? null : new ArrayList<>(List.of(value));
   }
 
   private void resetBombedPlayer() {
     bombedPlayer = null;
+    bombedPlayers = null;
+  }
+
+  /** Request 32: every nation bombed in this zone (saves from before list only the first). */
+  public List<GamePlayer> getBombedPlayers() {
+    if (bombedPlayers != null && !bombedPlayers.isEmpty()) {
+      return List.copyOf(bombedPlayers);
+    }
+    return bombedPlayer == null ? List.of() : List.of(bombedPlayer);
+  }
+
+  /**
+   * Whether the nation attacks in this bombing zone: it is at war with one of the nations bombed
+   * here. Everyone else (the bombed nations and their allies) defends.
+   */
+  public boolean isAttacker(final GamePlayer player) {
+    return getBombedPlayers().stream()
+        .anyMatch(b -> player.getData().getRelationshipTracker().isAtWar(player, b));
   }
 
   private void setCoveredTerritories(final String value) throws GameParseException {

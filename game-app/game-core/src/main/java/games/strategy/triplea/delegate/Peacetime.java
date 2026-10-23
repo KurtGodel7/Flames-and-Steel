@@ -49,11 +49,17 @@ public class Peacetime {
 
   /** "Americans are at peace: units can't move until they are at war." */
   public static String noMoveMessage(final GamePlayer player) {
-    return player.getName() + " are at peace: units can't move until they are at war.";
+    return who(player) + " at peace: units can't move until they are at war.";
   }
 
   /** "Americans are at peace: no part in the air phase until they are at war." */
   public static String noAirMessage(final GamePlayer player) {
-    return player.getName() + " are at peace: no part in the air phase until they are at war.";
+    return who(player) + " at peace: no part in the air phase until they are at war.";
+  }
+
+  /** "Americans are", or with a display name (request 32) "America Pacific is". */
+  private static String who(final GamePlayer player) {
+    final String shown = games.strategy.triplea.formatter.PlayerNames.display(player);
+    return shown.equals(player.getName()) ? shown + " are" : shown + " is";
   }
 }

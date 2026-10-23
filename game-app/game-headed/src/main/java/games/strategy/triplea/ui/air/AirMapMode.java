@@ -1648,7 +1648,7 @@ public final class AirMapMode implements MapOverlay {
                 }
               });
           if (!mine.isEmpty()) {
-            parts.add(player.getName() + " " + String.join(", ", mine));
+            parts.add(games.strategy.triplea.formatter.PlayerNames.display(player) + " " + String.join(", ", mine));
           }
         });
     return parts.isEmpty() ? "no bombers in range" : String.join("; ", parts);

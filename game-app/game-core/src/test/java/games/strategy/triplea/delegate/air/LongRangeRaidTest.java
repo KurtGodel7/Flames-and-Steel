@@ -70,7 +70,7 @@ class LongRangeRaidTest {
     americans = data.getPlayerList().getPlayerId("Americans");
     westernEurope = data.getMap().getTerritoryOrThrow("Air - Western Europe");
     easternFront = data.getMap().getTerritoryOrThrow("Air - Eastern Front");
-    bombUsa = data.getMap().getTerritoryOrThrow("Air - Bomb USA");
+    bombUsa = data.getMap().getTerritoryOrThrow("Air - Bomb America Atlantic");
     final InitializationDelegate start = new InitializationDelegate();
     start.initialize("initDelegate", "Initializing Delegates");
     start.setDelegateBridgeAndPlayer(newDelegateBridge(germans));
@@ -219,7 +219,7 @@ class LongRangeRaidTest {
 
     // request 27: the targets came first; then US fighters in Bomb USA intercept (3, missed)
     // and the wing fires back (air defense 4, missed)
-    assertThat(history, hasItem("Air battle over Detroit (Bomb USA)"));
+    assertThat(history, hasItem("Air battle over Detroit (Bomb America Atlantic)"));
     assertThat(history, hasItem("Americans fire with total value 3: 0 hits"));
     assertThat(history, hasItem("Germans fire with total value 4: 0 hits"));
     // bombing damage 6 off the US cash, within Detroit's cap

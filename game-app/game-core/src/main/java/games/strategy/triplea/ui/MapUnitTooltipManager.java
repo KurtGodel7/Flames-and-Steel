@@ -1,5 +1,6 @@
 package games.strategy.triplea.ui;
 
+import games.strategy.triplea.formatter.PlayerNames;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import games.strategy.engine.data.GamePlayer;
@@ -158,7 +159,7 @@ public final class MapUnitTooltipManager implements ActionListener {
             "<b>%s%s (%s)</b>%s<br />",
             count == 1 ? "" : (count + " "),
             StringUtils.capitalize(UnitNames.of(unitType)),
-            player.getName(),
+            PlayerNames.display(player),
             HitPointBar.hasBar(hitPoints)
                 ? " — "
                     + Math.max(0, hitPoints - hits)

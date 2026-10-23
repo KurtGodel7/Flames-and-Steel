@@ -135,8 +135,8 @@ class Draft60Test {
   @Test
   void usGetsPeacetimeIncomeInRoundTwoThenWarStartsAndFullIncomeFromRoundThree() {
     final int[] round2 = usEndTurn(2);
-    assertThat(round2[0], is(36));
-    assertThat(round2[1], is(4));
+    assertThat(round2[0], is(21));
+    assertThat(round2[1], is(3));
     // the war trigger fired after the US end turn of round 2
     assertThat(atWar("Japanese", "Americans"), is(true));
     assertThat(atWar("Japanese", "British"), is(true));
@@ -145,7 +145,7 @@ class Draft60Test {
     assertThat(allied("British", "Dutch"), is(true));
     assertThat(allied("Americans", "Dutch"), is(true));
     final int[] round3 = usEndTurn(3);
-    assertThat("full income from round 3: " + round3[0], round3[0] > 36, is(true));
+    assertThat("full income from round 3: " + round3[0], round3[0] > 21, is(true));
   }
 
   @Test

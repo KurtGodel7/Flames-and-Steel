@@ -54,8 +54,8 @@ class Draft40Test {
   @Test
   void usEstimatedIncomeIsTheFixedAmount() {
     final var income = AbstractEndTurnDelegate.findEstimatedIncome(americans, data);
-    assertThat(income.getInt(pus()), is(36));
-    assertThat(income.getInt(manpower()), is(4));
+    assertThat(income.getInt(pus()), is(21));
+    assertThat(income.getInt(manpower()), is(3));
   }
 
   @Test
@@ -68,8 +68,8 @@ class Draft40Test {
     delegate.setDelegateBridgeAndPlayer(bridge);
     delegate.start();
 
-    assertThat(americans.getResources().getQuantity(pus()) - pusBefore, is(36));
-    assertThat(americans.getResources().getQuantity(manpower()) - mpBefore, is(4));
+    assertThat(americans.getResources().getQuantity(pus()) - pusBefore, is(21));
+    assertThat(americans.getResources().getQuantity(manpower()) - mpBefore, is(3));
   }
 
   @Test
@@ -82,7 +82,7 @@ class Draft40Test {
                 .getRelationshipType(Constants.RELATIONSHIP_TYPE_DEFAULT_WAR));
     assertThat(Peacetime.isAtPeace(americans), is(false));
     final var income = AbstractEndTurnDelegate.findEstimatedIncome(americans, data);
-    assertThat(income.getInt(pus()), greaterThan(36));
+    assertThat(income.getInt(pus()), greaterThan(21));
   }
 
   @Test

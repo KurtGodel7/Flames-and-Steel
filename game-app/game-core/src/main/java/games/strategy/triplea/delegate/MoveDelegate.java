@@ -727,6 +727,12 @@ public class MoveDelegate extends AbstractMoveDelegate {
           .getHistoryWriter()
           .addChildToEvent(FleetAircraft.historyText(fleet.get(), aircraft), aircraft);
     }
+    // Flames and Steel (request 32): munitions remember when they arrived, newest absorbed first
+    final Change arrival = Munitions.stampArrival(data, move.getUnits());
+    if (!arrival.isEmpty()) {
+      currentMove.addChange(arrival);
+      bridge.addChange(arrival);
+    }
     return Optional.empty();
   }
 

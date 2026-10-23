@@ -1,5 +1,6 @@
 package games.strategy.triplea.ui;
 
+import games.strategy.triplea.formatter.PlayerNames;
 import static games.strategy.triplea.image.UnitImageFactory.ImageKey;
 
 import com.google.common.base.Preconditions;
@@ -814,18 +815,27 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
     return actionButtonsPanel.waitForBattleSelection();
   }
 
+  /** Flames and Steel (request 32): the game shown, for display names. */
+  public GameData getGameDataForNames() {
+    return data;
+  }
+
   /** We do NOT want to block the next player from beginning their turn. */
   public void notifyError(final String message) {
     final String displayMessage =
-        LocalizeHtml.localizeImgLinksInHtml(message, uiContext.getMapLocation());
+        LocalizeHtml.localizeImgLinksInHtml(
+            PlayerNames.inText(message, data), uiContext.getMapLocation());
     showMessageDialog(displayMessage, "Error", JOptionPane.ERROR_MESSAGE);
   }
 
   /** We do NOT want to block the next player from beginning their turn. */
-  public void notifyMessage(final String message, final String title) {
-    if (message == null || title == null) {
+  public void notifyMessage(final String rawMessage, final String rawTitle) {
+    if (rawMessage == null || rawTitle == null) {
       return;
     }
+    // Flames and Steel (request 32): display names in messages
+    final String message = PlayerNames.inText(rawMessage, data);
+    final String title = PlayerNames.inText(rawTitle, data);
     if (title.contains(AbstractConditionsAttachment.TRIGGER_CHANCE_FAILURE)
         && message.contains(AbstractConditionsAttachment.TRIGGER_CHANCE_FAILURE)
         && !getUiContext().getShowTriggerChanceFailure()) {
@@ -1971,7 +1981,9 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
       actionButtonsPanel.changeToStepInfo(
           player,
           stepDisplayName,
-          player == null || player.isNull() ? "" : "Waiting for " + player.getName() + ".");
+          player == null || player.isNull()
+              ? ""
+              : "Waiting for " + PlayerNames.display(player) + ".");
     }
     // if the game control has passed to someone else and we are not just showing the map, show the
     // history

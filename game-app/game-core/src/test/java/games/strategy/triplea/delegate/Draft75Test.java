@@ -33,7 +33,8 @@ class Draft75Test {
       Path.of(
           System.getProperty("user.home"),
           "triplea/downloadedMaps/flames_and_steel/map/games/flames_and_steel.xml");
-  private static final int[] PERCENT = {0, 0, 0, 50, 60, 70, 80, 90, 100, 100};
+  // request 32: America Atlantic's schedule
+  private static final int[] PERCENT = {0, 0, 0, 30, 40, 50, 60, 70, 80, 90};
   private GameData mobilizing;
   private GameData full;
   private final List<String> history = new ArrayList<>();
@@ -78,8 +79,8 @@ class Draft75Test {
       final int pus = usEndTurn(mobilizing, round, true);
       table.add("round " + round + ": " + pus + " of " + fullPus);
       if (round <= 2) {
-        assertThat("round " + round + " is peacetime", pus, is(36));
-        assertThat(fullPus, is(36));
+        assertThat("round " + round + " is peacetime", pus, is(21));
+        assertThat(fullPus, is(21));
         assertThat(percentBefore, is(100));
       } else {
         assertThat("round " + round, pus, is(fullPus * PERCENT[round] / 100));
@@ -97,16 +98,16 @@ class Draft75Test {
         history.stream()
             .anyMatch(
                 h ->
-                    h.startsWith("Americans collect ") && h.contains(" PUs (mobilization 60% of ")),
+                    h.startsWith("Americans collect ") && h.contains(" PUs (mobilization 40% of ")),
         is(true));
     assertThat(
         Mobilization.statusText(us(mobilizing), 4).orElseThrow(),
-        is("Americans: mobilization 60% (full income from round 8)"));
+        is("Americans: mobilization 40% (full income from round 10)"));
     assertThat(
         Mobilization.scheduleText(us(mobilizing)),
         is(
-            "Round 3: 50%, round 4: 60%, round 5: 70%, round 6: 80%, round 7: 90%,"
-                + " round 8 onward: 100%"));
+            "Round 3: 30%, round 4: 40%, round 5: 50%, round 6: 60%, round 7: 70%,"
+                + " round 8: 80%, round 9: 90%, round 10 onward: 100%"));
   }
 
   private int fullPusRound3;

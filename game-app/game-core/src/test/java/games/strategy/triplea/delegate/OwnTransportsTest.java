@@ -116,21 +116,21 @@ class OwnTransportsTest {
     final var americans = player("Americans");
     assertThat(
         load(british, americans, "britishCombatMove", false).orElse(""),
-        containsString("Only American units can use American transports."));
+        containsString("Only America Atlantic units can use America Atlantic transports."));
   }
 
   @Test
   void britishInfantryCannotBoardAnAmericanTransportInNonCombatMove() {
     assertThat(
         load(player("British"), player("Americans"), "britishNonCombatMove", false).orElse(""),
-        containsString("Only American units can use American transports."));
+        containsString("Only America Atlantic units can use America Atlantic transports."));
   }
 
   @Test
   void evenAForcedAlliedLoadIsRefused() {
     assertThat(
         load(player("British"), player("Americans"), "britishNonCombatMove", true).orElse(""),
-        containsString("Only American units can use American transports."));
+        containsString("Only America Atlantic units can use America Atlantic transports."));
   }
 
   @Test

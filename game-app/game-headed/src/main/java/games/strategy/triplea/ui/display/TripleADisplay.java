@@ -9,6 +9,7 @@ import games.strategy.triplea.TripleAPlayer;
 import games.strategy.triplea.delegate.DiceRoll;
 import games.strategy.triplea.delegate.Die;
 import games.strategy.triplea.delegate.battle.IBattle.BattleType;
+import games.strategy.triplea.formatter.PlayerNames;
 import games.strategy.triplea.ui.TripleAFrame;
 import java.util.Collection;
 import java.util.List;
@@ -21,6 +22,15 @@ public class TripleADisplay implements IDisplay {
 
   public TripleADisplay(final TripleAFrame ui) {
     this.ui = ui;
+  }
+
+  /** Request 32: display names in battle steps and messages (steps are keys: always translated). */
+  private String t(final String text) {
+    return PlayerNames.inText(text, ui.getGameDataForNames());
+  }
+
+  private List<String> t(final List<String> lines) {
+    return lines == null ? null : lines.stream().map(this::t).toList();
   }
 
   @Override
@@ -55,7 +65,7 @@ public class TripleADisplay implements IDisplay {
 
   @Override
   public void listBattleSteps(final UUID battleId, final List<String> steps) {
-    ui.getBattlePanel().listBattle(steps);
+    ui.getBattlePanel().listBattle(t(steps));
   }
 
   @Override
@@ -67,7 +77,7 @@ public class TripleADisplay implements IDisplay {
       final Collection<Unit> killed,
       final Collection<Unit> damaged,
       final Map<Unit, Collection<Unit>> dependents) {
-    ui.getBattlePanel().casualtyNotification(step, dice, player, killed, damaged, dependents);
+    ui.getBattlePanel().casualtyNotification(t(step), dice, player, killed, damaged, dependents);
   }
 
   @Override
@@ -91,7 +101,7 @@ public class TripleADisplay implements IDisplay {
 
   @Override
   public void battleEnd(final UUID battleId, final String message) {
-    ui.getBattlePanel().battleEndMessage(message);
+    ui.getBattlePanel().battleEndMessage(t(message));
   }
 
   @Override
@@ -109,7 +119,7 @@ public class TripleADisplay implements IDisplay {
     if (ui.getLocalPlayers().playing(retreatingPlayer)) {
       return;
     }
-    ui.getBattlePanel().notifyRetreat(message, step);
+    ui.getBattlePanel().notifyRetreat(t(message), t(step));
   }
 
   @Override
@@ -119,7 +129,7 @@ public class TripleADisplay implements IDisplay {
 
   @Override
   public void notifyDice(final DiceRoll dice, final String stepName) {
-    ui.getBattlePanel().showDice(dice, stepName);
+    ui.getBattlePanel().showDice(dice, t(stepName));
   }
 
   @Override
@@ -129,12 +139,12 @@ public class TripleADisplay implements IDisplay {
       final List<String> lines,
       final boolean keepDice,
       final String summary) {
-    ui.getBattlePanel().showStepText(step, lines, keepDice, summary);
+    ui.getBattlePanel().showStepText(t(step), t(lines), keepDice, t(summary));
   }
 
   @Override
   public void gotoBattleStep(final UUID battleId, final String step) {
-    ui.getBattlePanel().gotoStep(step);
+    ui.getBattlePanel().gotoStep(t(step));
   }
 
   @Override

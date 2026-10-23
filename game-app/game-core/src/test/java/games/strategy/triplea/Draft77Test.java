@@ -101,7 +101,7 @@ class Draft77Test {
   @Test
   void longRangeRaidPropertiesAreSet() {
     assertThat(data.getProperties().get("FS Long Range Raid Units", ""), is("flyingWing"));
-    assertThat(data.getProperties().get("FS Long Range Raid To", ""), is("Air - Bomb USA"));
+    assertThat(data.getProperties().get("FS Long Range Raid To", ""), is("Air - Bomb America Atlantic"));
   }
 
   @Test

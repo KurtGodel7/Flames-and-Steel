@@ -77,9 +77,10 @@ class Request31Test {
 
   /** Gives Window the effect request 31 asks the XML for. */
   private void windowOption() throws Exception {
-    TechAbilityAttachment.get(tech("Window"))
-        .getPropertyOrThrow("interceptionPenaltyAgainst")
-        .setValue("1:strategicBomber");
+    final TechAbilityAttachment window = TechAbilityAttachment.get(tech("Window"));
+    if (window.getInterceptionPenaltyAgainst().isEmpty()) {
+      window.getPropertyOrThrow("interceptionPenaltyAgainst").setValue("1:strategicBomber");
+    }
     data.getTechTracker().clearCache();
   }
 

@@ -93,7 +93,7 @@ public class ChineseLiberation {
 
   /** The nations whose captures of Chinese land go to China ("British:Americans"). */
   public static List<String> liberators(final GameState data) {
-    final String list = data.getProperties().get(LIBERATORS, "British:Americans");
+    final String list = data.getProperties().get(LIBERATORS, "British:AmericansPacific:Americans");
     return list.isBlank() ? List.of() : List.of(list.split(":"));
   }
 
@@ -360,7 +360,7 @@ public class ChineseLiberation {
       final Collection<Unit> removed) {
     final List<String> parts = new ArrayList<>();
     if (!created.isEmpty()) {
-      parts.add(MyFormatter.unitsToTextNoOwner(created));
+      parts.add(plainUnits(created));
     }
     if (cash > 0) {
       parts.add(cash + MyFormatter.pluralize(" PU", cash));
@@ -379,6 +379,23 @@ public class ChineseLiberation {
         + " "
         + owners
         + (removed.size() == 1 ? " unit." : " units.");
+  }
+
+  /** "4 conscripts, 3 anti-tank guns, 1 heavy gun, 2 trenches", in the order created. */
+  static String plainUnits(final Collection<Unit> units) {
+    final java.util.Map<UnitType, Integer> counts = new java.util.LinkedHashMap<>();
+    units.forEach(u -> counts.merge(u.getType(), 1, Integer::sum));
+    final List<String> parts = new ArrayList<>();
+    counts.forEach(
+        (type, n) -> {
+          final String name = games.strategy.triplea.delegate.air.AirCombat.unitName(type);
+          final String plural =
+              name.endsWith("ch") || name.endsWith("s") || name.endsWith("x")
+                  ? name + "es"
+                  : name + "s";
+          parts.add(n + " " + (n == 1 ? name : plural));
+        });
+    return String.join(", ", parts);
   }
 
   /** "Pool 34 PUs (units 30, 2 MP beyond the conscripts × 2); garrison 22; surplus 12 × 50% = 6." */

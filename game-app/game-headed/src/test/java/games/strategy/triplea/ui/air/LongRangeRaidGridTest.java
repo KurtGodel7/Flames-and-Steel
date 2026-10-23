@@ -120,14 +120,14 @@ class LongRangeRaidGridTest {
                   });
           final JLabel wing =
               label(
-                  grid.getContentPane(), "targets|flyingWing@Air - Western Europe|Air - Bomb USA");
+                  grid.getContentPane(), "targets|flyingWing@Air - Western Europe|Air - Bomb America Atlantic");
           assertThat(wing.getText(), containsString("Long-range raid"));
           assertThat(wing.getToolTipText(), containsString("Detroit"));
           assertThat(wing.getToolTipText(), containsString("New York"));
           assertThat(
               label(
                   grid.getContentPane(),
-                  "targets|strategicBomber@Air - Western Europe|Air - Bomb USA"),
+                  "targets|strategicBomber@Air - Western Europe|Air - Bomb America Atlantic"),
               is(nullValue()));
           try {
             grid.validate();

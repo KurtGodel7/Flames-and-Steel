@@ -1,5 +1,6 @@
 package games.strategy.triplea.ui.history;
 
+import games.strategy.triplea.formatter.PlayerNames;
 import com.google.common.base.Preconditions;
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
@@ -80,7 +81,7 @@ public class HistoryPanel extends JPanel {
     // Register the tree with the tooltip manager to make the tooltips we set work.
     ToolTipManager.sharedInstance().registerComponent(tree);
     tree.expandRow(0);
-    final HistoryTreeCellRenderer renderer = new HistoryTreeCellRenderer(uiContext);
+    final HistoryTreeCellRenderer renderer = new HistoryTreeCellRenderer(uiContext, data);
     renderer.setLeafIcon(null);
     renderer.setClosedIcon(null);
     renderer.setOpenIcon(null);
@@ -404,7 +405,10 @@ public class HistoryPanel extends JPanel {
     private final ImageIcon icon = new ImageIcon();
     private final UiContext uiContext;
 
-    HistoryTreeCellRenderer(final UiContext uiContext) {
+    private final GameData data;
+
+    HistoryTreeCellRenderer(final UiContext uiContext, final GameData data) {
+      this.data = data;
       this.uiContext = uiContext;
     }
 
@@ -421,7 +425,7 @@ public class HistoryPanel extends JPanel {
         final Optional<GamePlayer> optionalGamePlayer = step.getPlayerId();
         if (optionalGamePlayer.isPresent()) {
           final GamePlayer player = optionalGamePlayer.get();
-          final String text = value + " (" + player.getName() + ")";
+          final String text = value + " (" + PlayerNames.display(player) + ")";
           if (uiContext != null) {
             super.getTreeCellRendererComponent(tree, value, sel, expanded, leaf, row, haveFocus);
             icon.setImage(uiContext.getFlagImageFactory().getSmallFlag(player));
@@ -436,6 +440,8 @@ public class HistoryPanel extends JPanel {
       } else {
         super.getTreeCellRendererComponent(tree, value, sel, expanded, leaf, row, haveFocus);
       }
+      // Flames and Steel (request 32): display names in the history
+      setText(PlayerNames.inText(getText(), data));
       return this;
     }
   }

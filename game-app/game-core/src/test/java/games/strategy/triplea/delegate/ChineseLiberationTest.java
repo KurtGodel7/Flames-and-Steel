@@ -248,7 +248,7 @@ class ChineseLiberationTest {
     final String report = ChineseLiberation.garrisonWesternUnits(bridge(china), china);
 
     assertThat(report, containsString("Hunan: "));
-    assertThat(report, containsString("6 PUs pass to China from 9 American units."));
+    assertThat(report, containsString("6 PUs pass to China from 9 America Atlantic units."));
     assertThat(china.getResources().getQuantity(pus), is(pusBefore + 6));
     assertThat(china.getResources().getQuantity(mp), is(mpBefore));
     assertThat(hunan.anyUnitsMatch(Matches.unitIsOwnedBy(americans)), is(false));

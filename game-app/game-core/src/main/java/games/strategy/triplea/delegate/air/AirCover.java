@@ -74,8 +74,7 @@ public class AirCover {
 
   /** Whether the nation attacks in this bombing zone (it is at war with the bombed nation). */
   public static boolean attacksIn(final GamePlayer player, final Territory zone) {
-    final GamePlayer bombed = AirZoneAttachment.get(zone).orElseThrow().getBombedPlayer();
-    return bombed != null && AirCombat.atWar(player, bombed);
+    return AirZoneAttachment.get(zone).orElseThrow().isAttacker(player);
   }
 
   /**

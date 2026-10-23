@@ -1,5 +1,6 @@
 package games.strategy.triplea.ui.air;
 
+import games.strategy.triplea.formatter.PlayerNames;
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.Territory;
@@ -284,6 +285,11 @@ public final class AirZoneOverlay implements MapOverlay {
 
   /** The nation spelled out: "Italy", "United States"; other nations by their player name. */
   static String nationName(final GamePlayer player) {
+    // request 32: a display name from the game wins ("America Pacific")
+    final String shown = PlayerNames.display(player);
+    if (!shown.equals(player.getName())) {
+      return shown;
+    }
     return switch (player.getName()) {
       case "Americans" -> "United States";
       case "British" -> "United Kingdom";
@@ -299,7 +305,8 @@ public final class AirZoneOverlay implements MapOverlay {
   /** "US", "UK", "USSR" and so on; other nations by their first three letters. */
   static String shortName(final GamePlayer player) {
     return switch (player.getName()) {
-      case "Americans" -> "US";
+      case "Americans" -> PlayerNames.display(player).equals("Americans") ? "US" : "USA";
+      case "AmericansPacific" -> "USP";
       case "British" -> "UK";
       case "Russians" -> "USSR";
       case "Germans" -> "GER";

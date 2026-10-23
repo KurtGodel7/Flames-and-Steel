@@ -710,6 +710,11 @@ public class AirCombat {
 
   /** "German" for the Germans, "British" for the British. */
   public static String adjective(final GamePlayer player) {
+    // request 32: "America Pacific" when the game gives the player a display name
+    final String shown = games.strategy.triplea.formatter.PlayerNames.display(player);
+    if (!shown.equals(player.getName())) {
+      return shown;
+    }
     final String name = player.getName();
     return name.endsWith("ns") ? name.substring(0, name.length() - 1) : name;
   }

@@ -55,6 +55,8 @@ public class Unit extends GameDataComponent implements DynamicallyModifiable {
     LAUNCHED("launched"),
     AIRBORNE("airborne"),
     CHARGED_FLAT_FUEL_COST("chargedFlatFuelCost"),
+    // Flames and Steel (request 32): when a munition last moved, as round * 1000 + step index
+    ARRIVED("arrived"),
     ;
 
     private final String value;
@@ -114,6 +116,8 @@ public class Unit extends GameDataComponent implements DynamicallyModifiable {
   private boolean airborne = false;
   // was charged flat fuel cost already this turn
   private boolean chargedFlatFuelCost = false;
+  // Flames and Steel (request 32): when the unit last moved (round * 1000 + step index); 0 = never
+  private int arrived = 0;
 
   /** Creates new Unit. Owner can be null. */
   public Unit(final UnitType type, @Nullable final GamePlayer owner, final GameData data) {
@@ -307,6 +311,7 @@ public class Unit extends GameDataComponent implements DynamicallyModifiable {
                         case CHARGED_FLAT_FUEL_COST ->
                             MutableProperty.ofSimple(
                                 this::setChargedFlatFuelCost, this::getChargedFlatFuelCost);
+                        case ARRIVED -> MutableProperty.ofSimple(this::setArrived, this::getArrived);
                       });
     };
   }
@@ -369,6 +374,15 @@ public class Unit extends GameDataComponent implements DynamicallyModifiable {
 
   private void setChargedFlatFuelCost(final boolean value) {
     chargedFlatFuelCost = value;
+  }
+
+  /** Flames and Steel (request 32): when the unit last moved; 0 if it never did. */
+  public int getArrived() {
+    return arrived;
+  }
+
+  private void setArrived(final int value) {
+    arrived = value;
   }
 
   private void setWasInAirBattle(final boolean value) {

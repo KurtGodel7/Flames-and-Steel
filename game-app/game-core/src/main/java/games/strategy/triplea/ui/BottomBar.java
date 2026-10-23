@@ -1,5 +1,6 @@
 package games.strategy.triplea.ui;
 
+import games.strategy.triplea.formatter.PlayerNames;
 import static games.strategy.engine.framework.lookandfeel.LookAndFeel.convertColorToHex;
 import static games.strategy.engine.framework.lookandfeel.LookAndFeel.getRelationshipTypeAttachmentColor;
 
@@ -355,7 +356,8 @@ public class BottomBar extends JPanel implements TerritoryListener, ZoomMapListe
             .thenAccept(icon -> SwingUtilities.invokeLater(() -> roundLabel.setIcon(icon)));
     CompletableFutureUtils.logExceptionWhenComplete(
         future, throwable -> log.error("Failed to set round icon for " + player, throwable));
-    playerLabel.setText((uiContext.isCurrentPlayerRemote() ? "REMOTE: " : "") + player.getName());
+    playerLabel.setText(
+        (uiContext.isCurrentPlayerRemote() ? "REMOTE: " : "") + PlayerNames.display(player));
   }
 
   public void setMapZoomEnabled(boolean enabled) {

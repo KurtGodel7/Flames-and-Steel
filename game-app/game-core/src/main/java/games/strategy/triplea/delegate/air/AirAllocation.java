@@ -112,9 +112,8 @@ public class AirAllocation {
     final boolean fighter =
         AirUnitAttachment.get(type).map(AirUnitAttachment::isFighter).orElse(false);
     if (attachment.getZoneType() == ZoneType.BOMB) {
-      final GamePlayer bombed = attachment.getBombedPlayer();
-      final boolean defending =
-          bombed == null || !player.getData().getRelationshipTracker().isAtWar(player, bombed);
+      // request 32: a zone may bomb several nations (America Pacific and America Atlantic)
+      final boolean defending = !attachment.isAttacker(player);
       if (defending) {
         return fighter
             ? Optional.empty()

@@ -144,7 +144,7 @@ final class AirAllocationGrid extends JDialog {
   private @Nullable Territory hoverColumn;
 
   AirAllocationGrid(final Frame owner, final UiContext uiContext, final Host host) {
-    super(owner, host.player().getName() + " air allocation", false);
+    super(owner, games.strategy.triplea.formatter.PlayerNames.display(host.player()) + " air allocation", false);
     this.host = host;
     this.uiContext = uiContext;
     setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
@@ -291,7 +291,7 @@ final class AirAllocationGrid extends JDialog {
     final List<AirMove> staged = host.staged();
     final int moving = staged.stream().mapToInt(AirMove::count).sum();
     header.setText(
-        player.getName()
+        games.strategy.triplea.formatter.PlayerNames.display(player)
             + "  ·  round "
             + host.round()
             + "  ·  step "
@@ -1088,6 +1088,11 @@ final class AirAllocationGrid extends JDialog {
 
   /** "Japanese" for the Japanese, "German" for the Germans: for "no German carriers here". */
   private static String adjective(final GamePlayer player) {
+    // request 32: "America Pacific" when the game gives the player a display name
+    final String shown = games.strategy.triplea.formatter.PlayerNames.display(player);
+    if (!shown.equals(player.getName())) {
+      return shown;
+    }
     final String name = player.getName();
     return name.endsWith("ns") ? name.substring(0, name.length() - 1) : name;
   }

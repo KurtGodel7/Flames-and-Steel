@@ -1,5 +1,6 @@
 package games.strategy.triplea.ui;
 
+import games.strategy.triplea.formatter.PlayerNames;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.framework.IGame;
 import java.awt.Component;
@@ -26,12 +27,12 @@ public class PlayersPanel {
         continue;
       }
       if (tracker.isAtWar(player, other)) {
-        war.add(other.getName());
+        war.add(PlayerNames.display(other));
       } else if (tracker.isAllied(player, other)) {
-        allied.add(other.getName());
+        allied.add(PlayerNames.display(other));
       }
     }
-    final StringBuilder sb = new StringBuilder(player.getName() + ": no turns; ");
+    final StringBuilder sb = new StringBuilder(PlayerNames.display(player) + ": no turns; ");
     if (war.isEmpty() && allied.isEmpty()) {
       return sb.append("at peace with every nation").toString();
     }
@@ -59,11 +60,14 @@ public class PlayersPanel {
       } else if (gamePlayer.isAi()) {
         panel.add(
             new JLabel(
-                gamePlayer.getPlayerType().name + " is " + gamePlayer.getName(), JLabel.RIGHT));
+                gamePlayer.getPlayerType().name + " is " + PlayerNames.display(gamePlayer),
+                JLabel.RIGHT));
       } else {
         panel.add(
             new JLabel(
-                game.getPlayerManager().getNode(player).getName() + " is " + gamePlayer.getName(),
+                game.getPlayerManager().getNode(player).getName()
+                    + " is "
+                    + PlayerNames.display(gamePlayer),
                 JLabel.RIGHT));
       }
     }

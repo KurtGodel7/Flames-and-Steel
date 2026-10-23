@@ -1,5 +1,6 @@
 package games.strategy.triplea.ui;
 
+import games.strategy.triplea.formatter.PlayerNames;
 import games.strategy.engine.data.AllianceTracker;
 import games.strategy.engine.data.Change;
 import games.strategy.engine.data.GameData;
@@ -105,7 +106,7 @@ class StatPanel extends JPanel implements GameDataChangeListener {
     if (icon == null && uiContext != null) {
       final Image img = uiContext.getFlagImageFactory().getSmallFlag(player);
       icon = new ImageIcon(img);
-      icon.setDescription(player.getName());
+      icon.setDescription(PlayerNames.display(player));
       mapPlayerImage.put(player, icon);
     }
   }
@@ -151,7 +152,7 @@ class StatPanel extends JPanel implements GameDataChangeListener {
         collectedData = new String[players.size() + alliances.size()][stats.length + 1];
         int row = 0;
         for (final GamePlayer player : players) {
-          collectedData[row][0] = player.getName();
+          collectedData[row][0] = PlayerNames.display(player);
           for (int i = 0; i < stats.length; i++) {
             double value = stats[i].getValue(player, gameDataSync, uiContext.getMapData());
             collectedData[row][i + 1] = IStat.DECIMAL_FORMAT.format(value);
