@@ -1740,6 +1740,24 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
       final GamePlayer gamePlayer,
       final List<TargetAssignment> start,
       final Consumer<List<TargetAssignment>> store) {
+    return getAirTargets(gamePlayer, start, store, false, Map.of(), Map.of());
+  }
+
+  /**
+   * Flames and Steel: the nation's bomber targets or (request 30) its fighter cover, chosen on the
+   * map (Actions tab).
+   *
+   * @param cover whether this is the fighter cover step
+   * @param revealed every nation's bomber targets (cover step only)
+   * @param allied the allies' choices so far, which share the caps
+   */
+  public List<TargetAssignment> getAirTargets(
+      final GamePlayer gamePlayer,
+      final List<TargetAssignment> start,
+      final Consumer<List<TargetAssignment>> store,
+      final boolean cover,
+      final Map<GamePlayer, List<TargetAssignment>> revealed,
+      final Map<GamePlayer, List<TargetAssignment>> allied) {
     messageAndDialogThreadPool.waitForAll();
     requestWindowFocus();
     final AirTargetPanel panel = actionButtonsPanel.getAirTargetPanel();
@@ -1749,7 +1767,7 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
     actionButtonsPanel.changeToAirTargets(gamePlayer);
     // request 22: the target list is on the Actions tab; show it whatever tab was open
     SwingUtilities.invokeLater(this::showActionPanelTab);
-    panel.start(gamePlayer, start, store);
+    panel.start(gamePlayer, start, store, cover, revealed, allied);
     return panel.waitForTargets();
   }
 
@@ -2017,7 +2035,7 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
       // Flames and Steel (request 28): British and US units on Chinese land are sold to China
       final String sale;
       try (GameData.Unlocker ignored = data.acquireReadLock()) {
-        sale = games.strategy.triplea.delegate.ChineseLiberation.saleNote(unit, data);
+        sale = games.strategy.triplea.delegate.ChineseLiberation.garrisonNote(unit, data);
       }
       return MapUnitTooltipManager.getTooltipTextForUnit(
               unit.getType(),

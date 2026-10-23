@@ -1,6 +1,7 @@
 package games.strategy.triplea.delegate;
 
 import games.strategy.engine.data.GamePlayer;
+import games.strategy.engine.data.GameStep;
 import games.strategy.engine.data.Resource;
 import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
@@ -18,6 +19,7 @@ import games.strategy.triplea.delegate.air.AirCombat.Roll;
 import games.strategy.triplea.delegate.air.AirCombat.Target;
 import games.strategy.triplea.delegate.air.AirCombat.TargetAssignment;
 import games.strategy.triplea.delegate.air.AirCombat.TargetKind;
+import games.strategy.triplea.delegate.air.AirCover;
 import games.strategy.triplea.delegate.air.LongRangeRaid;
 import games.strategy.triplea.delegate.remote.IAirCombatDelegate;
 import games.strategy.triplea.formatter.MyFormatter;
@@ -26,8 +28,10 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.ToIntFunction;
 import javax.annotation.Nullable;
@@ -35,51 +39,85 @@ import lombok.extern.slf4j.Slf4j;
 import org.triplea.java.collections.IntegerMap;
 
 /**
- * Flames and Steel air combat, fought once at the start of each round after the air allocation
- * (request 27 order). Two kinds of step use this delegate:
+ * Flames and Steel air combat, fought once at the start of each round after the air allocation.
+ * Three kinds of step use this delegate:
  *
  * <ul>
  *   <li>"nationAirTargets": the nation assigns its bombers to targets before any fighting; the
- *       assignments are final for the round.
- *   <li>"airStrikes" (no player): in every front and bombing zone holding enemies, the dogfight
- *       (fighter-types only, game property "FS Dogfight Rounds" rounds), then interception (every
- *       surviving fighter-type fires at the enemy's bomber-types, which fire back), then every
- *       damaged bomber aborts. Then AA at each land target fires at every bomber assigned there,
- *       aborted ones included (bombers it damages abort too); then tactical strikes on land and
- *       sea and strategic bombing by bombers neither lost nor aborted; ships hit from the air fire
- *       back. All aircraft heal at the end of the air phase.
+ *       assignments are final for the round. Request 30: at most "FS Air Cap Bombers" (4) bombers
+ *       per side over a land territory or factory (see {@link AirCover}).
+ *   <li>"nationAirCover" (request 30): once every nation's bomber targets are revealed, the nation
+ *       places its fighter-types over territories in their front, to escort or to defend, at most
+ *       "FS Air Cap Fighters" (4) per side over a land territory (none over a factory under attack
+ *       or a sea zone). Fighters placed nowhere take no part. Game XML without these steps gets the
+ *       same choice asked at the start of "airStrikes".
+ *   <li>"airStrikes" (no player): each territory, sea zone or bombed factory with aircraft fights its
+ *       own air battle: the dogfight between the fighter-types there (game property "FS Dogfight
+ *       Rounds" rounds), then interception (surviving fighters fire at the enemy's bombers there,
+ *       which fire back), then every damaged bomber aborts. Then AA there fires at every bomber
+ *       assigned to its target, damaged ones first (bombers it damages abort too); then tactical
+ *       strikes and strategic bombing by bombers neither lost nor aborted; ships hit from the air
+ *       fire back. Casualties are picked at random (sticky hits apply), no battle window opens, and
+ *       one summary lists every battle. All aircraft heal at the end of the air phase.
  * </ul>
  *
  * <p>An "airDogfights" step (XML written for the old order, where it came before the targets)
  * does nothing: the dogfight is now part of the strike step, after the targets are chosen.
  *
- * <p>All fire uses low luck, and all hits follow the sticky hit rule.
+ * <p>All fire uses low luck.
  */
 @Slf4j
 public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombatDelegate {
   private static final String ABORTS = "Aborts";
 
   private Map<GamePlayer, List<TargetAssignment>> pending = new LinkedHashMap<>();
+  // request 30: fighter cover chosen in the "nationAirCover" steps
+  private Map<GamePlayer, List<TargetAssignment>> pendingCover = new LinkedHashMap<>();
   // the window of the air battle being fought, closed if that battle fails
   private transient AirBattleView currentView;
   // this strike step's bombing raids, for the summary at its end
   private final transient List<Raid> raids = new ArrayList<>();
   // request 27: bombers damaged during this air phase; they make no strike or bombing run
   private final transient Set<Unit> aborted = new HashSet<>();
+  // request 30: one line per territory's battle, for the summary at the end of the air phase
+  private final transient List<String> summary = new ArrayList<>();
 
   @Override
   public void start() {
     super.start();
     // request 27: "airDogfights" does nothing; the whole fight is in the strike step
     if (stepName().startsWith("airStrikes")) {
+      if (!hasCoverSteps()) {
+        askForCover();
+      }
       resolveAirPhase();
       returnRaiders();
     }
   }
 
+  private boolean isTargetStep() {
+    return stepName().endsWith("AirTargets");
+  }
+
+  private boolean isCoverStep() {
+    return GameStep.isAirCoverStepName(stepName());
+  }
+
+  /** Whether the game's sequence has request 30's fighter cover steps. */
+  private boolean hasCoverSteps() {
+    return getData().getSequence().getSteps().stream()
+        .anyMatch(s -> GameStep.isAirCoverStepName(s.getName()));
+  }
+
   @Override
   public boolean delegateCurrentlyRequiresUserInput() {
-    if (player == null || !stepName().endsWith("AirTargets") || Peacetime.isAtPeace(player)) {
+    if (player == null || Peacetime.isAtPeace(player)) {
+      return false;
+    }
+    if (isCoverStep()) {
+      return hasCoverChoice(player);
+    }
+    if (!isTargetStep()) {
       return false;
     }
     return AirZoneAttachment.getAirZones(getData().getMap()).stream()
@@ -89,28 +127,99 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
                     && !AirCombat.getTargets(player, zone).isEmpty());
   }
 
+  /** Whether the nation has fighter-types in a front with somewhere to cover. */
+  private boolean hasCoverChoice(final GamePlayer p) {
+    for (final Territory zone : AirZoneAttachment.getAirZones(getData().getMap())) {
+      for (final Unit u : zone.getUnitCollection().getMatches(Matches.unitIsOwnedBy(p))) {
+        if (AirCombat.isFighterType(u)
+            && !AirCover.places(p, zone, u.getType(), pending).isEmpty()) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   @Override
   public @Nullable String assignTargets(final List<TargetAssignment> assignments) {
-    if (player == null || !stepName().endsWith("AirTargets")) {
-      return "This is not a bomber target step.";
+    if (player == null || (!isTargetStep() && !isCoverStep())) {
+      return "This is not a bomber target or fighter cover step.";
     }
     if (Peacetime.isAtPeace(player)) {
       return Peacetime.noAirMessage(player);
+    }
+    if (isCoverStep()) {
+      final String error = validateCover(player, assignments, others(pendingCover), pending);
+      if (error != null) {
+        return error;
+      }
+      pendingCover.put(player, new ArrayList<>(assignments));
+      return null;
     }
     final String error = validate(player, assignments);
     if (error != null) {
       return error;
     }
+    final Optional<String> cap = AirCover.capProblem(player, assignments, others(pending), pending);
+    if (cap.isPresent()) {
+      return cap.get();
+    }
     pending.put(player, new ArrayList<>(assignments));
     return null;
   }
 
+  /** Everyone's choices but the current nation's. */
+  private Map<GamePlayer, List<TargetAssignment>> others(
+      final Map<GamePlayer, List<TargetAssignment>> all) {
+    final Map<GamePlayer, List<TargetAssignment>> result = new LinkedHashMap<>(all);
+    result.remove(player);
+    return result;
+  }
+
   @Override
   public List<TargetAssignment> getPendingAssignments() {
-    if (player == null || !stepName().endsWith("AirTargets")) {
+    if (player == null) {
+      return List.of();
+    }
+    if (isCoverStep()) {
+      return List.copyOf(pendingCover.getOrDefault(player, List.of()));
+    }
+    if (!isTargetStep()) {
       return List.of();
     }
     return List.copyOf(pending.getOrDefault(player, List.of()));
+  }
+
+  @Override
+  public Map<GamePlayer, List<TargetAssignment>> getRevealedBombers() {
+    if (!isCoverStep()) {
+      return Map.of();
+    }
+    return copy(pending);
+  }
+
+  @Override
+  public Map<GamePlayer, List<TargetAssignment>> getAlliedAssignments() {
+    if (player == null) {
+      return Map.of();
+    }
+    final Map<GamePlayer, List<TargetAssignment>> source =
+        isCoverStep() ? pendingCover : isTargetStep() ? pending : Map.of();
+    final Map<GamePlayer, List<TargetAssignment>> result = new LinkedHashMap<>();
+    source.forEach(
+        (p, list) -> {
+          if (!p.equals(player) && AirCover.sameSide(player, p)) {
+            result.put(p, List.copyOf(list));
+          }
+        });
+    return result;
+  }
+
+  private static Map<GamePlayer, List<TargetAssignment>> copy(
+      final Map<GamePlayer, List<TargetAssignment>> map) {
+    final Map<GamePlayer, List<TargetAssignment>> result = new LinkedHashMap<>();
+    map.forEach((p, list) -> result.put(p, List.copyOf(list)));
+    return result;
   }
 
   /** Why these targets are not allowed, or null. */
@@ -123,6 +232,9 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
       }
       if (!AirZoneAttachment.isAirZone(a.zone())) {
         return a.zone().getName() + " is not an air zone.";
+      }
+      if (AirCover.isCover(a)) {
+        return "Fighter cover is chosen in its own step.";
       }
       if (!AirCombat.getTargets(player, a.zone()).contains(a.target())) {
         return a.target().describe() + " cannot be attacked from " + a.zone().getName() + ".";
@@ -158,54 +270,193 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
   }
 
   /**
+   * Request 30: why this fighter cover is not allowed, or null.
+   *
+   * @param others the other nations' cover so far (allies share the caps)
+   * @param bombers every nation's bomber targets this round
+   */
+  static @Nullable String validateCover(
+      final GamePlayer player,
+      final List<TargetAssignment> assignments,
+      final Map<GamePlayer, List<TargetAssignment>> others,
+      final Map<GamePlayer, List<TargetAssignment>> bombers) {
+    final IntegerMap<String> used = new IntegerMap<>();
+    for (final TargetAssignment a : assignments) {
+      if (a.count() <= 0) {
+        return "Counts must be positive.";
+      }
+      if (!AirZoneAttachment.isAirZone(a.zone())) {
+        return a.zone().getName() + " is not an air zone.";
+      }
+      if (!AirCover.isCover(a)) {
+        return "Only fighter cover is chosen in this step.";
+      }
+      if (!AirCover.places(player, a.zone(), a.unitType(), bombers)
+          .contains(a.target().territory())) {
+        return AirAllocation.typeName(a.unitType())
+            + " in "
+            + AirAllocation.zoneName(a.zone())
+            + " cannot cover "
+            + a.target().territory().getName()
+            + " (out of range, or not a place it may go).";
+      }
+      final String key = a.zone().getName() + "|" + a.unitType().getName();
+      used.add(key, a.count());
+      final long available =
+          a.zone().getUnitCollection().stream()
+              .filter(u -> u.isOwnedBy(player) && u.getType().equals(a.unitType()))
+              .filter(AirCombat::isFighterType)
+              .count();
+      if (used.getInt(key) > available) {
+        return "Only "
+            + available
+            + " "
+            + AirAllocation.typeName(a.unitType())
+            + " in "
+            + AirAllocation.zoneName(a.zone())
+            + ".";
+      }
+    }
+    return AirCover.capProblem(player, assignments, others, bombers).orElse(null);
+  }
+
+  /**
+   * Request 30, for XML without "nationAirCover" steps: each nation in turn places its fighters,
+   * asked here. A placement refused five times counts as none.
+   */
+  private void askForCover() {
+    final List<GamePlayer> order = new ArrayList<>();
+    for (final GameStep step : getData().getSequence().getSteps()) {
+      if (step.getName().endsWith("AirTargets")
+          && step.getPlayerId() != null
+          && !order.contains(step.getPlayerId())) {
+        order.add(step.getPlayerId());
+      }
+    }
+    for (final GamePlayer p : order) {
+      if (Peacetime.isAtPeace(p) || !hasCoverChoice(p) || !AirBattleView.isControlled(p)) {
+        continue;
+      }
+      List<TargetAssignment> choice = List.of();
+      String problem = "";
+      for (int attempt = 0; attempt < 5; attempt++) {
+        final Map<GamePlayer, List<TargetAssignment>> allied = new LinkedHashMap<>();
+        pendingCover.forEach(
+            (other, list) -> {
+              if (AirCover.sameSide(p, other)) {
+                allied.put(other, List.copyOf(list));
+              }
+            });
+        choice =
+            bridge.getRemotePlayer(p).selectAirCover(choice, copy(pending), allied, problem);
+        final Map<GamePlayer, List<TargetAssignment>> others = new LinkedHashMap<>(pendingCover);
+        others.remove(p);
+        final String error =
+            validateCover(p, choice == null ? List.of() : choice, others, pending);
+        if (error == null) {
+          if (choice != null && !choice.isEmpty()) {
+            pendingCover.put(p, new ArrayList<>(choice));
+          }
+          break;
+        }
+        problem = error;
+        choice = choice == null ? List.of() : choice;
+      }
+    }
+  }
+
+  /** Where one air battle is fought: a territory (or sea zone, or factory), seen from one box. */
+  private record Place(Territory zone, Territory territory) {
+    String describe() {
+      return territory.getName() + " (" + AirAllocation.zoneName(zone) + ")";
+    }
+  }
+
+  /**
    * Request 27: the targets are fixed before any fighting, so the bombers of each strike are taken
-   * now; then every front's air battle; then AA and the strikes; then all aircraft heal.
+   * now. Request 30: then each territory's air battle, AA and strikes in turn; then all aircraft
+   * heal, and one summary lists every battle.
    */
   private void resolveAirPhase() {
     final List<Strike> strikes = buildStrikes();
+    final Map<Place, List<Unit>> cover = buildCover();
     pending.clear();
+    pendingCover.clear();
     raids.clear();
     aborted.clear();
+    summary.clear();
     clearBombedThisRound();
+    final Set<Place> places = new LinkedHashSet<>();
     for (final Territory zone : AirZoneAttachment.getAirZones(getData().getMap())) {
-      if (AirZoneAttachment.get(zone).orElseThrow().getZoneType() == ZoneType.RESERVE) {
-        continue;
-      }
-      final List<Unit> aircraft = zone.getUnitCollection().getMatches(Matches.unitIsAir());
-      if (aircraft.isEmpty()) {
-        continue;
-      }
-      final GamePlayer first = aircraft.get(0).getOwner();
-      final List<Unit> sideA = new ArrayList<>();
-      final List<Unit> sideB = new ArrayList<>();
-      for (final Unit unit : aircraft) {
-        if (unit.getOwner().equals(first)
-            || getData().getRelationshipTracker().isAllied(first, unit.getOwner())) {
-          sideA.add(unit);
-        } else if (AirCombat.atWar(first, unit.getOwner())) {
-          sideB.add(unit);
-        }
-      }
-      if (!sideB.isEmpty() && hasAirFight(sideA, sideB)) {
-        safely("Air battle in " + zone.getName(), () -> fightAirBattle(zone, sideA, sideB));
-      }
+      final List<Place> here = new ArrayList<>();
+      strikes.stream()
+          .filter(s -> s.zone().equals(zone))
+          .map(s -> new Place(zone, s.target().territory()))
+          .forEach(here::add);
+      cover.keySet().stream().filter(p -> p.zone().equals(zone)).forEach(here::add);
+      here.sort(java.util.Comparator.comparing(p -> p.territory().getName()));
+      places.addAll(here);
     }
-    if (!strikes.isEmpty()) {
-      bridge.getHistoryWriter().startEvent("Air strikes");
-      final IntegerMap<Territory> bombed = new IntegerMap<>();
-      for (final Strike strike : strikes) {
-        if (strike.target().kind() != TargetKind.STRATEGIC) {
-          safely(strikeName(strike), () -> fightStrike(strike, bombed));
-        }
-      }
-      for (final Strike strike : strikes) {
-        if (strike.target().kind() == TargetKind.STRATEGIC) {
-          safely(strikeName(strike), () -> fightStrike(strike, bombed));
-        }
-      }
-      reportRaids();
+    if (!places.isEmpty()) {
+      bridge.getHistoryWriter().startEvent("Air battles");
     }
+    final IntegerMap<Territory> bombed = new IntegerMap<>();
+    for (final Place place : places) {
+      final List<Strike> here =
+          strikes.stream()
+              .filter(
+                  s ->
+                      s.zone().equals(place.zone())
+                          && s.target().territory().equals(place.territory()))
+              .sorted(
+                  java.util.Comparator.comparing(
+                      (Strike s) -> s.target().kind() == TargetKind.STRATEGIC))
+              .toList();
+      safely(
+          "Air battle over " + place.describe(),
+          () -> fightPlace(place, here, cover.getOrDefault(place, List.of()), bombed));
+    }
+    reportAirPhase();
     healAircraft();
+  }
+
+  /**
+   * Request 30: one territory's air battle (dogfight, interception, aborts), then AA and the
+   * strikes there.
+   */
+  private void fightPlace(
+      final Place place,
+      final List<Strike> strikes,
+      final List<Unit> fighters,
+      final IntegerMap<Territory> bombed) {
+    final Territory zone = place.zone();
+    final List<Unit> aircraft = new ArrayList<>(alive(zone, fighters));
+    for (final Strike strike : strikes) {
+      strike.survivors().stream().filter(u -> !aircraft.contains(u)).forEach(aircraft::add);
+    }
+    if (aircraft.isEmpty()) {
+      return;
+    }
+    final GamePlayer first = aircraft.get(0).getOwner();
+    final List<Unit> sideA = new ArrayList<>();
+    final List<Unit> sideB = new ArrayList<>();
+    for (final Unit unit : aircraft) {
+      if (AirCover.sameSide(first, unit.getOwner())) {
+        sideA.add(unit);
+      } else if (AirCombat.atWar(first, unit.getOwner())) {
+        sideB.add(unit);
+      }
+    }
+    final List<String> lines = new ArrayList<>();
+    if (!sideB.isEmpty() && hasAirFight(sideA, sideB)) {
+      fightAirBattle(place, sideA, sideB, lines);
+    }
+    for (final Strike strike : strikes) {
+      fightStrike(strike, bombed, lines);
+    }
+    if (!lines.isEmpty()) {
+      summary.add("<b>" + place.describe() + "</b>: " + String.join("; ", lines));
+    }
   }
 
   /** Whether the sides fight at all: a dogfight, or interceptors against enemy bombers. */
@@ -221,7 +472,12 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
    * Request 27: one front's air battle, which is one battle for sticky hits: the dogfight
    * (fighter-types only), interception, then every damaged bomber aborts.
    */
-  private void fightAirBattle(final Territory zone, final List<Unit> sideA, final List<Unit> sideB) {
+  private void fightAirBattle(
+      final Place place,
+      final List<Unit> sideA,
+      final List<Unit> sideB,
+      final List<String> lines) {
+    final Territory zone = place.zone();
     final GamePlayer playerA = AirCombat.chooser(sideA);
     final GamePlayer playerB = AirCombat.chooser(sideB);
     final int rounds = AirCombat.dogfightRounds(getData());
@@ -245,11 +501,10 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
     steps.add(bomberLossStep(playerA));
     steps.add(fighterLossStep(playerB));
     steps.add(ABORTS);
-    final String title = "Air battle in " + AirAllocation.zoneName(zone);
-    final AirBattleView view =
-        AirBattleView.show(bridge, zone, title, sideA, sideB, playerA, playerB, steps);
+    // request 30: no battle window; the air phase ends with one summary
+    final AirBattleView view = AirBattleView.quiet(bridge, playerA, playerB);
     currentView = view;
-    bridge.getHistoryWriter().startEvent("Air battle in " + zone.getName());
+    bridge.getHistoryWriter().addChildToEvent("Air battle over " + place.describe());
     // request 18: who fought, readable later in the history
     final List<Unit> everyone = new ArrayList<>(sideA);
     everyone.addAll(sideB);
@@ -268,7 +523,7 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
       if (aliveA.isEmpty() || aliveB.isEmpty()) {
         break;
       }
-      final String text = "Dogfight in " + zone.getName() + ", round " + round;
+      final String text = "Dogfight over " + place.territory().getName() + ", round " + round;
       final Roll rollA = fire(aliveA, AirCombat::dogfightPower, text);
       final DiceRoll diceA =
           view.showDice(rollA, AirCombat.chooser(aliveA), fireStep(playerA, round));
@@ -282,7 +537,7 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
           bridge, view, casualtyStep(playerA, round), zone, aliveA, aliveB, rollB, diceB, text);
     }
     // 2. interception: every surviving fighter-type, damaged or not
-    intercept(zone, view, playerA, playerB, sideA, sideB);
+    intercept(zone, place.territory(), view, playerA, playerB, sideA, sideB);
     // 3. aborts: every damaged bomber
     final List<Unit> nowAborted = new ArrayList<>();
     for (final Unit bomber : alive(zone, everyone)) {
@@ -314,15 +569,19 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
         .getHistoryWriter()
         .addChildToEvent(
             "Result: lost " + AirCombat.sideText(lost) + "; left " + AirCombat.sideText(left));
-    view.end(
-        playerA.getName()
-            + " lost "
-            + (sideA.size() - alive(zone, sideA).size())
-            + ", "
-            + playerB.getName()
-            + " lost "
-            + (sideB.size() - alive(zone, sideB).size())
-            + (nowAborted.isEmpty() ? "" : "; " + nowAborted.size() + " bombers aborted"));
+    final List<Unit> lostA = sideA.stream().filter(lost::contains).toList();
+    final List<Unit> lostB = sideB.stream().filter(lost::contains).toList();
+    lines.add(
+        "air battle: "
+            + lossText(playerA, lostA)
+            + "; "
+            + lossText(playerB, lostB)
+            + (nowAborted.isEmpty() ? "" : "; aborted " + AirCombat.sideText(nowAborted)));
+  }
+
+  /** "Germans lost none" or "lost Germans 1 fighter". */
+  private static String lossText(final GamePlayer side, final List<Unit> lost) {
+    return lost.isEmpty() ? side.getName() + " lost none" : "lost " + AirCombat.sideText(lost);
   }
 
   /**
@@ -334,6 +593,7 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
    */
   private void intercept(
       final Territory zone,
+      final Territory over,
       final AirBattleView view,
       final GamePlayer playerA,
       final GamePlayer playerB,
@@ -343,13 +603,17 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
     final List<Unit> fightersB = fighters(zone, sideB);
     final List<Unit> bombersA = bombers(zone, sideA);
     final List<Unit> bombersB = bombers(zone, sideB);
-    final String text = "Interception in " + zone.getName();
+    final String text = "Interception over " + over.getName();
+    // request 31: Window takes 1 off every interceptor firing at a raid that includes a British
+    // strategic bomber
+    final int penaltyB = AirCombat.interceptionPenalty(bombersB);
+    final int penaltyA = AirCombat.interceptionPenalty(bombersA);
     final Shot interceptA =
         shoot(
             view,
             fightersA,
             bombersB,
-            AirCombat::interceptionPower,
+            u -> AirCombat.interceptionPower(u, penaltyB),
             interceptStep(playerA),
             text,
             " fighters intercept");
@@ -367,7 +631,7 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
             view,
             fightersB,
             bombersA,
-            AirCombat::interceptionPower,
+            u -> AirCombat.interceptionPower(u, penaltyA),
             interceptStep(playerB),
             text,
             " fighters intercept");
@@ -589,7 +853,8 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
    * only, so taking the strikes one at a time gives the same result as AA everywhere first, then
    * all tactical strikes, then all bombing.
    */
-  private void fightStrike(final Strike strike, final IntegerMap<Territory> bombed) {
+  private void fightStrike(
+      final Strike strike, final IntegerMap<Territory> bombed, final List<String> lines) {
     if (strike.survivors().isEmpty()) {
       return;
     }
@@ -615,6 +880,7 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
           .addChildToEvent(
               title + ": no attack, " + AirCombat.sideText(abortedBefore) + " aborted",
               abortedBefore);
+      lines.add(title + ": no attack (" + AirCombat.sideText(abortedBefore) + " aborted)");
       return;
     }
     final List<Unit> targets =
@@ -629,6 +895,7 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
                           AirCombat.atWar(attacker, u.getOwner())
                               && (Matches.unitCanProduceUnits().test(u)
                                   || ApcAttachment.isApc(u.getType())));
+          case COVER -> List.of(); // fighter cover is never a strike
         };
     final List<Unit> defenders = new ArrayList<>(targets);
     aaGuns.stream().filter(u -> !defenders.contains(u)).forEach(defenders::add);
@@ -655,9 +922,7 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
       steps.add(fireBack);
       steps.add(fireBackCasualties);
     }
-    final AirBattleView view =
-        AirBattleView.show(
-            bridge, t, title, strike.survivors(), defenders, attacker, defender, steps);
+    final AirBattleView view = AirBattleView.quiet(bridge, attacker, defender);
     currentView = view;
     // request 18: who took part, readable later in the history
     final List<Unit> involved = new ArrayList<>(strike.survivors());
@@ -716,13 +981,13 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
               ? "all attacking aircraft lost to AA"
               : "no attack: every bomber lost or aborted";
       strikeResult(title, strike, result);
-      view.end(strike.survivors().isEmpty() ? "All attacking aircraft lost" : "No attack");
+      lines.add(title + ": " + result);
       return;
     }
     if (kind == TargetKind.STRATEGIC) {
       final String result = strategicBombing(strike, attackers, bombed, targets, view, strikeStep);
       strikeResult(title, strike, result);
-      view.end(result);
+      lines.add(title + ": " + result + lossAndAborts(strike, abortedNow));
       return;
     }
     // 3. the strike
@@ -772,7 +1037,30 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
             + (lost > 0 ? "; " + lost + " aircraft lost" : "")
             + (abortedNow.isEmpty() ? "" : "; " + abortedNow.size() + " aborted");
     strikeResult(title, strike, result);
-    view.end(result);
+    lines.add(
+        title
+            + ": "
+            + (hit.all().isEmpty() ? "no hits" : hitText(hit))
+            + lossAndAborts(strike, abortedNow));
+  }
+
+  /** "2 infantry destroyed, 1 tank damaged". */
+  private static String hitText(final Hit hit) {
+    final List<String> parts = new ArrayList<>();
+    if (!hit.killed().isEmpty()) {
+      parts.add(MyFormatter.unitsToTextNoOwner(hit.killed()) + " destroyed");
+    }
+    if (!hit.damaged().isEmpty()) {
+      parts.add(MyFormatter.unitsToTextNoOwner(hit.damaged()) + " damaged");
+    }
+    return String.join(", ", parts);
+  }
+
+  /** "; 1 aircraft lost; 2 aborted" for a strike's summary line, or "". */
+  private static String lossAndAborts(final Strike strike, final List<Unit> abortedNow) {
+    final int lost = strike.aircraft().size() - strike.survivors().size();
+    return (lost > 0 ? "; " + lost + " aircraft lost" : "")
+        + (abortedNow.isEmpty() ? "" : "; " + abortedNow.size() + " aborted");
   }
 
   /** The strike's last history line: its result, the aircraft lost and those left. */
@@ -904,7 +1192,13 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
               tech, tech.getBombedThisRound() + loss, "bombedThisRound"));
     }
     view.showText(step, lines, "Bombing damage: " + victim.getName() + " " + MINUS + loss + " PUs");
-    return victim.getName() + " lose " + loss + " PUs";
+    return victim.getName()
+        + " lose "
+        + loss
+        + " PUs"
+        + (damage > capLeft
+            ? " (" + damage + " PUs of damage, capped at " + capLeft + ": 2 × the territory's value)"
+            : "");
   }
 
   /**
@@ -920,33 +1214,72 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
     }
   }
 
-  /** At the end of the strikes: every raid with its damage, and the total per nation. */
-  private void reportRaids() {
-    if (raids.isEmpty()) {
+  /**
+   * Request 30: at the end of the air phase one summary for everyone: each territory's battle
+   * (losses, aborts, strike hits), then every raid with its damage and the total per nation.
+   */
+  private void reportAirPhase() {
+    if (summary.isEmpty() && raids.isEmpty()) {
       return;
     }
-    final Map<GamePlayer, Integer> totals = new LinkedHashMap<>();
-    raids.forEach(r -> totals.merge(r.victim(), r.loss(), Integer::sum));
-    final List<String> lines = new ArrayList<>(raids.stream().map(Raid::describe).toList());
-    totals.forEach(
-        (victim, loss) ->
-            lines.add(
-                "Total: "
-                    + victim.getName()
-                    + " "
-                    + MINUS
-                    + loss
-                    + " PUs from bombing this round"));
-    bridge.getHistoryWriter().startEvent("Strategic bombing this round");
-    lines.forEach(line -> bridge.getHistoryWriter().addChildToEvent(line));
+    final List<String> lines = new ArrayList<>(summary);
+    summary.forEach(line -> bridge.getHistoryWriter().addChildToEvent(line.replaceAll("<[^>]*>", "")));
+    if (!raids.isEmpty()) {
+      final Map<GamePlayer, Integer> totals = new LinkedHashMap<>();
+      raids.forEach(r -> totals.merge(r.victim(), r.loss(), Integer::sum));
+      final List<String> bombing = new ArrayList<>(raids.stream().map(Raid::describe).toList());
+      totals.forEach(
+          (victim, loss) ->
+              bombing.add(
+                  "Total: "
+                      + victim.getName()
+                      + " "
+                      + MINUS
+                      + loss
+                      + " PUs from bombing this round"));
+      bridge.getHistoryWriter().startEvent("Strategic bombing this round");
+      bombing.forEach(line -> bridge.getHistoryWriter().addChildToEvent(line));
+      lines.add("");
+      lines.add("<b>Strategic bombing</b>");
+      lines.addAll(bombing);
+    }
     bridge
         .getDisplayChannelBroadcaster()
         .reportMessageToAll(
             "<html>" + String.join("<br>", lines) + "</html>",
-            "Strategic bombing this round",
+            "Air battles this round",
             false,
             false,
             false);
+  }
+
+  /**
+   * Request 30: the fighters each nation placed, by place, undamaged ones first (an aircraft is in
+   * one place only).
+   */
+  private Map<Place, List<Unit>> buildCover() {
+    final Map<Place, List<Unit>> result = new LinkedHashMap<>();
+    for (final Map.Entry<GamePlayer, List<TargetAssignment>> entry : pendingCover.entrySet()) {
+      final Set<Unit> used = new HashSet<>();
+      for (final TargetAssignment a : entry.getValue()) {
+        final List<Unit> units =
+            a.zone().getUnitCollection().stream()
+                .filter(
+                    u ->
+                        u.isOwnedBy(entry.getKey())
+                            && AirCombat.isFighterType(u)
+                            && u.getType().equals(a.unitType())
+                            && !used.contains(u))
+                .sorted(java.util.Comparator.comparingInt(Unit::getHits))
+                .limit(a.count())
+                .toList();
+        used.addAll(units);
+        result
+            .computeIfAbsent(new Place(a.zone(), a.target().territory()), k -> new ArrayList<>())
+            .addAll(units);
+      }
+    }
+    return result;
   }
 
   /**
@@ -984,6 +1317,7 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
     final AirCombatState state = new AirCombatState();
     state.superState = super.saveState();
     state.pending = new LinkedHashMap<>(pending);
+    state.pendingCover = new LinkedHashMap<>(pendingCover);
     return state;
   }
 
@@ -992,6 +1326,9 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
     final AirCombatState s = (AirCombatState) state;
     super.loadState(s.superState);
     pending = new LinkedHashMap<>(s.pending);
+    // saves from before request 30 have no fighter cover
+    pendingCover =
+        s.pendingCover == null ? new LinkedHashMap<>() : new LinkedHashMap<>(s.pendingCover);
   }
 
   @Override
@@ -1004,5 +1341,6 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
 
     private Serializable superState;
     private Map<GamePlayer, List<TargetAssignment>> pending;
+    private Map<GamePlayer, List<TargetAssignment>> pendingCover;
   }
 }

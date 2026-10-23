@@ -793,7 +793,8 @@ public final class GameParser {
         throw new GameParseException(
             String.format("Could not find technology: %s", current.getName()));
       }
-      frontier.addAdvance(ta);
+      // Flames and Steel (request 31): a category is researched in the order the XML lists it
+      frontier.addAdvanceInListedOrder(ta);
     }
   }
 

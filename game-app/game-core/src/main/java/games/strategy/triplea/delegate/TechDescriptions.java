@@ -35,6 +35,7 @@ public class TechDescriptions {
     final IntegerMap<UnitType> interceptionRolls = ability.getInterceptionRollsBonus();
     final IntegerMap<UnitType> airDefense = ability.getBomberAirDefenseBonus();
     final IntegerMap<UnitType> airDefenseRolls = ability.getBomberAirDefenseRollsBonus();
+    final IntegerMap<UnitType> windowPenalty = ability.getInterceptionPenaltyAgainst();
     final Set<UnitType> types = new LinkedHashSet<>();
     for (final IntegerMap<UnitType> map :
         List.of(
@@ -48,7 +49,8 @@ public class TechDescriptions {
             interception,
             interceptionRolls,
             airDefense,
-            airDefenseRolls)) {
+            airDefenseRolls,
+            windowPenalty)) {
       types.addAll(map.keySet());
     }
     final List<String> clauses = new ArrayList<>();
@@ -61,6 +63,14 @@ public class TechDescriptions {
       }
       if (dogfight.getInt(type) != 0) {
         clauses.add(signed(dogfight.getInt(type)) + " dogfight value for " + plural);
+      }
+      if (windowPenalty.getInt(type) != 0) {
+        clauses.add(
+            "enemy fighters intercepting bombers that include your "
+                + plural
+                + " lose "
+                + windowPenalty.getInt(type)
+                + " interception (never below 1)");
       }
       if (dogfightRolls.getInt(type) != 0) {
         clauses.add(

@@ -15,6 +15,7 @@ import games.strategy.triplea.delegate.AbstractMoveDelegate.MoveType;
 import games.strategy.triplea.delegate.EditDelegate;
 import games.strategy.triplea.delegate.GameStepPropertiesHelper;
 import games.strategy.triplea.delegate.Matches;
+import games.strategy.triplea.delegate.OwnTransports;
 import games.strategy.triplea.delegate.TransportTracker;
 import games.strategy.triplea.delegate.UnitComparator;
 import games.strategy.triplea.delegate.air.FleetAircraft;
@@ -751,7 +752,9 @@ public class MovePanel extends AbstractMovePanel {
                 Math.min(minTransportCost, unit.getUnitAttachment().getTransportCost());
           }
           final Predicate<Unit> candidateSeaTransportsMatch =
-              Matches.unitIsSeaTransport().and(Matches.alliedUnit(unitOwner));
+              Matches.unitIsSeaTransport()
+                  .and(Matches.alliedUnit(unitOwner))
+                  .and(OwnTransports.usableBy(unitOwner));
           final List<Unit> candidateSeaTransports =
               CollectionUtils.getMatches(route.getEnd().getUnits(), candidateSeaTransportsMatch);
 

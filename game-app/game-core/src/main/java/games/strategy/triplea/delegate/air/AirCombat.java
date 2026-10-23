@@ -19,10 +19,6 @@ import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.TechAdvance;
 import games.strategy.triplea.delegate.TechTracker;
 import games.strategy.triplea.delegate.battle.BattleDelegate;
-import games.strategy.triplea.delegate.battle.BattleState;
-import games.strategy.triplea.delegate.battle.casualty.CasualtySelector;
-import games.strategy.triplea.delegate.data.CasualtyDetails;
-import games.strategy.triplea.delegate.power.calculator.CombatValueBuilder;
 import games.strategy.triplea.formatter.MyFormatter;
 import java.io.Serial;
 import java.io.Serializable;
@@ -49,7 +45,9 @@ public class AirCombat {
     /** Submarines in a sea zone (torpedo and medium bombers only). */
     SUBS,
     /** A factory territory of the bombed nation (strategic bombing). */
-    STRATEGIC
+    STRATEGIC,
+    /** Request 30: fighter-types placed over a territory, to escort or defend (see AirCover). */
+    COVER
   }
 
   /** A target a nation's bombers in an air zone may attack. */
@@ -62,6 +60,7 @@ public class AirCombat {
         case SURFACE -> territory.getName() + ": surface ships";
         case SUBS -> territory.getName() + ": submarines";
         case STRATEGIC -> territory.getName() + ": strategic bombing";
+        case COVER -> territory.getName() + ": fighter cover";
       };
     }
   }
@@ -193,6 +192,7 @@ public class AirCombat {
     return switch (kind) {
       case STRATEGIC -> air != null && air.getBombingDamage() > 0;
       case SUBS -> air != null && air.isCanAttackSubs();
+      case COVER -> air != null && air.isFighter();
       default -> true;
     };
   }
@@ -318,6 +318,40 @@ public class AirCombat {
     return AirUnitAttachment.get(unit.getType())
         .map(a -> interceptionValue(unit) * Math.max(0, a.getInterceptionRolls() + extraRolls))
         .orElse(0);
+  }
+
+  /**
+   * Request 31 (Window): firing power of a fighter-type intercepting these bombers: its
+   * interception value less the bombers' penalty, never below 1, times its interception dice.
+   */
+  public static int interceptionPower(final Unit unit, final int penalty) {
+    final int extraRolls =
+        unit.getData().getTechTracker().getInterceptionRollsBonus(unit.getOwner(), unit.getType());
+    return AirUnitAttachment.get(unit.getType())
+        .map(
+            a ->
+                Math.max(1, interceptionValue(unit) - penalty)
+                    * Math.max(0, a.getInterceptionRolls() + extraRolls))
+        .orElse(0);
+  }
+
+  /**
+   * Request 31 (Window): how much interceptors lose against this group of bombers: the largest
+   * "interceptionPenaltyAgainst" any of its bombers' owners has for a bomber type in the group
+   * (one British strategic bomber covers the American bombers with it); 0 if none.
+   */
+  public static int interceptionPenalty(final Collection<Unit> bombers) {
+    int penalty = 0;
+    for (final Unit bomber : bombers) {
+      penalty =
+          Math.max(
+              penalty,
+              bomber
+                  .getData()
+                  .getTechTracker()
+                  .getInterceptionPenaltyAgainst(bomber.getOwner(), bomber.getType()));
+    }
+    return penalty;
   }
 
   /** The value an interceptor's dice hit at (request 27). */
@@ -497,9 +531,10 @@ public class AirCombat {
   }
 
   /**
-   * The owner with the most of the target units chooses where the hits go (sticky hits apply), in
-   * the battle window; damage is marked and destroyed units are removed, and the window shows the
-   * casualties.
+   * Request 30: in the air phase nobody chooses casualties. Each hit goes to a unit already damaged
+   * if there is one (sticky hits: damaged units first, and a unit once hit takes the next hits until
+   * it is destroyed); otherwise a unit picked at random among the targets. Damage is marked,
+   * destroyed units are removed, and the (quiet) battle view is told.
    *
    * @param step the battle window step the casualties belong to
    * @param dice the roll as the battle window shows it
@@ -517,37 +552,40 @@ public class AirCombat {
     if (roll.hits() <= 0 || targets.isEmpty()) {
       return new Hit(List.of(), List.of());
     }
-    final GameData data = bridge.getData();
     final GamePlayer chooser = chooser(targets);
-    final List<Unit> targetList = new ArrayList<>(targets);
-    final CasualtyDetails details =
-        CasualtySelector.selectCasualties(
-            chooser,
-            targetList,
-            CombatValueBuilder.mainCombatValue()
-                .enemyUnits(new ArrayList<>(firing))
-                .friendlyUnits(targetList)
-                .side(BattleState.Side.DEFENSE)
-                .gameSequence(data.getSequence())
-                .supportAttachments(data.getUnitTypeList().getSupportRules())
-                .lhtrHeavyBombers(false)
-                .gameDiceSides(data.getDiceSides())
-                .territoryEffects(List.of())
-                .build(),
-            location,
-            bridge,
-            text,
-            dice,
-            view.getId(),
-            false,
-            // with "Transport Casualties Restricted" the selector counts these hits, not the dice;
-            // transports are never among air targets
-            roll.hits(),
-            true);
-    final List<Unit> killed = new ArrayList<>(details.getKilled());
-    final List<Unit> damaged = new ArrayList<>(details.getDamaged());
-    damaged.removeAll(killed);
-    BattleDelegate.markDamaged(details.getDamaged(), bridge, location);
+    final List<Unit> pool = new ArrayList<>(targets);
+    final Map<Unit, Integer> taken = new java.util.HashMap<>();
+    final List<Unit> killed = new ArrayList<>();
+    final List<Unit> damageHits = new ArrayList<>();
+    for (int i = 0; i < roll.hits() && !pool.isEmpty(); i++) {
+      final List<Unit> hurt =
+          pool.stream().filter(u -> u.getHits() + taken.getOrDefault(u, 0) > 0).toList();
+      final List<Unit> choices = hurt.isEmpty() ? pool : hurt;
+      final Unit unit =
+          choices.size() == 1
+              ? choices.get(0)
+              : choices.get(
+                  bridge.getRandom(
+                      choices.size(),
+                      chooser,
+                      DiceType.ENGINE,
+                      "Random casualty for " + chooser.getName() + ": " + text));
+      final int hits = taken.merge(unit, 1, Integer::sum);
+      if (unit.getHits() + hits >= Unit.maxHitPoints(unit)) {
+        killed.add(unit);
+        pool.remove(unit);
+      }
+    }
+    taken.forEach(
+        (unit, hits) -> {
+          if (!killed.contains(unit)) {
+            for (int h = 0; h < hits; h++) {
+              damageHits.add(unit);
+            }
+          }
+        });
+    final List<Unit> damaged = damageHits.stream().distinct().toList();
+    BattleDelegate.markDamaged(damageHits, bridge, location);
     if (!killed.isEmpty()) {
       bridge
           .getHistoryWriter()
@@ -561,8 +599,7 @@ public class AirCombat {
           .addChildToEvent(
               MyFormatter.unitsToText(damaged) + " damaged in " + location.getName(), damaged);
     }
-    view.showCasualties(
-        step, dice, chooser, chooser(firing), killed, damaged, details.getAutoCalculated());
+    view.showCasualties(step, dice, chooser, chooser(firing), killed, damaged, true);
     return new Hit(killed, damaged);
   }
 

@@ -120,8 +120,15 @@ public class AirAllocation {
             ? Optional.empty()
             : Optional.of("Only fighters defend against strategic bombing.");
       }
+      // request 30: with P-51 Mustang, American advanced fighters escort the bombers
+      if (fighter && AirCover.mayEscortInBombZone(player, type)) {
+        return Optional.empty();
+      }
       if (AirUnitAttachment.get(type).map(AirUnitAttachment::getBombingDamage).orElse(0) <= 0) {
-        return Optional.of("No strategic bombing value.");
+        return Optional.of(
+            fighter
+                ? "Only escorts allowed by a tech (P-51 Mustang) may enter a bombing zone."
+                : "No strategic bombing value.");
       }
       return AirCombat.countTargets(player, zone, type) > 0
           ? Optional.empty()

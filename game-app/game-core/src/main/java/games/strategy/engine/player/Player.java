@@ -248,6 +248,34 @@ public interface Player extends IRemote {
   }
 
   /**
+   * Flames and Steel (request 30), for game XML without "nationAirCover" steps: the nation places
+   * its fighter-types over territories, after every nation's bomber targets are revealed. Players
+   * that don't ask place none.
+   *
+   * @param start the placement so far (empty, or the last one refused)
+   * @param bombers every nation's bomber targets this round
+   * @param allied the nation's allies' fighter placements so far
+   * @param problem why the last placement was refused, or "" the first time
+   * @return the placements, as cover targets
+   */
+  @RemoteActionCode(31)
+  default java.util.List<games.strategy.triplea.delegate.air.AirCombat.TargetAssignment>
+      selectAirCover(
+          final java.util.List<games.strategy.triplea.delegate.air.AirCombat.TargetAssignment>
+              start,
+          final java.util.Map<
+                  GamePlayer,
+                  java.util.List<games.strategy.triplea.delegate.air.AirCombat.TargetAssignment>>
+              bombers,
+          final java.util.Map<
+                  GamePlayer,
+                  java.util.List<games.strategy.triplea.delegate.air.AirCombat.TargetAssignment>>
+              allied,
+          final String problem) {
+    return java.util.List.of();
+  }
+
+  /**
    * Ask the player if he wishes to retreat.
    *
    * @param battleId - the battle

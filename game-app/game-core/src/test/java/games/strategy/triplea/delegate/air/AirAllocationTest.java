@@ -213,7 +213,7 @@ class AirAllocationTest {
     airUnit(fighter, "bombingDamage", "0");
     assertThat(
         AirAllocation.entryProblem(british, fighter, bombZone).orElseThrow(),
-        is("No strategic bombing value."));
+        is("Only escorts allowed by a tech (P-51 Mustang) may enter a bombing zone."));
     assertThat(AirAllocation.entryProblem(germans, fighter, bombZone).isEmpty(), is(true));
     assertThat(
         AirAllocation.entryProblem(germans, bomber, bombZone).orElseThrow(),

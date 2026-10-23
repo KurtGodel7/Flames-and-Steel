@@ -176,7 +176,9 @@ public class TripleAPlayer extends AbstractBasePlayer {
     } else if (GameStep.isAirAllocationStepName(name)) {
       airAllocation(name);
     } else if (GameStep.isAirTargetStepName(name)) {
-      airTargets();
+      airTargets(false);
+    } else if (GameStep.isAirCoverStepName(name)) {
+      airTargets(true);
     } else if (GameStep.isApcProductionStepName(name)) {
       apcProduction();
     } else if (GameStep.isPurchaseOrBidStepName(name)) {
@@ -331,13 +333,20 @@ public class TripleAPlayer extends AbstractBasePlayer {
     }
   }
 
-  private void airTargets() {
+  /**
+   * Flames and Steel: bomber targets, or (request 30, {@code cover}) fighter cover once every
+   * nation's bomber targets are revealed.
+   */
+  private void airTargets(final boolean cover) {
     if (getPlayerBridge().isGameOver()) {
       return;
     }
     final IAirCombatDelegate airDelegate =
         (IAirCombatDelegate) getPlayerBridge().getRemoteDelegate();
     List<TargetAssignment> assignments = airDelegate.getPendingAssignments();
+    final Map<GamePlayer, List<TargetAssignment>> revealed =
+        cover ? airDelegate.getRevealedBombers() : Map.of();
+    final Map<GamePlayer, List<TargetAssignment>> allied = airDelegate.getAlliedAssignments();
     while (!getPlayerBridge().isGameOver()) {
       assignments =
           ui.getAirTargets(
@@ -348,7 +357,10 @@ public class TripleAPlayer extends AbstractBasePlayer {
                   // not storable yet; Done reports the problem
                   log.debug("Air targets not stored: " + staged);
                 }
-              });
+              },
+              cover,
+              revealed,
+              allied);
       final String error = airDelegate.assignTargets(assignments);
       if (error == null) {
         return;
@@ -875,6 +887,22 @@ public class TripleAPlayer extends AbstractBasePlayer {
     final String question =
         "Not all air units in destination territory can land, do you still want to move?";
     return ui.getOk(question, question);
+  }
+
+  /** Request 30, for game XML without fighter cover steps: asked during the air battles step. */
+  @Override
+  public List<TargetAssignment> selectAirCover(
+      final List<TargetAssignment> start,
+      final Map<GamePlayer, List<TargetAssignment>> bombers,
+      final Map<GamePlayer, List<TargetAssignment>> allied,
+      final String problem) {
+    if (getPlayerBridge().isGameOver()) {
+      return List.of();
+    }
+    if (problem != null && !problem.isEmpty()) {
+      ui.notifyError(problem);
+    }
+    return ui.getAirTargets(getGamePlayer(), start, staged -> {}, true, bombers, allied);
   }
 
   @Override

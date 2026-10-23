@@ -2,6 +2,7 @@ package games.strategy.triplea.delegate;
 
 import static games.strategy.triplea.delegate.MockDelegateBridge.newDelegateBridge;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
 
 import games.strategy.engine.data.DefaultAttachment;
@@ -178,43 +179,102 @@ class ChineseLiberationTest {
     assertThat(problem.orElse(""), problem.isEmpty(), is(true));
   }
 
+  private List<Unit> units(final GamePlayer owner, final Object... typesAndCounts) {
+    final List<Unit> units = new ArrayList<>();
+    for (int i = 0; i < typesAndCounts.length; i += 2) {
+      units.addAll(type((String) typesAndCounts[i]).create((Integer) typesAndCounts[i + 1], owner));
+    }
+    return units;
+  }
+
+  private int count(final ChineseLiberation.Garrison g, final String type) {
+    return g.units().getInt(type(type));
+  }
+
   @Test
-  void westernUnitsOnChineseLandAreSoldAtTheEndOfChinasTurn() {
+  void twoInfantryAndEightPusOfOtherUnits() {
+    final var g = ChineseLiberation.garrisonFor(units(americans, "infantry", 2, "tank", 1), data);
+    assertThat(g.conscripts(), is(2));
+    assertThat(g.pool(), is(10));
+    assertThat(count(g, "antiTankGun"), is(3));
+    assertThat(count(g, "heavyGun"), is(0));
+    assertThat(g.full(), is(false));
+    assertThat(g.cash(), is(0));
+  }
+
+  @Test
+  void sixInfantryAndThreeTanks() {
+    final var g = ChineseLiberation.garrisonFor(units(americans, "infantry", 6, "tank", 3), data);
+    assertThat(g.conscripts(), is(4));
+    assertThat(g.pool(), is(34)); // 6 + 24 + 2 extra infantry x 1 MP x 2
+    assertThat(count(g, "antiTankGun"), is(3));
+    assertThat(count(g, "heavyGun"), is(1));
+    assertThat(count(g, "trench"), is(2));
+    assertThat(g.surplus(), is(12));
+    assertThat(g.cash(), is(6));
+  }
+
+  @Test
+  void noInfantryAndTwoTanks() {
+    final var g = ChineseLiberation.garrisonFor(units(british, "tank", 2), data);
+    assertThat(g.conscripts(), is(0));
+    assertThat(count(g, "antiTankGun"), is(3));
+    assertThat(count(g, "heavyGun"), is(1));
+    assertThat(count(g, "trench"), is(0));
+    assertThat(g.cash(), is(0));
+  }
+
+  @Test
+  void aSurplusOfNineteenGivesNinePus() {
+    // 5 tanks + 1 infantry = 41 PUs; garrison 22; surplus 19 x 50% = 9.5, rounded down
+    final var g = ChineseLiberation.garrisonFor(units(british, "tank", 5, "infantry", 1), data);
+    assertThat(g.surplus(), is(19));
+    assertThat(g.cash(), is(9));
+  }
+
+  @Test
+  void westernUnitsBecomeAChineseGarrisonAtTheEndOfChinasTurn() {
     final Territory hunan = territory("Hunan");
-    final List<Unit> units = new ArrayList<>(type("infantry").create(3, british));
-    units.addAll(type("antiTankGun").create(3, british));
-    units.get(4).setHits(1); // damaged: sells at full value
-    data.performChange(ChangeFactory.addUnits(hunan, units));
+    final List<Unit> force = units(americans, "infantry", 6, "tank", 3);
+    force.get(7).setHits(1); // damaged: counts at full value
+    data.performChange(ChangeFactory.addUnits(hunan, force));
     final var pus = data.getResourceList().getResourceOrThrow("PUs");
     final var mp = data.getResourceList().getResourceOrThrow("Manpower");
     final int pusBefore = china.getResources().getQuantity(pus);
     final int mpBefore = china.getResources().getQuantity(mp);
+    final int conscriptsBefore =
+        hunan.getUnitCollection().getMatches(Matches.unitIsOfType(type("conscript"))).size();
 
-    final String report = ChineseLiberation.sellWesternUnits(bridge(china), china);
+    final String report = ChineseLiberation.garrisonWesternUnits(bridge(china), china);
 
-    // (1 + 2) x 3 + 3 x 3 = 18, x 50% = 9
-    assertThat(report, report.startsWith("China receives 9 PUs"), is(true));
-    assertThat(china.getResources().getQuantity(pus), is(pusBefore + 9));
+    assertThat(report, containsString("Hunan: "));
+    assertThat(report, containsString("6 PUs pass to China from 9 American units."));
+    assertThat(china.getResources().getQuantity(pus), is(pusBefore + 6));
     assertThat(china.getResources().getQuantity(mp), is(mpBefore));
-    assertThat(hunan.anyUnitsMatch(Matches.unitIsOwnedBy(british)), is(false));
+    assertThat(hunan.anyUnitsMatch(Matches.unitIsOwnedBy(americans)), is(false));
+    assertThat(
+        hunan.getUnitCollection().getMatches(Matches.unitIsOfType(type("conscript"))).size(),
+        is(conscriptsBefore + 4));
+    assertThat(
+        hunan.getUnitCollection()
+            .getMatches(Matches.unitIsOfType(type("heavyGun")).and(Matches.unitIsOwnedBy(china)))
+            .size()
+            >= 1,
+        is(true));
   }
 
   @Test
-  void theSaleIsRoundedDownOnceAndItsNumbersAreProperties() {
-    final List<Unit> force = new ArrayList<>(type("infantry").create(3, british));
-    force.addAll(type("antiTankGun").create(3, british));
-    assertThat(ChineseLiberation.fullValue(force, data), is(18));
-    assertThat(ChineseLiberation.saleValue(force, data), is(9));
-    // 21 at 50% is 10.5: rounded down once, at the end, to 10
-    data.getProperties().set(ChineseLiberation.MP_BONUS, 2);
-    final List<Unit> biggerForce = new ArrayList<>(force);
-    biggerForce.addAll(type("infantry").create(1, british)); // 21
-    data.getProperties().set(ChineseLiberation.PERCENT, 50);
-    assertThat(ChineseLiberation.saleValue(biggerForce, data), is(10));
-    data.getProperties().set(ChineseLiberation.MP_BONUS, 1); // 3 x 2 + 9 = 15; one more infantry: 17
-    data.getProperties().set(ChineseLiberation.PERCENT, 100);
-    assertThat(ChineseLiberation.saleValue(force, data), is(15));
-    assertThat(ChineseLiberation.saleValue(biggerForce, data), is(17));
+  void eachTerritoryIsComputedSeparately() {
+    final var pus = data.getResourceList().getResourceOrThrow("PUs");
+    final int before = china.getResources().getQuantity(pus);
+    for (final String name : List.of("Hunan", "Kwangsi", "Yunnan")) {
+      data.performChange(
+          ChangeFactory.addUnits(territory(name), units(british, "infantry", 6, "tank", 3)));
+    }
+    final String report = ChineseLiberation.garrisonWesternUnits(bridge(china), china);
+    // pooled, 3 x 34 = 102 would buy one garrison and leave 80 (40 PUs); separately: 3 x 6
+    assertThat(china.getResources().getQuantity(pus), is(before + 18));
+    assertThat(report.split("<br />").length, is(3));
   }
 
   /** Gives Mukden a map manpower value of 1 through a Japanese trigger (draft 77 has none). */
@@ -226,9 +286,14 @@ class ChineseLiberationTest {
   }
 
   @Test
-  void chinaCollectsTheMapManpowerOfLiberatedManchuria() {
-    giveMukdenJapaneseManpower();
-    final Territory mukden = territory("Mukden");
+  void chinaCollectsTheMapManpowerOfLiberatedChineseLand() {
+    // Nanking: no Chinese trigger pays it (Mukden does since the 23 October XML), so give it a
+    // Japanese one
+    set(
+        (DefaultAttachment) japanese.getAttachment("conditionAttachment_Japanese_mp1"),
+        "directOwnershipTerritories",
+        "each:Chubu:Chugoku:Kyushu:Tohoku:Nanking");
+    final Territory mukden = territory("Nanking");
     assertThat(ChineseLiberation.homelandManpower(mukden, china), is(0)); // Japan holds it
     takeOver(mukden, british);
     assertThat(mukden.getOwner(), is(china));
@@ -258,10 +323,10 @@ class ChineseLiberationTest {
   }
 
   @Test
-  void sovietUnitsAreNeverSold() {
+  void sovietUnitsNeverBecomeAGarrison() {
     final Territory hunan = territory("Hunan");
     data.performChange(ChangeFactory.addUnits(hunan, type("infantry").create(2, russians)));
-    assertThat(ChineseLiberation.sellWesternUnits(bridge(china), china), is(""));
+    assertThat(ChineseLiberation.garrisonWesternUnits(bridge(china), china), is(""));
     assertThat(hunan.anyUnitsMatch(Matches.unitIsOwnedBy(russians)), is(true));
   }
 

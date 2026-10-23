@@ -88,6 +88,16 @@ public class TechTracker {
     return getCached(player, type, "getInterceptionBonus", getter);
   }
 
+  /**
+   * Flames and Steel (request 31, Window): how much enemy interceptors lose against bombers that
+   * include one of the nation's bombers of this type.
+   */
+  public int getInterceptionPenaltyAgainst(GamePlayer player, UnitType type) {
+    final Supplier<Integer> getter =
+        () -> getSumOfBonuses(TechAbilityAttachment::getInterceptionPenaltyAgainst, type, player);
+    return getCached(player, type, "getInterceptionPenaltyAgainst", getter);
+  }
+
   /** Flames and Steel (request 27): added interception dice from the nation's techs for this type. */
   public int getInterceptionRollsBonus(GamePlayer player, UnitType type) {
     final Supplier<Integer> getter =

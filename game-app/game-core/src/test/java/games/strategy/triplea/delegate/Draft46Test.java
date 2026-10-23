@@ -210,7 +210,7 @@ class Draft46Test {
             "Japanese/Tank",
             3,
             "Japanese/StrategicBomber",
-            3,
+            1, // request 31: was 3
             "Italians/Tank",
             3,
             "Germans/KingTiger",

@@ -153,6 +153,8 @@ public final class AirMapMode implements MapOverlay {
   // the nation filter (null: all nations) and the target step's "unassigned" marker
   private volatile @Nullable GamePlayer filter;
   private volatile boolean markUnassigned;
+  // request 30: the marked step is the fighter cover step, not the bomber targets
+  private volatile boolean coverMode;
 
   public AirMapMode(
       final UiContext uiContext,
@@ -494,6 +496,11 @@ public final class AirMapMode implements MapOverlay {
 
   public @Nullable GamePlayer getFilter() {
     return filter;
+  }
+
+  /** Request 30: whether the marked aircraft are fighters to place rather than bombers. */
+  public void setCoverMode(final boolean cover) {
+    coverMode = cover;
   }
 
   /** In the target step, the acting nation's bombers without a target carry a marker. */
@@ -964,7 +971,9 @@ public final class AirMapMode implements MapOverlay {
         }
         if (isSelectable(zone, item)) {
           waiting.add(item.type());
-        } else if (AirCombat.isBomber(item.units().get(0))) {
+        } else if (coverMode
+            ? AirCombat.isFighterType(item.units().get(0))
+            : AirCombat.isBomber(item.units().get(0))) {
           outOfReach.add(item.type());
         }
       }
@@ -974,29 +983,42 @@ public final class AirMapMode implements MapOverlay {
         leaving.entrySet().stream()
             .anyMatch(e -> e.getKey().startsWith(prefix) && e.getValue() > 0);
     final String legend =
-        " Orange outline: strike aircraft still without a target. Grey: aircraft that cannot"
-            + " strike from here (fighters never strike; others have nothing in reach). Point at an"
-            + " icon for the reason.";
+        coverMode
+            ? " Orange outline: fighters not yet placed. Grey: aircraft that cannot be placed"
+                + " (bombers have their targets; some fighters have nowhere in reach). Point at an"
+                + " icon for the reason."
+            : " Orange outline: strike aircraft still without a target. Grey: aircraft that cannot"
+                + " strike from here (fighters never strike; others have nothing in reach). Point"
+                + " at an icon for the reason.";
     if (!waiting.isEmpty()) {
       return new String[] {
-        "Choose targets: "
+        (coverMode ? "Place fighters: " : "Choose targets: ")
             + waiting.size()
             + (waiting.size() == 1 ? " group" : " groups")
             + " waiting",
-        "These aircraft have targets in reach but none chosen yet: click them, or use the Actions"
-            + " panel."
+        (coverMode
+                ? "These fighters can cover places in reach but are not placed yet: click them,"
+                    + " or use the Actions panel."
+                : "These aircraft have targets in reach but none chosen yet: click them, or use the"
+                    + " Actions panel.")
             + legend
       };
     }
     if (assigned) {
       return new String[] {
-        "All assigned", "Every strike aircraft here that can reach a target has one." + legend
+        "All assigned",
+        (coverMode
+                ? "Every fighter here that can reach a place is placed."
+                : "Every strike aircraft here that can reach a target has one.")
+            + legend
       };
     }
     if (!outOfReach.isEmpty()) {
       return new String[] {
         "Nothing in reach",
-        "No target is within reach of these strike aircraft from "
+        (coverMode
+                ? "No place is within reach of these fighters from "
+                : "No target is within reach of these strike aircraft from ")
             + AirAllocation.zoneName(zone)
             + "."
             + legend

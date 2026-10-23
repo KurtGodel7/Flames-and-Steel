@@ -26,6 +26,7 @@ import games.strategy.triplea.delegate.AbstractMoveDelegate;
 import games.strategy.triplea.delegate.GameStepPropertiesHelper;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.MoveDelegate;
+import games.strategy.triplea.delegate.OwnTransports;
 import games.strategy.triplea.delegate.TechTracker;
 import games.strategy.triplea.delegate.TerritoryEffectHelper;
 import games.strategy.triplea.delegate.TransportTracker;
@@ -1346,6 +1347,27 @@ public class MoveValidator {
               result.addDisallowedUnit(
                   TRANSPORT_HAS_ALREADY_UNLOADED_UNITS_TO + alreadyUnloadedTo.getName(), baseUnit);
             }
+          }
+        }
+      }
+      // Flames and Steel: a nation's transports carry only that nation's units
+      if (OwnTransports.isActive(data)) {
+        for (final Unit baseUnit : land) {
+          final Unit transport = unitsToSeaTransports.get(baseUnit);
+          if (transport != null && !OwnTransports.mayCarry(transport, baseUnit)) {
+            result.addDisallowedUnit(OwnTransports.message(transport.getOwner()), baseUnit);
+          } else if (transport == null
+              && baseUnit.getUnitAttachment().getTransportCost() != -1
+              && route.getEnd().getUnitCollection().stream()
+                  .noneMatch(
+                      Matches.unitIsSeaTransport().and(OwnTransports.usableBy(baseUnit.getOwner())))) {
+            route.getEnd().getUnitCollection().stream()
+                .filter(Matches.unitIsSeaTransport().and(Matches.alliedUnit(player)))
+                .findFirst()
+                .ifPresent(
+                    foreign ->
+                        result.addDisallowedUnit(
+                            OwnTransports.message(foreign.getOwner()), baseUnit));
           }
         }
       }

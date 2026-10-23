@@ -1,5 +1,6 @@
 package games.strategy.triplea.delegate.remote;
 
+import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.delegate.IDelegate;
 import games.strategy.engine.delegate.IDelegateBridge;
 import games.strategy.engine.message.IRemote;
@@ -7,6 +8,7 @@ import games.strategy.engine.message.RemoteActionCode;
 import games.strategy.triplea.delegate.air.AirCombat.TargetAssignment;
 import java.io.Serializable;
 import java.util.List;
+import java.util.Map;
 import javax.annotation.Nullable;
 
 /** Flames and Steel: a nation sends its surviving bombers against targets. */
@@ -23,6 +25,20 @@ public interface IAirCombatDelegate extends IRemote, IDelegate {
   /** This nation's targets stored so far this step (after a save and load, say). */
   @RemoteActionCode(13)
   List<TargetAssignment> getPendingAssignments();
+
+  /**
+   * Request 30: in a fighter cover step ("nationAirCover"), every nation's bomber targets for this
+   * round (revealed once all have chosen); empty in other steps.
+   */
+  @RemoteActionCode(14)
+  Map<GamePlayer, List<TargetAssignment>> getRevealedBombers();
+
+  /**
+   * Request 30: this nation's allies' choices so far this step (bomber targets, or fighter cover),
+   * which count against the same caps.
+   */
+  @RemoteActionCode(15)
+  Map<GamePlayer, List<TargetAssignment>> getAlliedAssignments();
 
   @RemoteActionCode(6)
   @Override

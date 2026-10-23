@@ -40,6 +40,16 @@ public class TechnologyFrontier extends GameDataComponent implements Iterable<Te
     getData().getTechTracker().clearCache();
   }
 
+  /**
+   * Flames and Steel (request 31): adds the tech at the end, keeping the order the techs were added
+   * in rather than the game's overall tech order. Research categories are researched in this
+   * order, so a category keeps the order its XML lists.
+   */
+  public void addAdvanceInListedOrder(final TechAdvance t) {
+    techs.add(t);
+    getData().getTechTracker().clearCache();
+  }
+
   public void addAdvance(final List<TechAdvance> list) {
     for (final TechAdvance t : list) {
       techs.add(t);

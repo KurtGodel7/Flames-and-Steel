@@ -96,7 +96,13 @@ class AirCombatDelegateTest {
     delegate = new AirCombatDelegate();
     delegate.initialize("airCombat", "Air combat");
     for (final String step :
-        List.of("airDogfights", "germanAirTargets", "britishAirTargets", "airStrikes")) {
+        List.of(
+            "airDogfights",
+            "germanAirTargets",
+            "britishAirTargets",
+            "germanAirCover",
+            "britishAirCover",
+            "airStrikes")) {
       gameData
           .getSequence()
           .addStep(
@@ -108,6 +114,9 @@ class AirCombatDelegateTest {
                   gameData,
                   new Properties()));
     }
+    // request 30: the older tests send more than 4 aircraft to one place
+    gameData.getProperties().set(AirCover.CAP_BOMBERS, 99);
+    gameData.getProperties().set(AirCover.CAP_FIGHTERS, 99);
   }
 
   @Test
@@ -128,7 +137,11 @@ class AirCombatDelegateTest {
     addTo(front, fighter.create(2, british)); // 6: one hit a round
     addTo(front, fighter.create(1, germans)); // 3: one hit a round
     addTo(front, bomber.create(3, germans));
+    addTo(karelia, infantry(gameData).create(3, russians(gameData)));
 
+    targets(germans, new TargetAssignment(front, bomber, 3, land(karelia)));
+    cover(germans, new TargetAssignment(front, fighter, 1, over(karelia)));
+    cover(british, new TargetAssignment(front, fighter, 2, over(karelia)));
     runStep("airStrikes", germans);
 
     // round 1: the German fighter falls (never a bomber), one British fighter falls; round 2:
@@ -145,14 +158,14 @@ class AirCombatDelegateTest {
     addTo(front, fighter.create(2, germans));
 
     gameData.getProperties().set(AirCombat.DOGFIGHT_ROUNDS, 1);
-    runStep("airStrikes", germans);
+    dogfightOverKarelia(2);
     assertThat(count(front, germans, fighter), is(1));
     assertThat(count(front, british, fighter), is(1));
 
     gameData.getProperties().set(AirCombat.DOGFIGHT_ROUNDS, 2);
     addTo(front, fighter.create(1, british));
     addTo(front, fighter.create(1, germans));
-    runStep("airStrikes", germans);
+    dogfightOverKarelia(2);
     assertThat(count(front, germans, fighter), is(0));
     assertThat(count(front, british, fighter), is(0));
   }
@@ -167,7 +180,10 @@ class AirCombatDelegateTest {
     fighters.get(0).setHits(1); // damaged: still intercepts
     addTo(front, fighters);
     addTo(front, bomber.create(6, germans));
+    addTo(karelia, infantry(gameData).create(9, russians(gameData)));
 
+    targets(germans, new TargetAssignment(front, bomber, 6, land(karelia)));
+    cover(british, new TargetAssignment(front, fighter, 3, over(karelia)));
     runStep("airStrikes", germans);
 
     // 3 x 2 = 6: one hit (two fighters alone would make 4: none); no share of the force
@@ -181,7 +197,10 @@ class AirCombatDelegateTest {
     air(bomber, "airDefense", "1"); // 6 x 1 = 6: one hit
     addTo(front, fighter.create(1, british));
     addTo(front, bomber.create(6, germans));
+    addTo(karelia, infantry(gameData).create(9, russians(gameData)));
 
+    targets(germans, new TargetAssignment(front, bomber, 6, land(karelia)));
+    cover(british, new TargetAssignment(front, fighter, 1, over(karelia)));
     runStep("airStrikes", germans);
 
     assertThat(count(front, british, fighter), is(0));
@@ -195,6 +214,8 @@ class AirCombatDelegateTest {
     addTo(front, fighter.create(1, germans)); // 3: one hit
     gameData.getProperties().set(AirCombat.DOGFIGHT_ROUNDS, 1);
 
+    cover(germans, new TargetAssignment(front, fighter, 1, over(karelia)));
+    cover(british, new TargetAssignment(front, fighter, 2, over(karelia)));
     runStep("airStrikes", germans);
 
     // the dogfight only: the British have no bombers, the Germans none to intercept
@@ -211,7 +232,9 @@ class AirCombatDelegateTest {
     addTo(front, bombers);
     addTo(karelia, infantry(gameData).create(3, russians(gameData)));
 
-    strike(germans, new TargetAssignment(front, bomber, 1, land(karelia)));
+    targets(germans, new TargetAssignment(front, bomber, 1, land(karelia)));
+    cover(british, new TargetAssignment(front, fighter, 1, over(karelia)));
+    runStep("airStrikes", germans);
 
     assertThat(count(karelia, russians(gameData)), is(3)); // aborted: no strike
     assertThat(count(front, germans, bomber), is(1));
@@ -254,9 +277,11 @@ class AirCombatDelegateTest {
     addTo(bombGermany, bomber.create(2, british));
     addTo(bombGermany, fighter.create(1, germans)); // interception 3: one hit
 
-    strike(
+    targets(
         british,
         new TargetAssignment(bombGermany, bomber, 2, new Target(germany, TargetKind.STRATEGIC)));
+    cover(germans, new TargetAssignment(bombGermany, fighter, 1, over(germany)));
+    runStep("airStrikes", british);
 
     assertThat(germans.getResources().getQuantity(Constants.PUS), is(startPus - 5));
     assertThat(count(bombGermany, british, bomber), is(2));
@@ -285,7 +310,9 @@ class AirCombatDelegateTest {
     addTo(karelia, infantry(gameData).create(3, russians(gameData)));
     addTo(karelia, aaGun(gameData).create(1, russians(gameData))); // one hit
 
-    strike(germans, new TargetAssignment(front, bomber, 2, land(karelia)));
+    targets(germans, new TargetAssignment(front, bomber, 2, land(karelia)));
+    cover(british, new TargetAssignment(front, fighter, 1, over(karelia)));
+    runStep("airStrikes", germans);
 
     // the AA hit finished the aborted bomber; the undamaged one struck (4: one hit)
     assertThat(count(front, germans, bomber), is(1));
@@ -338,11 +365,67 @@ class AirCombatDelegateTest {
     addTo(front, fighter.create(2, germans));
     addTo(front, fighter.create(1, british)); // dogfight 3: one German fighter damaged
     addTo(front, bomber.create(1, british)); // fires back at 1: one hit
+    addTo(karelia, infantry(gameData).create(1, germans));
 
+    targets(british, new TargetAssignment(front, bomber, 1, land(karelia)));
+    cover(germans, new TargetAssignment(front, fighter, 2, over(karelia)));
+    cover(british, new TargetAssignment(front, fighter, 1, over(karelia)));
     runStep("airStrikes", germans);
 
     // the return-fire hit had to go to the fighter damaged in the dogfight: it is destroyed
     assertThat(count(front, germans, fighter), is(1));
+  }
+
+  // ---- request 30: one air battle per territory
+
+  @Test
+  void fightersOverOneTerritoryDoNotTouchBombersOverAnother() {
+    hitPoints(bomber, 2);
+    air(bomber, "airDefenseRolls", "0");
+    final Territory archangel = territory("Archangel", gameData);
+    removeFrom(archangel, archangel.getUnits());
+    addTo(archangel, infantry(gameData).create(1, russians(gameData)));
+    zone(front, "coveredTerritories", karelia.getName() + ":" + archangel.getName());
+    addTo(front, fighter.create(2, british)); // interception 6: would damage a bomber
+    final List<Unit> bombers = bomber.create(2, germans);
+    addTo(front, bombers);
+    addTo(karelia, infantry(gameData).create(3, russians(gameData)));
+
+    targets(germans, new TargetAssignment(front, bomber, 2, land(karelia)));
+    cover(british, new TargetAssignment(front, fighter, 2, over(archangel)));
+    runStep("airStrikes", germans);
+
+    // no interception over Karelia: both bombers strike (8: two hits)
+    assertThat(count(karelia, russians(gameData)), is(1));
+    assertThat(count(front, germans, bomber), is(2));
+  }
+
+  @Test
+  void unplacedFightersTakeNoPart() {
+    hitPoints(bomber, 2);
+    air(bomber, "airDefenseRolls", "0");
+    addTo(front, fighter.create(2, british)); // in the front, but placed nowhere
+    addTo(front, bomber.create(1, germans));
+    addTo(karelia, infantry(gameData).create(3, russians(gameData)));
+
+    targets(germans, new TargetAssignment(front, bomber, 1, land(karelia)));
+    runStep("airStrikes", germans);
+
+    assertThat(count(karelia, russians(gameData)), is(2)); // the bomber struck
+  }
+
+  @Test
+  void aFifthBomberOverALandTerritoryIsRefused() {
+    gameData.getProperties().set(AirCover.CAP_BOMBERS, 4);
+    addTo(front, bomber.create(5, germans));
+    addTo(karelia, infantry(gameData).create(1, russians(gameData)));
+
+    assertThat(
+        assign("germanAirTargets", germans, new TargetAssignment(front, bomber, 5, land(karelia))),
+        is(notNullValue()));
+    assertThat(
+        assign("germanAirTargets", germans, new TargetAssignment(front, bomber, 4, land(karelia))),
+        is(nullValue()));
   }
 
   private void noInterception() {
@@ -537,6 +620,27 @@ class AirCombatDelegateTest {
     addTo(karelia, infantry(gameData).create(1, russians(gameData)));
 
     assertThat(AirCombat.getBombers(germans, front).isEmpty(), is(true));
+  }
+
+  /** Both sides put all their fighters over Karelia, and the air phase is fought. */
+  private void dogfightOverKarelia(final int each) {
+    cover(germans, new TargetAssignment(front, fighter, each, over(karelia)));
+    cover(british, new TargetAssignment(front, fighter, each, over(karelia)));
+    runStep("airStrikes", germans);
+  }
+
+  private void targets(final GamePlayer attacker, final TargetAssignment... assignments) {
+    final String step = attacker.equals(british) ? "britishAirTargets" : "germanAirTargets";
+    assertThat(assign(step, attacker, assignments), is(nullValue()));
+  }
+
+  private void cover(final GamePlayer player, final TargetAssignment... assignments) {
+    final String step = player.equals(british) ? "britishAirCover" : "germanAirCover";
+    assertThat(assign(step, player, assignments), is(nullValue()));
+  }
+
+  private static Target over(final Territory t) {
+    return AirCover.over(t);
   }
 
   private void strike(final GamePlayer attacker, final TargetAssignment... assignments) {

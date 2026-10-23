@@ -9,6 +9,7 @@ import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.UnitCollection;
 import games.strategy.triplea.delegate.AbstractMoveDelegate.MoveType;
 import games.strategy.triplea.delegate.Matches;
+import games.strategy.triplea.delegate.OwnTransports;
 import games.strategy.triplea.delegate.UndoableMove;
 import games.strategy.triplea.delegate.UnitComparator;
 import games.strategy.triplea.delegate.data.MoveValidationResult;
@@ -185,7 +186,10 @@ final class MovableUnitsFilter {
     // TODO kev check for already loaded airTransports
     if (MoveValidator.isLoad(units, airTransportDependents, route, player)) {
       final UnitCollection unitsAtEnd = route.getEnd().getUnitCollection();
-      return unitsAtEnd.getMatches(Matches.unitIsSeaTransport().and(Matches.alliedUnit(player)));
+      return unitsAtEnd.getMatches(
+          Matches.unitIsSeaTransport()
+              .and(Matches.alliedUnit(player))
+              .and(OwnTransports.usableBy(player)));
     }
     return List.of();
   }

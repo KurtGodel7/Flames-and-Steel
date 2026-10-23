@@ -5,6 +5,7 @@ import static games.strategy.triplea.delegate.GameDataTestUtil.removeFrom;
 import static games.strategy.triplea.delegate.MockDelegateBridge.advanceToStep;
 import static games.strategy.triplea.delegate.MockDelegateBridge.newDelegateBridge;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.nullValue;
@@ -60,7 +61,6 @@ class BombingResultsTest {
   private Territory hamburg;
   private AirCombatDelegate delegate;
   private final List<String> history = new ArrayList<>();
-  private final List<List<String>> stepTexts = new ArrayList<>();
   private final List<String> summaries = new ArrayList<>();
 
   @BeforeEach
@@ -107,64 +107,64 @@ class BombingResultsTest {
     delegate.setDelegateBridgeAndPlayer(strikes);
     delegate.start();
     delegate.end();
-    final ArgumentCaptor<List<String>> lines = ArgumentCaptor.captor();
+    // request 30: no battle window; one summary of the air phase for everyone
     final ArgumentCaptor<String> summary = ArgumentCaptor.forClass(String.class);
     verify(strikes.getDisplayChannelBroadcaster(), atLeastOnce())
-        .battleStepText(any(), eq("Bombing"), lines.capture(), eq(false), summary.capture());
-    stepTexts.addAll(lines.getAllValues());
+        .reportMessageToAll(
+            summary.capture(), eq("Air battles this round"), eq(false), eq(false), eq(false));
     summaries.addAll(summary.getAllValues());
   }
 
   @Test
-  void aStrategicBomberTakesFivePusFromGermany() {
+  void aStrategicBomberTakesTwoPusFromGermany() {
     final int before = pus(germans);
 
     raid("strategicBomber", 1);
 
-    assertThat(pus(germans), is(before - 5));
-    assertThat(germans.getTechAttachment().getBombedThisRound(), is(5));
+    assertThat(pus(germans), is(before - 2));
+    assertThat(germans.getTechAttachment().getBombedThisRound(), is(2));
     assertThat(
-        stepTexts.get(0),
-        is(
-            List.of(
-                "British strategic bomber bombs Hamburg factory: 5 PUs",
-                "Germans lose 5 PUs (raid cap 10): " + before + " → " + (before - 5) + " PUs")));
-    assertThat(summaries.get(0), is("Bombing damage: Germans −5 PUs"));
+        summaries.get(0),
+        containsString("Strategic bombing of Hamburg: Germans lose 2 PUs"));
+    assertThat(summaries.get(0), containsString("British bombed Hamburg: Germans −2 PUs"));
     assertThat(
         history,
         hasItem(
-            "British bombed Hamburg: Germans −5 PUs (5 damage, raid cap 10; "
+            "British bombed Hamburg: Germans −2 PUs (2 damage, raid cap 10; "
                 + before
                 + " → "
-                + (before - 5)
+                + (before - 2)
                 + " PUs)"));
-    assertThat(history, hasItem("Total: Germans −5 PUs from bombing this round"));
+    assertThat(history, hasItem("Total: Germans −2 PUs from bombing this round"));
   }
 
   @Test
-  void aMediumBomberTakesTwo() {
+  void aMediumBomberTakesOne() {
     final int before = pus(germans);
 
     raid("mediumBomber", 1);
 
-    assertThat(pus(germans), is(before - 2));
+    assertThat(pus(germans), is(before - 1));
   }
 
   @Test
   void theCapIsTwiceTheTerritorysValueAndTheWindowSaysSo() {
     final int before = pus(germans);
 
-    raid("strategicBomber", 3); // 15 damage, Hamburg is worth 5
+    // request 30 allows 4 bombers per factory; raise the cap to pass Hamburg's limit
+    data.getProperties().set(AirCover.CAP_BOMBERS, 6);
+    raid("strategicBomber", 6); // request 31 values: 6 x 2 = 12 damage, Hamburg is worth 5
 
     assertThat(pus(germans), is(before - 10));
     assertThat(
-        stepTexts.get(0), hasItem("15 PUs of damage, capped at 10 (2 × the territory's value)"));
+        summaries.get(0),
+        containsString("12 PUs of damage, capped at 10: 2 × the territory's value"));
   }
 
   @Test
   void theNextRoundsStrikeStepClearsLastRoundsFigure() {
     raid("strategicBomber", 1);
-    assertThat(germans.getTechAttachment().getBombedThisRound(), is(5));
+    assertThat(germans.getTechAttachment().getBombedThisRound(), is(2));
 
     final IDelegateBridge strikes = bridge(british);
     data.getSequence().next();

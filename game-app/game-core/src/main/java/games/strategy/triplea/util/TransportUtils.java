@@ -5,6 +5,7 @@ import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
 import games.strategy.triplea.attachments.UnitAttachment;
 import games.strategy.triplea.delegate.Matches;
+import games.strategy.triplea.delegate.OwnTransports;
 import games.strategy.triplea.delegate.TransportTracker;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -241,6 +242,9 @@ public final class TransportUtils {
       final IntegerMap<Unit> addedLoad) {
     final int cost = unit.getUnitAttachment().getTransportCost();
     for (final Unit transport : canTransport) {
+      if (!OwnTransports.mayCarry(transport, unit)) {
+        continue;
+      }
       final int capacity =
           TransportTracker.getAvailableCapacity(transport) - addedLoad.getInt(transport);
       if (capacity >= cost) {
@@ -258,7 +262,7 @@ public final class TransportUtils {
     for (final Iterator<Unit> it = canBeTransported.iterator(); it.hasNext(); ) {
       final Unit unit = it.next();
       final int cost = unit.getUnitAttachment().getTransportCost();
-      if (capacity >= cost) {
+      if (capacity >= cost && OwnTransports.mayCarry(transport, unit)) {
         capacity -= cost;
         mapping.put(unit, transport);
         it.remove();

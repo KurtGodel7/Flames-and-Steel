@@ -190,6 +190,26 @@ class LongRangeRaidTest {
         is(nullValue()));
     delegate.end();
 
+    // request 30: the US fighter defends Detroit
+    data.getSequence()
+        .addStep(
+            new games.strategy.engine.data.GameStep(
+                "americanAirCover",
+                "americanAirCover",
+                americans,
+                delegate,
+                data,
+                new java.util.Properties()));
+    final IDelegateBridge cover = bridge(americans);
+    advanceToStep(cover, "americanAirCover");
+    delegate.setDelegateBridgeAndPlayer(cover);
+    delegate.start();
+    assertThat(
+        delegate.assignTargets(
+            List.of(new TargetAssignment(bombUsa, type("fighter"), 1, AirCover.over(detroit)))),
+        is(nullValue()));
+    delegate.end();
+
     final int before = americans.getResources().getQuantity("PUs");
     final IDelegateBridge strikes = bridge(germans);
     advanceToStep(strikes, "airStrikes");
@@ -199,7 +219,7 @@ class LongRangeRaidTest {
 
     // request 27: the targets came first; then US fighters in Bomb USA intercept (3, missed)
     // and the wing fires back (air defense 4, missed)
-    assertThat(history, hasItem("Air battle in Air - Bomb USA"));
+    assertThat(history, hasItem("Air battle over Detroit (Bomb USA)"));
     assertThat(history, hasItem("Americans fire with total value 3: 0 hits"));
     assertThat(history, hasItem("Germans fire with total value 4: 0 hits"));
     // bombing damage 6 off the US cash, within Detroit's cap

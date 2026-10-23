@@ -255,7 +255,7 @@ public abstract class AbstractEndTurnDelegate extends BaseTripleADelegate
     endTurnReport.append(peacetimeIncome(leftOverResources));
     endTurnReport.append(Munitions.convert(bridge, player));
     endTurnReport.append(AlliedUnitSale.sellAlliedUnits(bridge, player));
-    endTurnReport.append(ChineseLiberation.sellWesternUnits(bridge, player));
+    endTurnReport.append(ChineseLiberation.garrisonWesternUnits(bridge, player));
     endTurnReport.append(ChineseLiberation.collectHomelandManpower(bridge, player));
     if (GameStepPropertiesHelper.isRepairUnits(data)) {
       MoveDelegate.repairMultipleHitPointUnits(bridge, bridge.getGamePlayer());

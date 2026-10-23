@@ -83,6 +83,10 @@ public class TechAbilityAttachment extends DefaultAttachment {
   private @Nullable IntegerMap<UnitType> interceptionBonus = null;
   // Flames and Steel (request 27): extra interception dice, e.g. "1:fighter"
   private @Nullable IntegerMap<UnitType> interceptionRollsBonus = null;
+  // Flames and Steel (request 31, Window): taken off the interception value of enemy fighters
+  // intercepting a group of bombers that includes one of the nation's bombers of the type, e.g.
+  // "1:strategicBomber"
+  private @Nullable IntegerMap<UnitType> interceptionPenaltyAgainst = null;
   // Flames and Steel (request 27): added to the bomber type's air defense value, e.g. "1:fighter"
   private @Nullable IntegerMap<UnitType> bomberAirDefenseBonus = null;
   // Flames and Steel (request 27): extra air defense dice, e.g. "1:fighter"
@@ -248,6 +252,25 @@ public class TechAbilityAttachment extends DefaultAttachment {
   /** Flames and Steel (request 27): added to the unit type's interception value, by unit type. */
   public IntegerMap<UnitType> getInterceptionBonus() {
     return getIntegerMapProperty(interceptionBonus);
+  }
+
+  private void setInterceptionPenaltyAgainst(final String value) throws GameParseException {
+    if (interceptionPenaltyAgainst == null) {
+      interceptionPenaltyAgainst = new IntegerMap<>();
+    }
+    applyCheckedValue("interceptionPenaltyAgainst", value, interceptionPenaltyAgainst::add);
+  }
+
+  private void setInterceptionPenaltyAgainst(final IntegerMap<UnitType> value) {
+    interceptionPenaltyAgainst = value;
+  }
+
+  /**
+   * Flames and Steel (request 31, Window): by the nation's bomber type, how much enemy fighters
+   * intercepting bombers that include one of that type lose from their interception value.
+   */
+  public IntegerMap<UnitType> getInterceptionPenaltyAgainst() {
+    return getIntegerMapProperty(interceptionPenaltyAgainst);
   }
 
   private void setInterceptionRollsBonus(final String value) throws GameParseException {
@@ -1084,6 +1107,13 @@ public class TechAbilityAttachment extends DefaultAttachment {
                   this::setInterceptionBonus,
                   this::getInterceptionBonus,
                   () -> interceptionBonus = null));
+      case "interceptionPenaltyAgainst" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setInterceptionPenaltyAgainst,
+                  this::setInterceptionPenaltyAgainst,
+                  this::getInterceptionPenaltyAgainst,
+                  () -> interceptionPenaltyAgainst = null));
       case "interceptionRollsBonus" ->
           Optional.of(
               MutableProperty.of(

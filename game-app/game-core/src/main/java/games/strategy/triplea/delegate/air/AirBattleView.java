@@ -29,6 +29,8 @@ public final class AirBattleView {
   public static final String END_PAUSE = " (next in 5 seconds, or press space)";
 
   private final IDelegateBridge bridge;
+  // request 30: air battles show no window; the air phase ends with one summary instead
+  private boolean quiet;
   private GamePlayer attacker;
   private GamePlayer defender;
   private final UUID id = UUID.randomUUID();
@@ -76,6 +78,19 @@ public final class AirBattleView {
     return view;
   }
 
+  /**
+   * Request 30: a view that opens no window and asks nobody to confirm; the dice are still worked
+   * out for the history.
+   */
+  public static AirBattleView quiet(
+      final IDelegateBridge bridge, final GamePlayer attacker, final GamePlayer defender) {
+    final AirBattleView view = new AirBattleView(bridge);
+    view.quiet = true;
+    view.attacker = attacker;
+    view.defender = defender;
+    return view;
+  }
+
   public UUID getId() {
     return id;
   }
@@ -96,6 +111,9 @@ public final class AirBattleView {
   public DiceRoll showDice(
       final AirCombat.Roll roll, final GamePlayer roller, final String step, final String who) {
     final DiceRoll diceRoll = sendDice(roll, roller, step);
+    if (quiet) {
+      return diceRoll;
+    }
     final String caption = AirCombat.describeRoll(who, roll, bridge.getData().getDiceSides());
     captions.put(diceRoll, caption);
     bridge.getDisplayChannelBroadcaster().battleStepText(id, step, List.of(caption), true, "");
@@ -107,6 +125,9 @@ public final class AirBattleView {
    * optional line for the casualties area.
    */
   public void showText(final String step, final List<String> lines, final String summary) {
+    if (quiet) {
+      return;
+    }
     bridge.getDisplayChannelBroadcaster().battleStepText(id, step, lines, false, summary);
   }
 
@@ -119,6 +140,9 @@ public final class AirBattleView {
     }
     final DiceRoll diceRoll =
         new DiceRoll(dice, roll.hits(), roll.power() / (double) sides, roller.getName());
+    if (quiet) {
+      return diceRoll;
+    }
     bridge.getDisplayChannelBroadcaster().gotoBattleStep(id, step);
     bridge.getDisplayChannelBroadcaster().notifyDice(diceRoll, step);
     return diceRoll;
@@ -126,6 +150,9 @@ public final class AirBattleView {
 
   /** Moves the window to a step without dice (e.g. "Transports lost"). */
   public void gotoStep(final String step) {
+    if (quiet) {
+      return;
+    }
     bridge.getDisplayChannelBroadcaster().gotoBattleStep(id, step);
   }
 
@@ -141,6 +168,9 @@ public final class AirBattleView {
       final Collection<Unit> killed,
       final Collection<Unit> damaged,
       final boolean autoCalculated) {
+    if (quiet) {
+      return;
+    }
     bridge
         .getDisplayChannelBroadcaster()
         .casualtyNotification(
@@ -178,17 +208,23 @@ public final class AirBattleView {
    * Whether a person or AI plays this player, so it can be asked to confirm. The neutral player
    * (which owns neutral garrisons) has nobody behind it: asking it crashed the game.
    */
-  static boolean isControlled(final GamePlayer player) {
+  public static boolean isControlled(final GamePlayer player) {
     return player != null && !player.isNull();
   }
 
   /** Closes the window after a strike that failed, so it doesn't stay open. */
   public void abort(final String message) {
+    if (quiet) {
+      return;
+    }
     bridge.getDisplayChannelBroadcaster().battleEnd(id, message);
   }
 
   /** Ends the battle with a message, e.g. "Germans lose 6 PUs". */
   public void end(final String message) {
+    if (quiet) {
+      return;
+    }
     // let the players see the result before the next battle; the stock "battle over" message comes
     // after the wait, so the window ends with its own close button (sent before, the wait could
     // replace that button and leave the window with none)
