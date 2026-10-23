@@ -48,6 +48,19 @@ public final class PinnedLayout {
     panel.add(scroll, BorderLayout.CENTER);
   }
 
+  /**
+   * Request 34: as {@link #install}, but {@code fill} (a list with its own scroll bar, such as the
+   * moves made) takes all the height below the pinned bar instead of the scrolling body.
+   */
+  public void installFill(final Container panel, final Component fill) {
+    top.removeAll();
+    body.removeAll();
+    panel.removeAll();
+    panel.setLayout(new BorderLayout());
+    panel.add(top, BorderLayout.NORTH);
+    panel.add(fill, BorderLayout.CENTER);
+  }
+
   /** The pinned bar: heading and the step's main buttons. Add left-aligned components. */
   public JPanel top() {
     return top;

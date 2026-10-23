@@ -218,10 +218,20 @@ public class ActionButtonsPanel extends JPanel {
    */
   public void changeToStepInfo(
       final @Nullable GamePlayer gamePlayer, final String step, final String detail) {
+    changeToStepInfo(gamePlayer, step, detail, null, null);
+  }
+
+  /** Request 34: with a button to reopen the step's window, e.g. "Open research window". */
+  public void changeToStepInfo(
+      final @Nullable GamePlayer gamePlayer,
+      final String step,
+      final String detail,
+      final @Nullable String buttonText,
+      final @Nullable Runnable action) {
     if (stepInfoPanel == null) {
       return;
     }
-    stepInfoPanel.setStep(gamePlayer, step, detail);
+    stepInfoPanel.setStep(gamePlayer, step, detail, buttonText, action);
     changeTo(gamePlayer, stepInfoPanel);
   }
 

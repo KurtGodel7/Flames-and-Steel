@@ -575,7 +575,12 @@ public abstract class AbstractEndTurnDelegate extends BaseTripleADelegate
     if (!change.isEmpty()) {
       bridge.addChange(change);
     }
-    final String message = player.getName() + " are at peace: fixed income " + text + ".";
+    // request 34: "America Atlantic is at peace", "Americans are at peace"
+    final String shown = games.strategy.triplea.formatter.PlayerNames.display(player);
+    final String message =
+        shown + (shown.equals(player.getName()) ? " are" : " is") + " at peace: fixed income "
+            + text
+            + ".";
     bridge.getHistoryWriter().startEvent(message);
     return "<br />" + message + "<br />";
   }

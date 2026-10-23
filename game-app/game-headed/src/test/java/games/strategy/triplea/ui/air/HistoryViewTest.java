@@ -66,6 +66,7 @@ class HistoryViewTest {
           name.endsWith("AirBombers")
               || name.endsWith("AirFighters")
               || name.endsWith("AirTargets")
+              || name.endsWith("AirCover")
               || name.startsWith("airReveal")
               || name.equals("airDogfights")
               || name.equals("airStrikes");

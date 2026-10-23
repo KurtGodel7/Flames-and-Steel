@@ -328,7 +328,7 @@ public final class ResearchScreen extends JDialog {
 
   private void showView(final GamePlayer nation) {
     view = ResearchView.read(data, nation);
-    setTitle(nation.getName() + " research");
+    setTitle(games.strategy.triplea.formatter.PlayerNames.display(nation) + " research");
     centersLabel.setText(nation.getName() + ": " + view.centersText());
     oddsLabel.setText(view.oddsText());
     board.setView(view);

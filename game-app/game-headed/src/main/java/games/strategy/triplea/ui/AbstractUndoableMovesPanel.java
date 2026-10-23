@@ -162,14 +162,12 @@ public abstract class AbstractUndoableMovesPanel extends JPanel {
     setSize(buttonSize, undoButton);
     final JButton viewButton = new JButton(new ViewAction(move));
     setSize(buttonSize, viewButton);
-    final Box buttonsBox = new Box(BoxLayout.X_AXIS);
-    buttonsBox.add(viewButton);
-    buttonsBox.add(undoButton);
-    buttonsBox.add(Box.createHorizontalGlue());
+    // request 34: Show and Undo on the units line, so each move takes two lines, not three
+    unitsBox.add(viewButton);
+    unitsBox.add(undoButton);
     final Box containerBox = new Box(BoxLayout.Y_AXIS);
     containerBox.add(unitsBox);
     containerBox.add(textBox);
-    containerBox.add(buttonsBox);
     containerBox.setBorder(BorderFactory.createEmptyBorder(2, 0, 2, 0));
     return containerBox;
   }

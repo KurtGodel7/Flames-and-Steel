@@ -268,7 +268,13 @@ public abstract class AbstractMovePanel extends ActionPanel {
   private void movedUnitsPanel(final GamePlayer gamePlayer, final String actionLabel) {
     // asked first: a subclass may add its components to this panel before they are moved below
     final List<Component> additional = getAdditionalButtons();
-    pinned.install(this);
+    // request 34: in movement the moves made take all the free height, with their own scroll bar;
+    // placement (which adds its units to place) keeps the scrolling list
+    if (additional.isEmpty()) {
+      pinned.installFill(this, undoableMovesPanel);
+    } else {
+      pinned.install(this);
+    }
 
     this.actionLabel.setText(gamePlayer.getName() + actionLabel);
     pinned.top().add(SwingComponents.leftBox(this.actionLabel));
@@ -283,9 +289,11 @@ public abstract class AbstractMovePanel extends ActionPanel {
 
     // Add any additional buttons on their own lines, since their text may be
     // arbitrarily long.
-    additional.forEach(pinned::add);
-    pinned.add(undoableMovesPanel);
-    pinned.add(Box.createGlue());
+    if (!additional.isEmpty()) {
+      additional.forEach(pinned::add);
+      pinned.add(undoableMovesPanel);
+      pinned.add(Box.createGlue());
+    }
   }
 
   protected final void setUp(final PlayerBridge bridge) {

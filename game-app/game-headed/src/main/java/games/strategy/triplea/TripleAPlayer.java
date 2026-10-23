@@ -415,7 +415,12 @@ public class TripleAPlayer extends AbstractBasePlayer {
       playSound(SoundPath.CLIP_PHASE_TECHNOLOGY);
       soundPlayedAlreadyTechnology = true;
     }
-    ui.showStepInfo(getGamePlayer(), "Choose in the research window.");
+    // request 34: a way back to the window from the Actions tab
+    ui.showStepInfo(
+        getGamePlayer(),
+        "Choose in the research window.",
+        "Open research window",
+        ui::reopenResearchScreen);
     while (!getPlayerBridge().isGameOver()) {
       final Optional<ResearchScreen.Choice> choice = ui.getResearchChoice(getGamePlayer());
       if (choice.isEmpty()) {

@@ -22,7 +22,22 @@ import org.triplea.swing.SwingComponents;
 /** Abstract superclass for all action panels. */
 public abstract class ActionPanel extends JPanel {
   @Serial private static final long serialVersionUID = -5954576036704958641L;
-  protected final JLabel actionLabel = createIndentedLabel();
+  // Flames and Steel (request 34): every step heading shows display names ("America Atlantic
+  // production"), whichever panel sets it
+  protected final JLabel actionLabel =
+      new JLabel() {
+        @Serial private static final long serialVersionUID = 1L;
+
+        @Override
+        public void setText(final String text) {
+          super.setText(
+              games.strategy.triplea.formatter.PlayerNames.inText(text, ActionPanel.this.data));
+        }
+      };
+
+  {
+    actionLabel.setBorder(createIndentedLabel().getBorder());
+  }
 
   @Getter(AccessLevel.PROTECTED)
   protected final MapPanel map;

@@ -1724,9 +1724,9 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
                                 + " player</h2>"
                                 + (stage == Stage.BOMBERS ? "Bomber" : "Fighter")
                                 + " allocation is hidden from enemies.<br>"
-                                + previous.getName()
+                                + games.strategy.triplea.formatter.PlayerNames.display(previous)
                                 + ": please look away.</html>",
-                            gamePlayer.getName() + " air allocation",
+                            games.strategy.triplea.formatter.PlayerNames.display(gamePlayer) + " air allocation",
                             JOptionPane.INFORMATION_MESSAGE)));
       }
     }
@@ -1786,6 +1786,18 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
    * instead of keeping the last step's panel.
    */
   public void showStepInfo(final GamePlayer gamePlayer, final String detail) {
+    showStepInfo(gamePlayer, detail, null, null);
+  }
+
+  /**
+   * Request 34: as {@link #showStepInfo(GamePlayer, String)}, with a button that reopens the step's
+   * window if the player closed it.
+   */
+  public void showStepInfo(
+      final GamePlayer gamePlayer,
+      final String detail,
+      final @Nullable String buttonText,
+      final @Nullable Runnable action) {
     if (actionButtonsPanel == null) {
       return;
     }
@@ -1793,7 +1805,12 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
     try (GameData.Unlocker ignored = data.acquireReadLock()) {
       step = data.getSequence().getStep().getDisplayName();
     }
-    actionButtonsPanel.changeToStepInfo(gamePlayer, step, detail);
+    actionButtonsPanel.changeToStepInfo(gamePlayer, step, detail, buttonText, action);
+  }
+
+  /** Request 34: reopens the research screen where the acting nation left off. */
+  public void reopenResearchScreen() {
+    SwingUtilities.invokeLater(() -> researchScreen().reopen());
   }
 
   /** Flames and Steel: asks what each of the nation's APCs builds. */

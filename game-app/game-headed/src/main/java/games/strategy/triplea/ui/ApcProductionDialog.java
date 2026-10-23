@@ -117,7 +117,7 @@ public final class ApcProductionDialog {
     JOptionPane.showOptionDialog(
         parent,
         panel,
-        player.getName() + " SPC production",
+        games.strategy.triplea.formatter.PlayerNames.display(player) + " SPC production",
         JOptionPane.DEFAULT_OPTION,
         JOptionPane.PLAIN_MESSAGE,
         null,

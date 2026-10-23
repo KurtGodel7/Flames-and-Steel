@@ -81,6 +81,8 @@ public class UnitScroller {
   private final JPanel selectUnitImagePanel = new JPanel();
 
   private CollapsiblePanel collapsiblePanel;
+  // request 34: whether the scroller is folded to one line in this game (a new game starts folded)
+  private boolean collapsedThisGame = true;
   private int movesLeft;
 
   public UnitScroller(
@@ -154,7 +156,8 @@ public class UnitScroller {
               movesLeft = movesLeft();
               SwingUtilities.invokeLater(
                   () -> {
-                    panel.setTitle("Active Units: " + movesLeft);
+                    // request 34: one compact line, "Units to move: 152"
+                    panel.setTitle("Units to move: " + movesLeft);
 
                     if (movesLeft == 0) {
                       clearUnitAvatarArea();
@@ -233,15 +236,16 @@ public class UnitScroller {
   /** Constructs a UI component for the UnitScroller. */
   public CollapsiblePanel build() {
     final JPanel panel = new JPanel();
-    collapsiblePanel =
-        new CollapsiblePanel(panel, "", ClientSetting.unitScrollerCollapsed::setValueAndFlush);
-    collapsiblePanel.setCollapsed(ClientSetting.unitScrollerCollapsed.getValueOrThrow());
+    // request 34: collapsed to one line when a game starts; opening or closing it holds for the
+    // rest of the game (its keyboard shortcuts work either way)
+    collapsiblePanel = new CollapsiblePanel(panel, "", collapsed -> collapsedThisGame = collapsed);
+    collapsiblePanel.setCollapsed(collapsedThisGame);
     updateMovesLeft();
 
     panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
 
     panel.add(selectUnitImagePanel);
-    panel.add(territoryNameLabel);
+    // request 34: the territory's name is in the bottom bar already
     panel.add(Box.createVerticalStrut(2));
 
     final JButton prevUnit = new JButton(UnitScrollerIcon.LEFT_ARROW.get());

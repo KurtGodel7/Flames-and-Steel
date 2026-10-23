@@ -93,12 +93,19 @@ public class ResourceBar extends JPanel implements GameDataChangeListener {
                                 player, gameData)
                             .getInt(gameData.getResourceList().getResourceOrThrow(Constants.PUS))
                         : 0;
-                mobilization = Mobilization.statusText(player, round).orElse(null);
+                // request 34: display names in the bottom bar
+                mobilization =
+                    Mobilization.statusText(player, round)
+                        .map(
+                            text ->
+                                games.strategy.triplea.formatter.PlayerNames.inText(
+                                    text, gameData))
+                        .orElse(null);
                 mobilizationSchedule = Mobilization.scheduleText(player);
                 // Flames and Steel: say so when the nation is at peace on fixed income
                 peace =
                     Peacetime.isAtPeace(player)
-                        ? player.getName()
+                        ? games.strategy.triplea.formatter.PlayerNames.display(player)
                             + ": at peace, fixed income "
                             + Peacetime.fixedIncome(player).orElse(0)
                             + Peacetime.fixedManpower(player).stream()
