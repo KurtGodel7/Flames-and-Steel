@@ -18,6 +18,7 @@ import games.strategy.triplea.delegate.air.AirRange;
 import games.strategy.triplea.delegate.air.LongRangeRaid;
 import games.strategy.triplea.delegate.air.TargetSplit;
 import games.strategy.triplea.formatter.MyFormatter;
+import games.strategy.triplea.formatter.PlayerNames;
 import games.strategy.triplea.image.UnitImageFactory.ImageKey;
 import games.strategy.triplea.ui.ActionPanel;
 import games.strategy.triplea.ui.DefaultMapSelectionListener;
@@ -25,6 +26,7 @@ import games.strategy.triplea.ui.MouseDetails;
 import games.strategy.triplea.ui.PinnedLayout;
 import games.strategy.triplea.ui.TripleAFrame;
 import games.strategy.triplea.ui.panels.map.MapOverlay;
+import games.strategy.triplea.ui.panels.map.MapPanel;
 import games.strategy.triplea.ui.panels.map.MapSelectionListener;
 import games.strategy.triplea.ui.panels.map.UnitSelectionListener;
 import games.strategy.triplea.ui.research.ResearchView;
@@ -33,6 +35,7 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.FlowLayout;
+import java.awt.Dimension;
 import java.awt.Graphics2D;
 import java.awt.Insets;
 import java.awt.Point;
@@ -56,6 +59,8 @@ import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.Icon;
 import javax.swing.JButton;
+import javax.swing.JScrollPane;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -80,7 +85,7 @@ public final class AirTargetPanel extends ActionPanel {
   private static final Color PREVIEW_BLOCKED = new Color(230, 60, 50);
   private static final Color ENEMY_LINE = new Color(170, 90, 255);
 
-  private final TripleAFrame frame;
+  private final Host frame;
   private final AirDraw draw;
   private final ExecutorService storeExecutor = Executors.newSingleThreadExecutor();
 
@@ -104,6 +109,9 @@ public final class AirTargetPanel extends ActionPanel {
   private final java.util.Set<Territory> expanded = new java.util.HashSet<>();
   private @Nullable String lastShownGroup;
   private final MapOverlay overlay = this::paintOverlay;
+  // request 33: the target shown in the panel (chosen on the map, in a moves line or in the list)
+  private @Nullable Target selectedTarget;
+  private @Nullable PickTargetDialog pickDialog;
   // request 30: the fighter cover step uses this panel too
   private boolean coverMode;
   // request 30: every nation's bomber targets (cover step) and the allies' choices so far
@@ -129,12 +137,92 @@ public final class AirTargetPanel extends ActionPanel {
         }
       };
 
+  /**
+   * Request 33: what the panel needs from the game window, so a test can show the panel without
+   * one.
+   */
+  interface Host {
+    MapPanel getMapPanel();
+
+    games.strategy.triplea.ui.UiContext getUiContext();
+
+    @Nullable
+    AirMapMode getAirMapMode();
+
+    void setStatusMessage(String message);
+
+    void setStatusErrorMessage(String message);
+
+    void setStatusWarningMessage(String message);
+
+    void clearStatusMessage();
+  }
+
   public AirTargetPanel(final TripleAFrame frame) {
-    super(frame);
+    this(
+        new Host() {
+          @Override
+          public MapPanel getMapPanel() {
+            return frame.getMapPanel();
+          }
+
+          @Override
+          public games.strategy.triplea.ui.UiContext getUiContext() {
+            return frame.getUiContext();
+          }
+
+          @Override
+          public @Nullable AirMapMode getAirMapMode() {
+            return frame.getAirMapMode();
+          }
+
+          @Override
+          public void setStatusMessage(final String message) {
+            frame.setStatusMessage(message);
+          }
+
+          @Override
+          public void setStatusErrorMessage(final String message) {
+            frame.setStatusErrorMessage(message);
+          }
+
+          @Override
+          public void setStatusWarningMessage(final String message) {
+            frame.setStatusWarningMessage(message);
+          }
+
+          @Override
+          public void clearStatusMessage() {
+            frame.clearStatusMessage();
+          }
+        });
+  }
+
+  AirTargetPanel(final Host frame) {
+    super(frame.getMapPanel().getData(), frame.getMapPanel());
     this.frame = frame;
     this.draw = new AirDraw(frame.getUiContext());
     targetsPanel.setLayout(new BoxLayout(targetsPanel, BoxLayout.Y_AXIS));
     targetsPanel.setAlignmentX(LEFT_ALIGNMENT);
+    // request 33: Ctrl+Z takes the newest move back
+    getInputMap(WHEN_IN_FOCUSED_WINDOW)
+        .put(
+            javax.swing.KeyStroke.getKeyStroke(
+                java.awt.event.KeyEvent.VK_Z, java.awt.event.InputEvent.CTRL_DOWN_MASK),
+            "fsUndoLastAirMove");
+    getActionMap()
+        .put(
+            "fsUndoLastAirMove",
+            new javax.swing.AbstractAction() {
+              private static final long serialVersionUID = 1L;
+
+              @Override
+              public void actionPerformed(final java.awt.event.ActionEvent e) {
+                if (listening && isActive()) {
+                  undoLast();
+                }
+              }
+            });
   }
 
   @Override
@@ -346,6 +434,10 @@ public final class AirTargetPanel extends ActionPanel {
   }
 
   private void stopListening() {
+    if (pickDialog != null) {
+      pickDialog.dispose();
+      pickDialog = null;
+    }
     if (listening) {
       listening = false;
       getMap().removeUnitSelectionListener(unitListener);
@@ -470,7 +562,7 @@ public final class AirTargetPanel extends ActionPanel {
       selectBombers(player, territory, units, md);
       return;
     }
-    if (selectedZone == null || selected.isEmpty()) {
+    if (selectedZone == null) {
       return;
     }
     final Territory place = territory;
@@ -500,6 +592,11 @@ public final class AirTargetPanel extends ActionPanel {
         return;
       }
       target = here.get(choice);
+    }
+    // request 33: with nothing set to send the click only selects the target
+    if (sendable(player, selectedZone, target) == 0) {
+      selectTarget(target);
+      return;
     }
     assign(target);
   }
@@ -560,44 +657,64 @@ public final class AirTargetPanel extends ActionPanel {
   }
 
   private void assign(final Target target) {
+    assign(target, selected);
+  }
+
+  /**
+   * Sends these counts (the ones under Unassigned, or the list window's) against the target, as far
+   * as the aircraft are unassigned, can reach it and the side's cap allows; the target stays
+   * selected and the counts go back to "all".
+   */
+  void assign(final Target target, final IntegerMap<UnitType> counts) {
+    final GamePlayer player = getCurrentPlayer();
+    final Territory zone = selectedZone;
+    if (zone == null) {
+      return;
+    }
     // request 30: never more than the side's cap over one place
-    int room = room(getCurrentPlayer(), selectedZone, target.territory());
+    int room = room(player, zone, target.territory());
     boolean trimmed = false;
-    for (final UnitType type : selected.keySet()) {
-      final int wanted = selected.getInt(type);
+    final IntegerMap<UnitType> free = available(player, zone);
+    for (final UnitType type : List.copyOf(counts.keySet())) {
+      final int wanted = Math.min(counts.getInt(type), free.getInt(type));
+      if (wanted <= 0 || !mayGo(player, zone, type, target)) {
+        continue;
+      }
       final int count = Math.min(wanted, room);
       trimmed |= count < wanted;
       if (count <= 0) {
-        continue; // request 28: a group kept in view after all its bombers have targets
+        continue;
       }
       room -= count;
       boolean merged = false;
       for (int i = 0; i < staged.size(); i++) {
         final TargetAssignment a = staged.get(i);
-        if (a.zone().equals(selectedZone)
-            && a.unitType().equals(type)
-            && a.target().equals(target)) {
+        if (a.zone().equals(zone) && a.unitType().equals(type) && a.target().equals(target)) {
           staged.set(i, new TargetAssignment(a.zone(), type, a.count() + count, target));
           merged = true;
         }
       }
       if (!merged) {
-        staged.add(new TargetAssignment(selectedZone, type, count, target));
+        staged.add(new TargetAssignment(zone, type, count, target));
       }
     }
-    final Territory capped = target.territory();
-    final Territory cappedZone = selectedZone;
-    clearSelection();
+    selectedTarget = target;
+    resetSend(zone);
     selectionChanged();
     strikesChanged();
-    // request 22: straight on to the next group still waiting
-    selectNextWaiting(getCurrentPlayer());
+    // request 22: when this front is done, straight on to the next group still waiting
+    if (selected.keySet().stream().noneMatch(t -> selected.getInt(t) > 0)) {
+      selectNextWaiting(player);
+    }
+    if (pickDialog != null && pickDialog.isDisplayable()) {
+      pickDialog.refreshList();
+    }
     if (trimmed) {
       frame.setStatusErrorMessage(
-          capped.getName()
+          target.territory().getName()
               + ": your side's cap is reached ("
-              + badge(getCurrentPlayer(), cappedZone, capped)
-              + "); the rest stay unplaced.");
+              + badge(player, zone, target.territory())
+              + "); the rest stay unassigned.");
     }
   }
 
@@ -626,8 +743,11 @@ public final class AirTargetPanel extends ActionPanel {
       return;
     }
     final List<Group> waiting = waitingGroups(player);
-    if (!waiting.isEmpty()) {
-      chooseGroup(player, waiting.get(0).zone(), waiting.get(0).type(), true);
+    if (!waiting.isEmpty() && !waiting.get(0).zone().equals(selectedZone)) {
+      chooseFront(player, waiting.get(0).zone(), true);
+    } else if (!waiting.isEmpty() && selected.isEmpty()) {
+      resetSend(selectedZone);
+      selectionChanged();
     }
     updateBanner(player, waiting.size());
   }
@@ -673,6 +793,7 @@ public final class AirTargetPanel extends ActionPanel {
 
   private void clearSelection() {
     selectedZone = null;
+    selectedTarget = null;
     selected.clear();
     targets = Map.of();
   }
@@ -685,14 +806,20 @@ public final class AirTargetPanel extends ActionPanel {
   private void selectionChanged(final boolean rebuildPanel) {
     final GamePlayer player = getCurrentPlayer();
     final Map<Target, Boolean> result = new LinkedHashMap<>();
-    if (selectedZone != null && !selected.isEmpty()) {
+    if (selectedZone != null) {
       final List<Collection<Unit>> highlight = new ArrayList<>();
       try (GameData.Unlocker ignored = getData().acquireReadLock()) {
+        // request 33: a target is green when any type being sent can reach it (with nothing set
+        // to send, any of the front's types: the click then only selects it)
+        final List<UnitType> sending =
+            selected.keySet().stream().filter(t -> selected.getInt(t) > 0).toList();
+        final List<UnitType> judge =
+            sending.isEmpty()
+                ? myAircraft(player, selectedZone).stream().map(Unit::getType).distinct().toList()
+                : sending;
         for (final Target target : allTargets(player, selectedZone)) {
           result.put(
-              target,
-              selected.keySet().stream()
-                  .allMatch(type -> mayGo(player, selectedZone, type, target)));
+              target, judge.stream().anyMatch(type -> mayGo(player, selectedZone, type, target)));
         }
         highlight.addAll(AirSelection.highlight(selected, myAircraft(player, selectedZone)));
       }
@@ -723,7 +850,6 @@ public final class AirTargetPanel extends ActionPanel {
     if (rebuildPanel) {
       rebuild(player);
     } else {
-      fillTargets(player);
       refresh.run();
     }
     getMap().repaint();
@@ -929,35 +1055,34 @@ public final class AirTargetPanel extends ActionPanel {
     getMap().repaint();
   }
 
-  // ---- the side panel
+  // ---- the side panel (request 33: compact; the map is the main way to choose)
+
+  /** Moves made shown before the list scrolls inside its own box. */
+  static final int MOVE_ROWS = 10;
+
+  private static final int ROW_HEIGHT = 26;
+
+  private String stepTitle() {
+    return coverMode ? "Place Fighters" : "Assign Bomber Targets";
+  }
 
   private void rebuild(final GamePlayer player) {
-    // request 24: heading and buttons pinned at the top, the rest scrolls
     layout.install(this);
-    actionLabel.setText(player.getName() + (coverMode ? " fighter cover" : " bomber targets"));
-    // the help is a tooltip on the heading; the panel itself lists the strikes
+    // 1. header: "Germans: Assign Bomber Targets", Undo all, Done
+    actionLabel.setText(PlayerNames.display(player) + ": " + stepTitle());
     actionLabel.setToolTipText(
         AirSelection.wrap(
-            "Click a group's icon in its box (or its Choose targets button here) to pick the whole"
-                + " group; then Ctrl, Alt and Shift clicks and right-clicks adjust it as usual."
-                + " Or use the counters here. The targets"
-                + " all picked bombers can reach light up on the map and are listed here;"
-                + " click one to attack it."));
+            coverMode
+                ? "Pick a front's fighters (the front list, or click their box), set how many to send,"
+                    + " then click a green territory on the map: over your bombers' target to escort,"
+                    + " over the enemy's to defend. Ctrl+Z undoes the last move."
+                : "Pick a front's bombers (the front list, or click their box), set how many to send,"
+                    + " then click a green target on the map. Ctrl+Z undoes the last move."));
     layout.top().add(leftAligned(actionLabel));
     if (finished) {
-      // read only: the strikes are chosen and resolve once every nation has chosen
-      actionLabel.setText(
-          player.getName() + (coverMode ? " fighter cover: done" : " bomber targets: done"));
-      layout.add(
-          leftAligned(
-              new JLabel(
-                  staged.isEmpty()
-                      ? (coverMode ? "No fighters placed." : "No strikes.")
-                      : (coverMode ? "Fighters placed:" : "Strikes:"))));
-      for (final TargetAssignment a : List.copyOf(staged)) {
-        layout.add(leftAligned(new JLabel(describe(a), icon(player, a.unitType()), JLabel.LEFT)));
-      }
-      layout.add(Box.createVerticalGlue());
+      layout.top().add(leftAligned(new JLabel(staged.isEmpty() ? "No moves made." : "Moves made:")));
+      layout.body().add(movesBox(player, false));
+      layout.body().add(Box.createVerticalGlue());
       refresh.run();
       return;
     }
@@ -966,300 +1091,696 @@ public final class AirTargetPanel extends ActionPanel {
     undoAll.addActionListener(
         e -> {
           staged.clear();
-          clearSelection();
+          resetSend(selectedZone);
           selectionChanged();
           strikesChanged();
         });
     final JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
     buttons.add(undoAll);
+    buttons.add(createDoneButton());
     // request 30: the same choices as last time, where they are still possible
     final List<TargetAssignment> last = lastRound.getOrDefault(lastKey(player), List.of());
     if (!last.isEmpty()) {
-      final JButton repeat = new JButton("Repeat last round");
+      final JButton repeat = smallButton("Repeat last round");
       repeat.setToolTipText(
           "Makes last time's choices again where the aircraft and places are still there.");
       repeat.addActionListener(e -> repeatLastRound(player, last));
       buttons.add(repeat);
     }
-    buttons.add(createDoneButton());
     layout.top().add(leftAligned(buttons));
+    // 2. status line: "2 groups waiting · 1 strike made"
     final int waiting = waitingGroups(player).size();
-    final JLabel progress =
+    final JLabel status =
         new JLabel(
-            waiting == 0
-                ? (coverMode
-                    ? "Every fighter group is placed or has nowhere in reach: press Done."
-                    : "Every group has a target or nothing in reach: press Done.")
-                : waiting
-                    + (waiting == 1 ? " group still waiting" : " groups still waiting")
-                    + "; "
-                    + staged.size()
-                    + (coverMode
-                        ? (staged.size() == 1 ? " placement" : " placements")
-                        : (staged.size() == 1 ? " strike" : " strikes"))
-                    + " made.");
-    progress.setBorder(BorderFactory.createEmptyBorder(2, 5, 0, 0));
-    layout.top().add(leftAligned(progress));
-
-    addOverview(player);
-
-    layout.add(Box.createVerticalStrut(6));
-    layout.add(
-        leftAligned(
-            new JLabel(
-                staged.isEmpty()
-                    ? (coverMode ? "No fighters placed yet." : "No strikes yet.")
-                    : (coverMode ? "Fighters placed:" : "Strikes:"))));
-    for (final TargetAssignment a : List.copyOf(staged)) {
-      final JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-      row.add(new JLabel(icon(player, a.unitType())));
-      row.add(new JLabel(describe(a)));
-      // request 28: one bomber more or fewer against this target
-      row.add(counter(player, a.zone(), a.unitType(), a.target(), false));
-      final JButton undo = smallButton("Undo");
-      undo.addActionListener(
-          e -> {
-            staged.remove(a);
-            clearSelection();
-            selectionChanged();
-            strikesChanged();
-          });
-      row.add(undo);
-      layout.add(leftAligned(row));
-    }
-    layout.add(Box.createVerticalGlue());
-    // a newly chosen group is first in the list: show it
-    final String shown = selectedZone == null ? null : selectedZone.getName() + selected.keySet();
-    if (shown != null && !shown.equals(lastShownGroup)) {
-      SwingUtilities.invokeLater(
-          () -> layout.scrollPane().getViewport().setViewPosition(new Point(0, 0)));
-    }
-    lastShownGroup = shown;
+            (waiting == 0
+                    ? "Nothing waiting: press Done"
+                    : waiting + (waiting == 1 ? " group waiting" : " groups waiting"))
+                + " · "
+                + staged.size()
+                + (coverMode
+                    ? (staged.size() == 1 ? " placement made" : " placements made")
+                    : (staged.size() == 1 ? " strike made" : " strikes made")));
+    status.setBorder(BorderFactory.createEmptyBorder(2, 5, 2, 0));
+    layout.top().add(leftAligned(status));
+    // 3. moves made, always in view, newest first
+    layout.top().add(movesBox(player, true));
+    // 4. the front and its unassigned aircraft
+    addUnassigned(player);
+    // 5. the selected target
+    addSelectedTarget(player);
+    // 6. the list, in its own window
+    final JButton pick = smallButton("Pick from list…");
+    pick.setToolTipText(
+        "Opens a separate window listing every target in reach of this front's aircraft. The map"
+            + " stays usable.");
+    pick.setEnabled(selectedZone != null);
+    pick.addActionListener(e -> openPickDialog(player));
+    layout.body().add(Box.createVerticalStrut(4));
+    layout.body().add(leftAligned(pick));
+    layout.body().add(Box.createVerticalGlue());
     refresh.run();
   }
 
   /**
-   * Request 20: the starting point of the step. Every front holding the nation's aircraft, with one
-   * line per type: how many targets are in reach and a button that picks the group, scrolls the map
-   * to its box and lights up its targets; or why it has nothing to do. Request 24: the front being
-   * chosen comes first, with its bombers and targets right under it; then fronts with groups
-   * waiting; fronts with nothing to do are one line each, opened by a click.
+   * Request 33: the moves made, newest first, one line each with its Undo; clicking a line selects
+   * its target. More than {@link #MOVE_ROWS} scroll inside the box.
    */
-  private void addOverview(final GamePlayer player) {
-    final List<Territory> chosen = new ArrayList<>();
-    final List<Territory> waiting = new ArrayList<>();
-    final List<Territory> idle = new ArrayList<>();
-    final Map<Territory, IntegerMap<UnitType>> allByZone = new HashMap<>();
-    try (GameData.Unlocker ignored = getData().acquireReadLock()) {
-      for (final Territory zone : AirZoneAttachment.getAirZones(getData().getMap())) {
-        if (AirZoneAttachment.get(zone).orElseThrow().getZoneType() == ZoneType.RESERVE) {
-          continue;
-        }
-        final IntegerMap<UnitType> all = new IntegerMap<>();
-        zone.getUnitCollection()
-            .getMatches(u -> u.isOwnedBy(player))
-            .forEach(u -> all.add(u.getType(), 1));
-        if (all.isEmpty()) {
-          continue;
-        }
-        allByZone.put(zone, all);
-        final IntegerMap<UnitType> left = available(player, zone);
-        final boolean hasWork =
-            all.keySet().stream()
-                .anyMatch(
-                    t ->
-                        left.getInt(t) > 0
-                            && isMineType(zone, t)
-                            && !targetsFor(player, zone, t).isEmpty());
-        if (zone.equals(selectedZone)) {
-          chosen.add(zone);
-        } else if (hasWork) {
-          waiting.add(zone);
-        } else {
-          idle.add(zone);
-        }
-      }
-      if (allByZone.isEmpty()) {
-        layout.add(leftAligned(new JLabel("You have no aircraft in any front.")));
-      }
-      for (final Territory zone : chosen) {
-        addZoneSection(player, zone, allByZone.get(zone));
-        addSelection(player);
-      }
-      for (final Territory zone : waiting) {
-        addZoneSection(player, zone, allByZone.get(zone));
-      }
-      for (final Territory zone : idle) {
-        if (expanded.contains(zone)) {
-          addZoneSection(player, zone, allByZone.get(zone));
-        } else {
-          addCollapsed(player, zone, allByZone.get(zone));
-        }
-      }
+  private JComponent movesBox(final GamePlayer player, final boolean withUndo) {
+    final JPanel rows = AirSelection.compactPanel();
+    rows.setLayout(new BoxLayout(rows, BoxLayout.Y_AXIS));
+    final List<TargetAssignment> newestFirst = new ArrayList<>(staged);
+    java.util.Collections.reverse(newestFirst);
+    if (newestFirst.isEmpty()) {
+      rows.add(
+          leftAligned(
+              new JLabel(
+                  coverMode
+                      ? "No fighters placed yet: click a green territory on the map."
+                      : "No strikes yet: click a green target on the map.")));
     }
-    layout.add(Box.createVerticalStrut(6));
-  }
-
-  private static boolean isBomberType(final Territory zone, final UnitType type) {
-    return zone.getUnitCollection()
-        .anyMatch(u -> u.getType().equals(type) && AirCombat.isBomber(u));
-  }
-
-  /** Whether the type is one this step places (bombers, or fighter-types for cover). */
-  private boolean isMineType(final Territory zone, final UnitType type) {
-    return coverMode ? !isBomberType(zone, type) : isBomberType(zone, type);
-  }
-
-  /** The picked bombers' counters and their targets, under the front being chosen. */
-  private void addSelection(final GamePlayer player) {
-    if (selectedZone == null) {
-      return;
-    }
-    final JPanel picked = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-    picked.add(Box.createHorizontalStrut(10));
-    picked.add(
-        new JLabel(
-            (coverMode ? "Fighters picked in " : "Bombers picked in ")
-                + AirAllocation.zoneName(selectedZone)
-                + ":"));
-    layout.add(leftAligned(picked));
-    layout.add(
-        leftAligned(
-            AirSelection.chooser(
-                frame.getUiContext(),
-                player,
-                available(player, selectedZone),
-                selected,
-                () -> selectionChanged(false))));
-    fillTargets(player);
-    layout.add(targetsPanel);
-  }
-
-  /**
-   * A front with nothing to do, on one line: "▸ Philippine Sea: 4 fighters (dogfight only), 8
-   * torpedo bombers (nothing in reach)". A click opens it.
-   */
-  private void addCollapsed(
-      final GamePlayer player, final Territory zone, final IntegerMap<UnitType> all) {
-    final IntegerMap<UnitType> left = available(player, zone);
-    final List<String> parts = new ArrayList<>();
-    for (final UnitType type : all.keySet()) {
-      final int count = all.getInt(type);
-      final String why;
-      if (!isMineType(zone, type)) {
-        why = coverMode ? "bombers: targets chosen" : "placed in the next step";
-      } else if (targetsFor(player, zone, type).isEmpty()) {
-        why = "nothing in reach";
-      } else {
-        why = left.getInt(type) <= 0 ? (coverMode ? "placed" : "target chosen") : "waiting";
-      }
-      parts.add(count + " " + typeName(type, count) + " (" + why + ")");
-    }
-    final JLabel line =
-        new JLabel(
-            "<html><div style='width:320px'>▸ <b>"
-                + AirAllocation.zoneName(zone)
-                + ":</b> "
-                + String.join(", ", parts)
-                + "</div></html>");
-    line.setToolTipText("Click to show the details");
-    line.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-    line.setBorder(BorderFactory.createEmptyBorder(1, 4, 1, 0));
-    line.addMouseListener(
-        new MouseAdapter() {
-          @Override
-          public void mouseClicked(final MouseEvent e) {
-            expanded.add(zone);
-            rebuild(player);
-          }
-        });
-    layout.add(leftAligned(line));
-  }
-
-  /** A front's heading and one line per aircraft type (the request 20 overview). */
-  private void addZoneSection(
-      final GamePlayer player, final Territory zone, final IntegerMap<UnitType> all) {
-    final IntegerMap<UnitType> left = available(player, zone);
-    final List<String> parts = new ArrayList<>();
-    all.keySet().forEach(t -> parts.add(all.getInt(t) + " " + typeName(t, all.getInt(t))));
-    final JPanel header = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-    final boolean opened = expanded.contains(zone);
-    final JLabel title =
-        new JLabel(
-            "<html>"
-                + (opened ? "▾ " : "")
-                + "<b>"
-                + AirAllocation.zoneName(zone)
-                + ":</b> "
-                + String.join(", ", parts)
-                + "</html>");
-    if (opened) {
-      title.setToolTipText("Click to fold it back to one line");
-      title.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-      title.addMouseListener(
+    for (final TargetAssignment a : newestFirst) {
+      final JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+      final JLabel text = new JLabel(moveText(player, a));
+      text.setToolTipText("Click to show " + a.target().territory().getName() + " on the map");
+      text.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+      text.addMouseListener(
           new MouseAdapter() {
             @Override
             public void mouseClicked(final MouseEvent e) {
-              expanded.remove(zone);
-              rebuild(player);
+              selectMove(player, a);
             }
           });
+      row.add(text);
+      if (withUndo) {
+        final JButton undo = smallButton("Undo");
+        undo.setToolTipText("Takes these aircraft back (Ctrl+Z undoes the newest move)");
+        undo.addActionListener(e -> undo(a));
+        row.add(undo);
+      }
+      rows.add(leftAligned(row));
     }
-    header.add(title);
-    layout.add(leftAligned(header));
-    for (final UnitType type : all.keySet()) {
-      final int count = all.getInt(type);
-      final String name =
-          AirAllocation.typeName(type) + (count == 1 ? "" : "s") + " (" + count + "): ";
-      final JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-      row.add(Box.createHorizontalStrut(10));
-      if (!isMineType(zone, type)) {
-        row.add(
-            new JLabel(
-                name
-                    + (coverMode
-                        ? "bombers: their targets are chosen."
-                        : "fighters are placed in the next step, to escort or defend.")));
-      } else {
-        final int targets = targetsFor(player, zone, type).size();
-        final int free = left.getInt(type);
-        if (targets == 0) {
-          row.add(
-              new JLabel(
-                  name
-                      + "nothing in reach ("
-                      + AirRange.reachText(player, zone, type).toLowerCase(java.util.Locale.ROOT)
-                      + ")."));
-        } else if (free <= 0) {
-          row.add(new JLabel(name + "all assigned."));
-        } else {
-          row.add(
-              new JLabel(
-                  name
-                      + targets
-                      + (coverMode
-                          ? (targets == 1 ? " place" : " places")
-                          : (targets == 1 ? " target" : " targets"))
-                      + " in reach"
-                      + (free < count ? "; " + free + " without a target" : "")
-                      + "."));
-          final JButton choose = smallButton(coverMode ? "Place" : "Choose targets");
-          choose.setToolTipText(
-              "Picks the whole group, shows its box and targets, and flashes the box. Same as"
-                  + " clicking the group's icon in its box.");
-          choose.addActionListener(e -> chooseGroup(player, zone, type, true));
-          // request 22: the group being chosen now has its button lit
-          if (zone.equals(selectedZone) && selected.getInt(type) > 0) {
-            choose.setText(coverMode ? "Placing: click a territory" : "Choosing: click a target");
-            choose.setBackground(new Color(0xFF, 0x8C, 0x00));
-            choose.setForeground(Color.BLACK);
-            choose.setOpaque(true);
-            choose.setFont(choose.getFont().deriveFont(java.awt.Font.BOLD));
-          }
-          row.add(choose);
+    final JScrollPane scroll = new JScrollPane(rows);
+    scroll.setBorder(
+        BorderFactory.createTitledBorder(
+            "Moves made" + (newestFirst.isEmpty() ? "" : " (" + newestFirst.size() + ")")));
+    scroll.getVerticalScrollBar().setUnitIncrement(16);
+    scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+    // the box is as tall as its first MOVE_ROWS lines; more scroll inside it
+    int height = 0;
+    final Component[] lines = rows.getComponents();
+    for (int i = 0; i < Math.min(lines.length, MOVE_ROWS); i++) {
+      height += lines[i].getPreferredSize().height;
+    }
+    height = Math.max(height, ROW_HEIGHT) + 30;
+    scroll.setPreferredSize(new Dimension(300, height));
+    scroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, height));
+    scroll.setAlignmentX(LEFT_ALIGNMENT);
+    return scroll;
+  }
+
+  /**
+   * "Bialystok ← 4 dive bombers", "Sea Zone 97 (surface ships) ← 2 torpedo bombers", or in the
+   * cover step "Bialystok ← 2 fighters (escort)"; the front is named when it is not the one shown.
+   */
+  String moveText(final GamePlayer player, final TargetAssignment a) {
+    final String kind =
+        switch (a.target().kind()) {
+          case SURFACE -> " (surface ships)";
+          case SUBS -> " (submarines)";
+          case STRATEGIC -> " (strategic bombing)";
+          default -> "";
+        };
+    final String role;
+    if (!coverMode) {
+      role = "";
+    } else if (AirCover.sideCount(player, a.zone(), a.target().territory(), false, revealed) > 0) {
+      role = " (escort)";
+    } else if (enemyBombers(player, a.zone(), a.target().territory()) > 0) {
+      role = " (defend)";
+    } else {
+      role = " (cover)";
+    }
+    return a.target().territory().getName()
+        + kind
+        + " ← "
+        + a.count()
+        + " "
+        + typeName(a.unitType(), a.count())
+        + role
+        + (a.zone().equals(selectedZone) ? "" : " from " + AirAllocation.zoneName(a.zone()));
+  }
+
+  /** Request 33: a moves-made line was clicked: its front and target are shown. */
+  void selectMove(final GamePlayer player, final TargetAssignment a) {
+    if (!a.zone().equals(selectedZone)) {
+      chooseFront(player, a.zone(), false);
+    }
+    selectTarget(a.target());
+    getMap().centerOn(a.target().territory());
+  }
+
+  /** Request 33: takes one move back; its aircraft are unassigned again. */
+  void undo(final TargetAssignment a) {
+    if (!staged.remove(a)) {
+      return;
+    }
+    if (a.zone().equals(selectedZone)) {
+      resetSend(selectedZone);
+    }
+    selectionChanged();
+    strikesChanged();
+  }
+
+  /** Request 33: Ctrl+Z, the newest move back. */
+  void undoLast() {
+    if (!staged.isEmpty() && !finished) {
+      undo(staged.get(staged.size() - 1));
+    }
+  }
+
+  /** The fronts with aircraft of this step that have somewhere to go. */
+  private List<Territory> frontsWithWork(final GamePlayer player) {
+    final List<Territory> result = new ArrayList<>();
+    try (GameData.Unlocker ignored = getData().acquireReadLock()) {
+      for (final Territory zone : AirZoneAttachment.getAirZones(getData().getMap())) {
+        final boolean any =
+            myAircraft(player, zone).stream()
+                .map(Unit::getType)
+                .distinct()
+                .anyMatch(t -> !targetsFor(player, zone, t).isEmpty());
+        if (any) {
+          result.add(zone);
         }
       }
-      layout.add(leftAligned(row));
+    }
+    return result;
+  }
+
+  /**
+   * Request 33, section 4: the front shown and its unassigned aircraft, one compact row per type
+   * with how many go with the next map click.
+   */
+  private void addUnassigned(final GamePlayer player) {
+    final List<Territory> fronts = frontsWithWork(player);
+    if (selectedZone != null && !fronts.contains(selectedZone)) {
+      fronts.add(0, selectedZone);
+    }
+    final JPanel frontRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+    frontRow.add(new JLabel("Front:"));
+    final javax.swing.JComboBox<Territory> chooser =
+        new javax.swing.JComboBox<>(fronts.toArray(new Territory[0]));
+    chooser.setRenderer(
+        new javax.swing.DefaultListCellRenderer() {
+          @Override
+          public Component getListCellRendererComponent(
+              final javax.swing.JList<?> list,
+              final Object value,
+              final int index,
+              final boolean isSelected,
+              final boolean cellHasFocus) {
+            final String text =
+                value instanceof Territory zone ? frontSummary(player, zone) : "(choose a front)";
+            return super.getListCellRendererComponent(list, text, index, isSelected, cellHasFocus);
+          }
+        });
+    chooser.setSelectedItem(selectedZone);
+    chooser.addActionListener(
+        e -> {
+          if (chooser.getSelectedItem() instanceof Territory zone && !zone.equals(selectedZone)) {
+            chooseFront(player, zone, true);
+          }
+        });
+    frontRow.add(chooser);
+    layout.body().add(leftAligned(frontRow));
+    if (selectedZone == null) {
+      layout.body().add(leftAligned(new JLabel("Choose a front, or click a group's box.")));
+      return;
+    }
+    final Territory zone = selectedZone;
+    final IntegerMap<UnitType> free = available(player, zone);
+    if (free.isEmpty()) {
+      layout
+          .body()
+          .add(
+              leftAligned(
+                  new JLabel(
+                      coverMode
+                          ? "Every fighter here is placed."
+                          : "Every bomber here has a target.")));
+      return;
+    }
+    final JPanel rows = AirSelection.compactPanel();
+    rows.setLayout(new BoxLayout(rows, BoxLayout.Y_AXIS));
+    rows.setBorder(BorderFactory.createTitledBorder("Unassigned"));
+    final List<UnitType> types = new ArrayList<>(free.keySet());
+    types.sort(java.util.Comparator.comparing(UnitType::getName));
+    for (final UnitType type : types) {
+      final int count = free.getInt(type);
+      final JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+      final JLabel name =
+          new JLabel(AirAllocation.typeName(type).toLowerCase(java.util.Locale.ROOT), icon(player, type), JLabel.LEFT);
+      row.add(name);
+      row.add(new JLabel(count + " unassigned"));
+      final boolean reach = !targetsFor(player, zone, type).isEmpty();
+      final String tip =
+          AirRange.reachText(player, zone, type)
+              + ". The next map click (or "
+              + (coverMode ? "Place" : "Attack")
+              + ") sends this many; − and + at a target change one at a time.";
+      name.setToolTipText(tip);
+      if (reach) {
+        row.add(new JLabel("send:"));
+        final int value = Math.max(0, Math.min(count, selected.getInt(type)));
+        final javax.swing.JSpinner spinner =
+            new javax.swing.JSpinner(new javax.swing.SpinnerNumberModel(value, 0, count, 1));
+        spinner.setToolTipText(tip);
+        spinner.addChangeListener(
+            e -> {
+              selected.put(type, (Integer) spinner.getValue());
+              selectionChanged(false);
+            });
+        row.add(spinner);
+      } else {
+        final JLabel none = new JLabel("nothing in reach");
+        none.setToolTipText(tip);
+        row.add(none);
+      }
+      row.setToolTipText(tip);
+      rows.add(leftAligned(row));
+      final long damaged =
+          myAircraft(player, zone).stream()
+              .filter(u -> u.getType().equals(type) && u.getHits() > 0)
+              .count();
+      if (damaged > 0) {
+        final JLabel hurt =
+            new JLabel(
+                "   of which damaged: "
+                    + damaged
+                    + " (undamaged "
+                    + typeName(type, 2)
+                    + " are sent first)");
+        rows.add(leftAligned(hurt));
+      }
+    }
+    rows.setAlignmentX(LEFT_ALIGNMENT);
+    layout.body().add(rows);
+  }
+
+  /** "Eastern Front: 2 groups waiting" for the front chooser. */
+  private String frontSummary(final GamePlayer player, final Territory zone) {
+    final IntegerMap<UnitType> free = available(player, zone);
+    final long waiting =
+        free.keySet().stream().filter(t -> !targetsFor(player, zone, t).isEmpty()).count();
+    return AirAllocation.zoneName(zone)
+        + (waiting == 0 ? ": done" : ": " + waiting + (waiting == 1 ? " group" : " groups") + " waiting");
+  }
+
+  /**
+   * Request 33, section 5: the selected target only: what is there, the cap, what is assigned per
+   * type with − and +, and the Attack (or Place) button.
+   */
+  private void addSelectedTarget(final GamePlayer player) {
+    final JPanel block = AirSelection.compactPanel();
+    block.setLayout(new BoxLayout(block, BoxLayout.Y_AXIS));
+    block.setAlignmentX(LEFT_ALIGNMENT);
+    if (selectedZone == null || selectedTarget == null) {
+      block.setBorder(BorderFactory.createTitledBorder("Target"));
+      block.add(
+          leftAligned(
+              new JLabel(
+                  coverMode
+                      ? "Click a territory on the map to see it here."
+                      : "Click a target on the map to see it here.")));
+      layout.body().add(block);
+      return;
+    }
+    final Target target = selectedTarget;
+    final Territory zone = selectedZone;
+    block.setBorder(BorderFactory.createTitledBorder(target.territory().getName()));
+    try (GameData.Unlocker ignored = getData().acquireReadLock()) {
+      block.add(leftAligned(new JLabel(AirSelection.wrap(describe(player, target)))));
+      // other targets in the same territory (land units and strategic bombing, ships and subs)
+      final JPanel kinds = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+      for (final Target other : allTargets(player, zone)) {
+        if (other.territory().equals(target.territory()) && !other.equals(target)) {
+          final JButton show = smallButton("Show " + kindName(other.kind()).toLowerCase(java.util.Locale.ROOT));
+          show.addActionListener(e -> selectTarget(other));
+          kinds.add(show);
+        }
+      }
+      if (kinds.getComponentCount() > 0) {
+        block.add(leftAligned(kinds));
+      }
+      final List<UnitType> types =
+          myAircraft(player, zone).stream()
+              .map(Unit::getType)
+              .distinct()
+              .filter(t -> mayGo(player, zone, t, target))
+              .sorted(java.util.Comparator.comparing(UnitType::getName))
+              .toList();
+      if (types.isEmpty()) {
+        block.add(leftAligned(new JLabel("None of this front's aircraft can reach it.")));
+      }
+      for (final UnitType type : types) {
+        final JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        row.add(new JLabel(AirAllocation.typeName(type) + ":", icon(player, type), JLabel.LEFT));
+        row.add(counter(player, zone, type, target, true));
+        block.add(leftAligned(row));
+      }
+    }
+    final JButton attack = smallButton(coverMode ? "Place here" : "Attack");
+    attack.setToolTipText(
+        (coverMode ? "Places" : "Sends")
+            + " the counts chosen under Unassigned against "
+            + target.describe()
+            + ", as a click on the map does. − and + change one at a time.");
+    attack.setEnabled(sendable(player, zone, target) > 0);
+    attack.addActionListener(e -> assign(target, selected));
+    block.add(leftAligned(attack));
+    layout.body().add(block);
+  }
+
+  /** How many of the counts chosen to send can go against the target. */
+  private int sendable(final GamePlayer player, final Territory zone, final Target target) {
+    return selected.keySet().stream()
+        .filter(t -> mayGo(player, zone, t, target))
+        .mapToInt(t -> Math.min(selected.getInt(t), available(player, zone).getInt(t)))
+        .sum();
+  }
+
+  /** Request 33: a target chosen on the map, in a moves line or in the list window. */
+  void selectTarget(final @Nullable Target target) {
+    selectedTarget = target;
+    rebuild(getCurrentPlayer());
+    if (pickDialog != null && pickDialog.isDisplayable()) {
+      pickDialog.showTarget(target);
+    }
+    getMap().repaint();
+  }
+
+  /** Every unassigned aircraft with a target in reach goes with the next click (the default). */
+  private void resetSend(final @Nullable Territory zone) {
+    selected.clear();
+    if (zone == null) {
+      return;
+    }
+    final GamePlayer player = getCurrentPlayer();
+    final IntegerMap<UnitType> free = available(player, zone);
+    for (final UnitType type : free.keySet()) {
+      if (!targetsFor(player, zone, type).isEmpty()) {
+        selected.put(type, free.getInt(type));
+      }
+    }
+  }
+
+  // ---- the pick-from-list window (request 33)
+
+  // the window's place and size, kept for the rest of the game
+  private static @Nullable Rectangle pickBounds;
+
+  void openPickDialog(final GamePlayer player) {
+    if (selectedZone == null) {
+      return;
+    }
+    if (pickDialog == null || !pickDialog.isDisplayable()) {
+      pickDialog = new PickTargetDialog(player);
+    }
+    pickDialog.refreshList();
+    pickDialog.setVisible(true);
+    pickDialog.toFront();
+  }
+
+  /** For tests: the moves made, oldest first. */
+  List<TargetAssignment> staged() {
+    return List.copyOf(staged);
+  }
+
+  /** For tests: the target shown in the panel. */
+  @Nullable
+  Target selectedTarget() {
+    return selectedTarget;
+  }
+
+  /** For tests: the front shown. */
+  @Nullable
+  Territory selectedZone() {
+    return selectedZone;
+  }
+
+  /** For tests: the player's unassigned aircraft of this step in the front. */
+  IntegerMap<UnitType> unassigned(final GamePlayer player, final Territory zone) {
+    return available(player, zone);
+  }
+
+  @Nullable
+  PickTargetDialog pickDialog() {
+    return pickDialog;
+  }
+
+  /** The targets in reach of any of this front's aircraft of this step, by name. */
+  List<Target> targetsInReach(final GamePlayer player, final Territory zone) {
+    final List<UnitType> types = myAircraft(player, zone).stream().map(Unit::getType).distinct().toList();
+    return allTargets(player, zone).stream()
+        .filter(t -> types.stream().anyMatch(type -> mayGo(player, zone, type, t)))
+        .sorted(
+            java.util.Comparator.comparing((Target t) -> t.territory().getName())
+                .thenComparing(Target::kind))
+        .toList();
+  }
+
+  /**
+   * "Bialystok · no AA · B 2/4 · yours: 2"; in the cover step "Bialystok · enemy B 3 · B 1/4 F
+   * 2/4 · yours: 2".
+   */
+  String pickLabel(final GamePlayer player, final Territory zone, final Target target) {
+    final Territory t = target.territory();
+    final int mine =
+        staged.stream()
+            .filter(a -> a.zone().equals(zone) && a.target().equals(target))
+            .mapToInt(TargetAssignment::count)
+            .sum();
+    final String what =
+        switch (target.kind()) {
+          case SURFACE -> " (surface ships)";
+          case SUBS -> " (submarines)";
+          case STRATEGIC -> " (strategic bombing)";
+          default -> "";
+        };
+    final String aa;
+    if (t.isWater()) {
+      aa = "";
+    } else {
+      final List<Unit> guns =
+          t.getUnitCollection()
+              .getMatches(
+                  Matches.unitIsAaForAnything().and(u -> AirCombat.atWar(player, u.getOwner())));
+      aa = guns.isEmpty() ? " · no AA" : " · AA " + guns.size();
+    }
+    return t.getName() + what + aa + " · " + badge(player, zone, t) + (mine > 0 ? " · yours: " + mine : "");
+  }
+
+  /**
+   * Request 33: picking from a list, in its own window so it is never mixed into the side panel.
+   * Left: every target in reach, with a filter. Right: the chosen target, a count per type and
+   * Assign, which makes the move exactly as a map click does. Undo stays in the side panel.
+   */
+  final class PickTargetDialog extends javax.swing.JDialog {
+    private static final long serialVersionUID = 1L;
+    private final GamePlayer player;
+    private final javax.swing.JTextField filter = new javax.swing.JTextField(14);
+    private final javax.swing.DefaultListModel<Target> model = new javax.swing.DefaultListModel<>();
+    private final javax.swing.JList<Target> list = new javax.swing.JList<>(model);
+    private final JPanel right = new JPanel();
+    private final IntegerMap<UnitType> counts = new IntegerMap<>();
+    private boolean updating;
+
+    PickTargetDialog(final GamePlayer player) {
+      super(
+          JOptionPane.getFrameForComponent(AirTargetPanel.this),
+          PlayerNames.display(player) + ": " + stepTitle() + " (pick from list)",
+          ModalityType.MODELESS);
+      this.player = player;
+      setDefaultCloseOperation(DISPOSE_ON_CLOSE);
+      list.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_SELECTION);
+      list.setCellRenderer(
+          new javax.swing.DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(
+                final javax.swing.JList<?> l,
+                final Object value,
+                final int index,
+                final boolean isSelected,
+                final boolean cellHasFocus) {
+              final String text =
+                  value instanceof Target t && selectedZone != null
+                      ? pickLabel(player, selectedZone, t)
+                      : String.valueOf(value);
+              return super.getListCellRendererComponent(l, text, index, isSelected, cellHasFocus);
+            }
+          });
+      list.addListSelectionListener(
+          e -> {
+            if (!e.getValueIsAdjusting() && !updating) {
+              counts.clear();
+              final Target t = list.getSelectedValue();
+              if (t != null) {
+                selectTarget(t);
+                getMap().centerOn(t.territory());
+              }
+              fillRight();
+            }
+          });
+      filter.getDocument()
+          .addDocumentListener(
+              new javax.swing.event.DocumentListener() {
+                @Override
+                public void insertUpdate(final javax.swing.event.DocumentEvent e) {
+                  refreshList();
+                }
+
+                @Override
+                public void removeUpdate(final javax.swing.event.DocumentEvent e) {
+                  refreshList();
+                }
+
+                @Override
+                public void changedUpdate(final javax.swing.event.DocumentEvent e) {
+                  refreshList();
+                }
+              });
+      final JPanel left = new JPanel(new BorderLayout(0, 4));
+      final JPanel filterRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+      filterRow.add(new JLabel("Filter:"));
+      filterRow.add(filter);
+      left.add(filterRow, BorderLayout.NORTH);
+      left.add(new JScrollPane(list), BorderLayout.CENTER);
+      right.setLayout(new BoxLayout(right, BoxLayout.Y_AXIS));
+      final JButton close = new JButton("Close");
+      close.addActionListener(e -> dispose());
+      final JPanel bottom = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+      bottom.add(close);
+      final javax.swing.JSplitPane split =
+          new javax.swing.JSplitPane(
+              javax.swing.JSplitPane.HORIZONTAL_SPLIT, left, new JScrollPane(right));
+      split.setResizeWeight(0.5);
+      split.setDividerLocation(400);
+      right.setMinimumSize(new Dimension(320, 0));
+      getContentPane().setLayout(new BorderLayout());
+      getContentPane().add(split, BorderLayout.CENTER);
+      getContentPane().add(bottom, BorderLayout.SOUTH);
+      if (pickBounds != null) {
+        setBounds(pickBounds);
+      } else {
+        setSize(820, 480);
+        setLocationRelativeTo(AirTargetPanel.this);
+      }
+      addComponentListener(
+          new java.awt.event.ComponentAdapter() {
+            @Override
+            public void componentMoved(final java.awt.event.ComponentEvent e) {
+              pickBounds = getBounds();
+            }
+
+            @Override
+            public void componentResized(final java.awt.event.ComponentEvent e) {
+              pickBounds = getBounds();
+            }
+          });
+      fillRight();
+    }
+
+    /** The targets in reach that match the filter, keeping the selection. */
+    void refreshList() {
+      final Target keep = list.getSelectedValue();
+      updating = true;
+      model.clear();
+      if (selectedZone != null) {
+        final String text = filter.getText().trim().toLowerCase(java.util.Locale.ROOT);
+        try (GameData.Unlocker ignored = getData().acquireReadLock()) {
+          for (final Target t : targetsInReach(player, selectedZone)) {
+            if (text.isEmpty()
+                || t.territory().getName().toLowerCase(java.util.Locale.ROOT).contains(text)) {
+              model.addElement(t);
+            }
+          }
+        }
+      }
+      if (keep != null && model.contains(keep)) {
+        list.setSelectedValue(keep, true);
+      }
+      updating = false;
+      list.repaint();
+    }
+
+    /** The side panel or the map chose a target: show it here too. */
+    void showTarget(final @Nullable Target target) {
+      if (target == null || target.equals(list.getSelectedValue())) {
+        return;
+      }
+      updating = true;
+      if (model.contains(target)) {
+        list.setSelectedValue(target, true);
+      } else {
+        list.clearSelection();
+      }
+      updating = false;
+      counts.clear();
+      fillRight();
+    }
+
+    /** The chosen target: one row per type that can go, a count each, and Assign. */
+    void fillRight() {
+      right.removeAll();
+      final Target target = list.getSelectedValue();
+      final Territory zone = selectedZone;
+      if (target == null || zone == null) {
+        right.add(leftAligned(new JLabel("Pick a target on the left.")));
+      } else {
+        right.add(leftAligned(new JLabel(AirSelection.wrap(pickLabel(player, zone, target)))));
+        final IntegerMap<UnitType> free = available(player, zone);
+        final int room = room(player, zone, target.territory());
+        for (final UnitType type : free.keySet()) {
+          if (!mayGo(player, zone, type, target)) {
+            continue;
+          }
+          final int max = Math.min(free.getInt(type), room);
+          final JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+          row.add(new JLabel(AirAllocation.typeName(type), icon(player, type), JLabel.LEFT));
+          row.add(new JLabel(free.getInt(type) + " unassigned"));
+          final javax.swing.JSpinner spinner =
+              new javax.swing.JSpinner(
+                  new javax.swing.SpinnerNumberModel(
+                      Math.min(counts.getInt(type), Math.max(0, max)), 0, Math.max(0, max), 1));
+          spinner.setToolTipText(
+              room == Integer.MAX_VALUE
+                  ? "At most the unassigned aircraft"
+                  : "At most the unassigned aircraft and the cap (" + room + " more allowed)");
+          spinner.addChangeListener(e -> counts.put(type, (Integer) spinner.getValue()));
+          row.add(spinner);
+          right.add(leftAligned(row));
+        }
+        final JButton assign = new JButton("Assign");
+        assign.setToolTipText("Makes the move as a click on the map would. Undo it in the side panel.");
+        assign.addActionListener(
+            e -> {
+              assign(target, counts);
+              counts.clear();
+              refreshList();
+              fillRight();
+            });
+        right.add(leftAligned(assign));
+      }
+      right.add(Box.createVerticalGlue());
+      right.revalidate();
+      right.repaint();
+    }
+
+    javax.swing.JList<Target> targetList() {
+      return list;
+    }
+
+    IntegerMap<UnitType> counts() {
+      return counts;
     }
   }
 
@@ -1269,25 +1790,26 @@ public final class AirTargetPanel extends ActionPanel {
     return count == 1 ? name : name + "s";
   }
 
-  /**
-   * Picks every aircraft of the type without a target in the front, scrolls the map to the front's
-   * box and lights up the targets in reach.
-   */
   private void chooseGroup(
       final GamePlayer player, final Territory zone, final UnitType type, final boolean scroll) {
-    final int free = available(player, zone).getInt(type);
-    if (free <= 0) {
-      return;
+    chooseFront(player, zone, scroll);
+  }
+
+  /**
+   * Request 33: shows a front: all its unassigned aircraft go with the next click, its box and the
+   * targets in reach come into view, and the box flashes.
+   */
+  void chooseFront(final GamePlayer player, final Territory zone, final boolean scroll) {
+    if (!zone.equals(selectedZone)) {
+      selectedTarget = null;
     }
     selectedZone = zone;
-    selected.clear();
-    selected.put(type, free);
+    resetSend(zone);
     final AirMapMode mode = frame.getAirMapMode();
     if (mode != null) {
-      // request 22: bring the box and the targets in reach into view together, and flash the box
       Rectangle view = mode.boxOnMap(zone).orElse(null);
       try (GameData.Unlocker ignored = getData().acquireReadLock()) {
-        for (final Target target : targetsFor(player, zone, type)) {
+        for (final Target target : targetsInReach(player, zone)) {
           final Rectangle r = frame.getUiContext().getMapData().getBoundingRect(target.territory());
           if (r != null) {
             view = view == null ? new Rectangle(r) : view.union(r);
@@ -1302,6 +1824,9 @@ public final class AirTargetPanel extends ActionPanel {
         mode.scrollTarget(zone).ifPresent(p -> getMap().centerOnPoint(p));
       }
       mode.flash(zone);
+    }
+    if (pickDialog != null && pickDialog.isDisplayable()) {
+      pickDialog.refreshList();
     }
     selectionChanged();
   }
@@ -1402,109 +1927,6 @@ public final class AirTargetPanel extends ActionPanel {
     }
     selectionChanged();
     strikesChanged();
-  }
-
-  /** The reach of each picked type, "only" buttons for mixed picks, and the targets in reach. */
-  private void fillTargets(final GamePlayer player) {
-    targetsPanel.removeAll();
-    if (selectedZone == null || selected.isEmpty()) {
-      targetsPanel.revalidate();
-      return;
-    }
-    // request 17: how far each picked type strikes, and from where
-    for (final UnitType type : selected.keySet()) {
-      targetsPanel.add(
-          leftAligned(
-              new JLabel(
-                  LongRangeRaid.isRaidZone(player, type, selectedZone)
-                      // request 26: no range limit, only the listed factories
-                      ? AirSelection.wrap(
-                          LongRangeRaid.LABEL
-                              + ": "
-                              + ResearchView.displayName(type.getName())
-                              + "s may bomb factories in "
-                              + String.join(", ", LongRangeRaid.targets(getData()))
-                              + ".")
-                      : AirRange.reachText(player, selectedZone, type))));
-    }
-    if (selected.size() > 1) {
-      final JPanel only = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-      only.add(new JLabel("See one type's own reach:"));
-      for (final UnitType type : selected.keySet()) {
-        final JButton button = smallButton("Only " + ResearchView.displayName(type.getName()));
-        button.addActionListener(
-            e -> {
-              final int count = selected.getInt(type);
-              selected.clear();
-              selected.put(type, count);
-              selectionChanged();
-            });
-        only.add(button);
-      }
-      targetsPanel.add(leftAligned(only));
-    }
-    final List<Target> allLegal =
-        targets.entrySet().stream().filter(Map.Entry::getValue).map(Map.Entry::getKey).toList();
-    // request 30: in the cover step the list holds only places where something happens; any
-    // other green territory can still be clicked on the map
-    final List<Target> legal =
-        coverMode
-            ? allLegal.stream().filter(t -> isBusy(player, selectedZone, t.territory())).toList()
-            : allLegal;
-    // request 28: how many of each type still have no target
-    final List<String> unassigned = new ArrayList<>();
-    for (final UnitType type : selected.keySet()) {
-      final int free = available(player, selectedZone).getInt(type);
-      unassigned.add(free + " " + typeName(type, free));
-    }
-    targetsPanel.add(leftAligned(new JLabel("Unassigned: " + String.join(", ", unassigned))));
-    targetsPanel.add(
-        leftAligned(
-            new JLabel(
-                coverMode
-                    ? AirSelection.wrap(
-                        allLegal.isEmpty()
-                            ? "Nowhere in reach of all of them."
-                            : legal.size()
-                                + " of the "
-                                + allLegal.size()
-                                + " places in reach have bombers over them (listed here); any green"
-                                + " territory on the map can be clicked. Place sends all picked;"
-                                + " − and + one at a time. Each side may have "
-                                + getData().getProperties().get(AirCover.CAP_FIGHTERS, 4)
-                                + " fighters over a land territory, more over a bombed factory or"
-                                + " a sea zone.")
-                    : legal.isEmpty()
-                        ? "No target in reach of all of them."
-                        : "Targets in reach ("
-                            + legal.size()
-                            + "). Attack sends all picked; − and + send one at a time."
-                            + " Targets are final for the round.")));
-    try (GameData.Unlocker ignored = getData().acquireReadLock()) {
-      for (final Target target : legal) {
-        final JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-        final JButton attack = smallButton(coverMode ? "Place" : "Attack");
-        attack.addActionListener(e -> assign(target));
-        row.add(attack);
-        final JButton show = smallButton("Show");
-        show.addActionListener(e -> getMap().centerOn(target.territory()));
-        row.add(show);
-        final JLabel text = new JLabel(targetLabel(player, target));
-        text.setToolTipText(describe(player, target));
-        row.add(text);
-        targetsPanel.add(leftAligned(row));
-        // request 28: a count per picked type against this target
-        for (final UnitType type : selected.keySet()) {
-          final JPanel counterRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-          counterRow.add(Box.createHorizontalStrut(24));
-          counterRow.add(new JLabel(ResearchView.displayName(type.getName()) + ":"));
-          counterRow.add(counter(player, selectedZone, type, target, true));
-          targetsPanel.add(leftAligned(counterRow));
-        }
-      }
-    }
-    targetsPanel.revalidate();
-    targetsPanel.repaint();
   }
 
   /**
@@ -1660,6 +2082,10 @@ public final class AirTargetPanel extends ActionPanel {
               }
             });
         draw.outlineBox(g, selectedZone, AirDraw.ORIGIN_LINE, 5f);
+      }
+      // request 33: the target shown in the panel
+      if (selectedTarget != null) {
+        draw.outlineBox(g, selectedTarget.territory(), Color.YELLOW, 4f);
       }
       if (selectedZone != null && !selected.isEmpty() && mousePoint != null) {
         paintPreview(g, player);
