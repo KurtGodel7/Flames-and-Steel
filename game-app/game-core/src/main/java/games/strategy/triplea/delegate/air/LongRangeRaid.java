@@ -38,10 +38,11 @@ public class LongRangeRaid {
   static final String DEFAULT_UNITS = "flyingWing";
   static final String DEFAULT_PLAYERS = "Germans";
   static final String DEFAULT_FROM = "Air - Western Europe";
-  static final String DEFAULT_TO = "Air - Bomb USA";
+  // request 32: Bomb USA became Bomb America Atlantic; New Orleans (America Pacific) dropped
+  static final String DEFAULT_TO = "Air - Bomb America Atlantic";
   static final String DEFAULT_TARGETS =
       "Chicago:Detroit:Pittsburgh:New York:Washington:New England:Kentucky-Tennessee:Carolinas"
-          + ":Florida:Mobile:New Orleans";
+          + ":Florida:Mobile";
 
   /** The label in the allocation grid and on the map. */
   public static final String LABEL = "Long-range raid";
