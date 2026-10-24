@@ -146,6 +146,17 @@ class AirCoverTest {
    * one territory, one dogfight round. Returns the bridge of the strike step.
    */
   private IDelegateBridge workedCheck(final Territory t) {
+    // the request 30 worked check was written for Soviet fighters at dogfight 2, interception 3;
+    // request 35 changed the Soviet values, so the check sets those it was written for
+    try {
+      final var tech = russians.getTechAttachment();
+      tech.getPropertyOrThrow("dogfightBonus").resetValue();
+      tech.getPropertyOrThrow("dogfightBonus").setValue("-1:fighter");
+      tech.getPropertyOrThrow("interceptionBonus").resetValue();
+    } catch (final Exception e) {
+      throw new IllegalStateException(e);
+    }
+    data.getTechTracker().clearCache();
     removeFrom(easternFront, easternFront.getUnits());
     removeFrom(t, t.getUnits());
     addTo(easternFront, type("fighter").create(4, germans));

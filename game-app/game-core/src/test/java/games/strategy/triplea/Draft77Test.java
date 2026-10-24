@@ -86,16 +86,17 @@ class Draft77Test {
   }
 
   @Test
-  void sovietModernFightersAndRadiosNeedsTwoStars() {
+  void sovietPilotTrainingNeedsTwoStarsAndRadiosOne() {
+    // request 35: Modern Fighters and Radios (2 stars) became Pilot Training (2) then Radios (1)
     final GamePlayer russians = data.getPlayerList().getPlayerId("Russians");
-    final games.strategy.triplea.delegate.TechAdvance tech =
-        data.getTechnologyFrontier().getTechs().stream()
-            .filter(t -> t.getName().equals("ModernFightersAndRadios"))
-            .findFirst()
-            .orElseThrow();
-    assertThat(
-        games.strategy.triplea.delegate.research.ResearchCenters.getStarsRequired(russians, tech),
-        is(2));
+    for (final var expected : java.util.Map.of("PilotTraining", 2, "Radios", 1).entrySet()) {
+      final games.strategy.triplea.delegate.TechAdvance tech =
+          data.getTechnologyFrontier().getAdvanceByName(expected.getKey());
+      assertThat(
+          games.strategy.triplea.delegate.research.ResearchCenters.getStarsRequired(
+              russians, tech),
+          is(expected.getValue()));
+    }
   }
 
   @Test

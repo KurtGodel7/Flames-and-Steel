@@ -1,5 +1,6 @@
 package games.strategy.triplea.delegate;
 
+import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.UnitType;
 import games.strategy.triplea.attachments.TechAbilityAttachment;
 import games.strategy.triplea.delegate.air.AirCombat;
@@ -18,6 +19,37 @@ import org.triplea.java.collections.IntegerMap;
  */
 @UtilityClass
 public class TechDescriptions {
+  /** Request 35: game property "FS Tech Description &lt;tech&gt;" (and "... &lt;player&gt;"). */
+  public static final String PREFIX = "FS Tech Description ";
+
+  /**
+   * Request 35: the description shown for a tech: the nation's own property ("FS Tech Description
+   * Propaganda1 Russians"), else the tech's ("FS Tech Description Propaganda1"), else the text
+   * built from its unit bonuses.
+   */
+  public static String describe(final TechAdvance tech, final GamePlayer player) {
+    if (player != null && tech.getData() != null) {
+      final String own =
+          tech.getData()
+              .getProperties()
+              .get(PREFIX + tech.getName() + " " + player.getName(), "");
+      if (!own.isBlank()) {
+        return own;
+      }
+    }
+    return describeAnyNation(tech);
+  }
+
+  /** As {@link #describe(TechAdvance, GamePlayer)} where no nation is meant (the tech table). */
+  public static String describeAnyNation(final TechAdvance tech) {
+    if (tech.getData() != null) {
+      final String general = tech.getData().getProperties().get(PREFIX + tech.getName(), "");
+      if (!general.isBlank()) {
+        return general;
+      }
+    }
+    return describe(tech);
+  }
 
   public static String describe(final TechAdvance tech) {
     final TechAbilityAttachment ability = TechAbilityAttachment.get(tech);

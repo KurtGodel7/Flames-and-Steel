@@ -164,8 +164,9 @@ class DogfightValuesTest {
   }
 
   @Test
-  void modernFightersAndRadiosRaisesFightersOnly() {
-    grant(japanese, "ModernFightersAndRadios");
+  void radiosRaisesFightersOnly() {
+    // request 35: Modern Fighters and Radios became Radios
+    grant(japanese, "Radios");
     final List<Unit> aircraft = japaneseAircraft();
 
     assertThat(dogfightValues(aircraft), is(List.of(4, 1, 1, 1)));
@@ -173,12 +174,15 @@ class DogfightValuesTest {
   }
 
   @Test
-  void sovietFightersFireAtTwo() {
+  void sovietFightersFireAtOneUntilPilotTrainingAndRadios() {
+    // request 35: the Soviet penalty is -2; Pilot Training and Radios give +1 each
     final Unit fighter =
         data.getUnitTypeList().getUnitTypeOrThrow("fighter").create(1, russians).get(0);
 
+    assertThat(AirCombat.dogfightValue(fighter), is(1));
+    grant(russians, "PilotTraining");
     assertThat(AirCombat.dogfightValue(fighter), is(2));
-    grant(russians, "ModernFightersAndRadios");
+    grant(russians, "Radios");
     assertThat(AirCombat.dogfightValue(fighter), is(3));
   }
 

@@ -59,6 +59,9 @@ public class TechAttachment extends DefaultAttachment {
   private @Nullable IntegerMap<String> researchStarsRequired = null;
   // Flames and Steel: the nation's own dogfight bonus or penalty per unit type, e.g. "-1:fighter"
   private @Nullable IntegerMap<UnitType> dogfightBonus = null;
+  // Flames and Steel (request 35): the nation's own interception bonus or penalty per unit type,
+  // e.g. "-2:fighter"
+  private @Nullable IntegerMap<UnitType> interceptionBonus = null;
   // Focus of each research centre, one entry per centre: "primary|secondary" (either may be "").
   private @Nullable List<String> researchFocus = null;
 
@@ -440,6 +443,27 @@ public class TechAttachment extends DefaultAttachment {
     return getIntegerMapProperty(dogfightBonus);
   }
 
+  private void setInterceptionBonus(final String value) throws GameParseException {
+    final String[] s = splitOnColon(value);
+    if (s.length != 2) {
+      throw new GameParseException(
+          "interceptionBonus must be a number and a unit type, e.g. -2:fighter" + thisErrorMsg());
+    }
+    if (interceptionBonus == null) {
+      interceptionBonus = new IntegerMap<>();
+    }
+    interceptionBonus.add(getUnitTypeOrThrow(s[1]), getInt(s[0]));
+  }
+
+  private void setInterceptionBonus(final IntegerMap<UnitType> value) {
+    interceptionBonus = value;
+  }
+
+  /** Request 35: the nation's own interception bonus or penalty, by unit type. */
+  public IntegerMap<UnitType> getInterceptionBonus() {
+    return getIntegerMapProperty(interceptionBonus);
+  }
+
   private void setResearchFocus(final String value) {
     if (researchFocus == null) {
       researchFocus = new ArrayList<>();
@@ -587,6 +611,13 @@ public class TechAttachment extends DefaultAttachment {
                   this::setResearchStars,
                   this::getResearchStars,
                   this::resetResearchStars));
+      case "interceptionBonus" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setInterceptionBonus,
+                  this::setInterceptionBonus,
+                  this::getInterceptionBonus,
+                  () -> interceptionBonus = null));
       case "dogfightBonus" ->
           Optional.of(
               MutableProperty.of(

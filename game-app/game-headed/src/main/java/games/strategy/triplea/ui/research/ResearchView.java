@@ -112,7 +112,8 @@ public record ResearchView(
                   required,
                   state,
                   fixedRounds.getOrDefault(tech, 0),
-                  games.strategy.triplea.delegate.TechDescriptions.describe(tech)));
+                  // request 35: the XML's description first
+                  games.strategy.triplea.delegate.TechDescriptions.describe(tech, player)));
         }
         categories.add(new Category(frontier.getName(), List.copyOf(techs), next));
       }

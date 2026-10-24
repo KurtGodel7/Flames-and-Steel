@@ -217,14 +217,14 @@ public final class ResearchBoard extends JPanel implements Scrollable {
         return null;
       }
       final Tech tech = category.techs().get(row);
-      return "<html><b>"
+      return "<html><div style='width:320px'><b>"
           + tech.displayName()
           + "</b> ("
           + tech.required()
           + (tech.required() == 1 ? " star" : " stars")
           + ")"
           + (tech.description().isEmpty() ? "" : "<br>" + tech.description())
-          + "</html>";
+          + "</div></html>";
     }
 
     @Override

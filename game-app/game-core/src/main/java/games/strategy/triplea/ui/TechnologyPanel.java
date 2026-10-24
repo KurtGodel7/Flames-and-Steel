@@ -70,7 +70,7 @@ class TechnologyPanel extends JPanel implements GameDataChangeListener {
       column.setHeaderValue(value);
     }
     // show tooltip for technology names
-    final TableCellRenderer techNameComponentRenderer = new TechNameComponentRenderer();
+    final TableCellRenderer techNameComponentRenderer = new TechNameComponentRenderer(gameData);
     final TableColumn techNameColumn = techTable.getColumnModel().getColumn(0);
     techNameColumn.setHeaderRenderer(techNameComponentRenderer);
     techNameColumn.setCellRenderer(techNameComponentRenderer);
@@ -78,9 +78,30 @@ class TechnologyPanel extends JPanel implements GameDataChangeListener {
   }
 
   static final class TechNameComponentRenderer extends DefaultTableCellRenderer {
+    private final GameData data;
+
+    TechNameComponentRenderer(final GameData data) {
+      this.data = data;
+    }
+
     @Override
     public void setValue(Object aValue) {
-      setToolTipText(aValue.toString());
+      // request 35: the tech's description under its name
+      final String name = String.valueOf(aValue);
+      final TechAdvance tech =
+          data == null ? null : data.getTechnologyFrontier().getAdvanceByName(name);
+      final String description =
+          tech == null
+              ? ""
+              : games.strategy.triplea.delegate.TechDescriptions.describeAnyNation(tech);
+      setToolTipText(
+          description.isEmpty()
+              ? name
+              : "<html><div style='width:320px'><b>"
+                  + name
+                  + "</b><br>"
+                  + description
+                  + "</div></html>");
       super.setValue(aValue);
     }
   }

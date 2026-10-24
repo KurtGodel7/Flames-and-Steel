@@ -84,7 +84,10 @@ public class TechTracker {
   /** Flames and Steel (request 27): added interception value from the nation's techs for this type. */
   public int getInterceptionBonus(GamePlayer player, UnitType type) {
     final Supplier<Integer> getter =
-        () -> getSumOfBonuses(TechAbilityAttachment::getInterceptionBonus, type, player);
+        () ->
+            getSumOfBonuses(TechAbilityAttachment::getInterceptionBonus, type, player)
+                // request 35: plus the nation's own (the Soviet -2)
+                + player.getTechAttachment().getInterceptionBonus().getInt(type);
     return getCached(player, type, "getInterceptionBonus", getter);
   }
 
