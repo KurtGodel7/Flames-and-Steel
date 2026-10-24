@@ -81,6 +81,8 @@ public class ServerGame extends AbstractGame {
   private final LaunchAction launchAction;
   private final ClientNetworkBridge clientNetworkBridge;
   @Setter private boolean delegateAutosavesEnabled = true;
+  // Flames and Steel (request 36): the nation whose step ran last, to see where a turn begins
+  private @Nullable GamePlayer lastNation;
 
   /**
    * When the delegate execution is stopped, we countdown on this latch to prevent the
@@ -313,6 +315,10 @@ public class ServerGame extends AbstractGame {
 
   /** Starts the game in a new thread. */
   public void startGame() {
+    // request 36: until the game ends normally, the start-up screen can offer to resume it
+    if (delegateAutosavesEnabled) {
+      RollingAutoSave.markRunning();
+    }
     try {
       setUpGameForRunningSteps();
       while (!isGameOver) {
@@ -358,6 +364,7 @@ public class ServerGame extends AbstractGame {
    * will then be shut down.
    */
   public void stopGame() {
+    RollingAutoSave.markStopped();
     if (isGameOver) {
       log.warn("Game previously stopped, cannot stop again.");
       return;
@@ -476,12 +483,25 @@ public class ServerGame extends AbstractGame {
     if (isGameOver) {
       return;
     }
-    if (gameData.getSequence().next()) {
+    final boolean newRound = gameData.getSequence().next();
+    if (newRound) {
       gameData.getHistory().getHistoryWriter().startNextRound(gameData.getSequence().getRound());
       saveGame(
           gameData.getSequence().getRound() % 2 == 0
               ? launchAction.getAutoSaveFileUtils().getEvenRoundAutoSaveFile()
               : launchAction.getAutoSaveFileUtils().getOddRoundAutoSaveFile());
+    }
+    // Flames and Steel (request 36): rolling autosaves that never overwrite each other
+    if (delegateAutosavesEnabled) {
+      try {
+        RollingAutoSave.afterHostStep(
+            gameData, delegateExecutionManager, currentStep, newRound, lastNation);
+      } catch (final RuntimeException e) {
+        log.warn("Rolling autosave failed", e);
+      }
+    }
+    if (currentStep.getPlayerId() != null && !currentStep.getPlayerId().isNull()) {
+      lastNation = currentStep.getPlayerId();
     }
     // Turn off Edit Mode if we're transitioning to an AI player to prevent infinite round combats.
     if (EditDelegate.getEditMode(gameData.getProperties())) {

@@ -190,6 +190,28 @@ WARNING: restart all running TripleA instances after changing this setting to av
     }
   },
 
+  FS_AUTOSAVE_PER_STEP_BINDING(
+      "Autosave after every step",
+      SettingType.GAME,
+      "Flames and Steel: save after every step a nation plays and every air phase step, as well as"
+          + " at each turn start and round start. Off: turn and round starts only.") {
+    @Override
+    public SelectionComponent<JComponent> newSelectionComponent() {
+      return booleanRadioButtons(ClientSetting.fsAutoSavePerStep);
+    }
+  },
+
+  FS_AUTOSAVE_ROLLING_BINDING(
+      "Rolling autosaves kept",
+      SettingType.GAME,
+      "Flames and Steel: how many step autosaves to keep in the autoSave folder; older ones are"
+          + " deleted. One save per round is always kept.") {
+    @Override
+    public SelectionComponent<JComponent> newSelectionComponent() {
+      return intValueRange(ClientSetting.fsAutoSaveRolling, 2, 200);
+    }
+  },
+
   NOTIFY_ALL_UNITS_MOVED(
       "Notify When All Units Moved",
       SettingType.GAME,

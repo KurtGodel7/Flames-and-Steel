@@ -27,6 +27,9 @@ import org.triplea.java.Interruptibles;
 /** Implementation of {@link IGame} for a network client node. */
 @Slf4j
 public class ClientGame extends AbstractGame {
+  // Flames and Steel (request 36): the nation of the last step seen, to see where a turn begins
+  private GamePlayer lastNation;
+
   public ClientGame(
       final GameData data,
       final Set<Player> gamePlayers,
@@ -75,9 +78,13 @@ public class ClientGame extends AbstractGame {
               final int round,
               final String displayName,
               final boolean loadedFromSavedGame) {
+            // request 36: the client's own copies, where nothing is secret
+            final int roundBefore = gameData.getSequence().getRound();
+            final GamePlayer nationBefore = lastNation;
             // we want to skip the first iteration, since that simply advances us to step 0
             if (firstRun) {
               firstRun = false;
+              RollingAutoSave.markRunning();
             } else {
               try (GameData.Unlocker ignored = gameData.acquireWriteLock()) {
                 gameData.getSequence().next();
@@ -122,6 +129,18 @@ public class ClientGame extends AbstractGame {
                   .startNextStep(stepName, delegateName, player, displayName);
             }
             CasualtySelector.clearOolCache();
+            if (!loadedFromSavedGame) {
+              try {
+                RollingAutoSave.afterClientStep(
+                    gameData, gameData.getSequence().getRound() > roundBefore, nationBefore);
+              } catch (final RuntimeException e) {
+                // only a copy
+              }
+            }
+            final GamePlayer stepNation = gameData.getSequence().getStep().getPlayerId();
+            if (stepNation != null && !stepNation.isNull()) {
+              lastNation = stepNation;
+            }
             gameData.fireGameDataEvent(GameDataEvent.GAME_STEP_CHANGED);
           }
 
@@ -190,6 +209,7 @@ public class ClientGame extends AbstractGame {
    * player associated with this node.
    */
   public void shutDown() {
+    RollingAutoSave.markStopped();
     if (isGameOver) {
       return;
     }

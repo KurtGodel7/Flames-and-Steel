@@ -182,6 +182,11 @@ public abstract class ClientSetting<T> implements GameSetting<T> {
   public static final ClientSetting<Boolean> unitScrollerHighlightTerritory =
       new BooleanClientSetting("UNIT_SCROLLER_HIGHLIGHT_TERRITORY", true);
 
+  // Flames and Steel (request 36): rolling autosaves kept, and whether to save after every step
+  public static final ClientSetting<Integer> fsAutoSaveRolling =
+      new IntegerClientSetting("FS_AUTOSAVE_ROLLING", 20);
+  public static final ClientSetting<Boolean> fsAutoSavePerStep =
+      new BooleanClientSetting("FS_AUTOSAVE_PER_STEP", true);
   public static final ClientSetting<Boolean> unitScrollerCollapsed =
       new BooleanClientSetting("UNIT_SCROLLER_COLLAPSED", false);
 

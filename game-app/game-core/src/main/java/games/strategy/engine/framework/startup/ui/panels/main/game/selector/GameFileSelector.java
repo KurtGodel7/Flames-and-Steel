@@ -59,6 +59,20 @@ public final class GameFileSelector {
     return path;
   }
 
+  /** Request 36: an open dialog in the autosave folder (the fork's autosaves sort in play order). */
+  public static Optional<Path> selectAutoSave(final Frame frame) {
+    return FileChooser.builder()
+        .parent(frame)
+        .directory(games.strategy.engine.framework.RollingAutoSave.hostFolder())
+        .filenameFilter((dir, name) -> GameDataFileUtils.isCandidateFileName(name))
+        .fileExtension(GameDataFileUtils.getExtension())
+        .mode(FileDialog.LOAD)
+        .title("Open Autosave")
+        .build()
+        .chooseFile()
+        .filter(Files::exists);
+  }
+
   private static FileChooser.FileChooserBuilder createFileChooser(final Frame frame) {
     return FileChooser.builder()
         .parent(frame)

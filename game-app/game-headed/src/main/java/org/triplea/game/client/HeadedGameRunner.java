@@ -222,6 +222,8 @@ public final class HeadedGameRunner {
       MainFrame.show();
       gameSelectorModel.loadDefaultGameSameThread();
       openMapDownloadWindowIfDownloadScheduled();
+      // Flames and Steel (request 36): offer to resume a game that did not close normally
+      games.strategy.engine.framework.ui.AutoSaveRecovery.offer();
     }
   }
 

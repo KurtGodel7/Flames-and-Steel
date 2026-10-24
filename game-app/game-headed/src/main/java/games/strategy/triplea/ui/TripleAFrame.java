@@ -419,6 +419,9 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
 
     final MovePanel movePanel = new MovePanel(this);
     actionButtonsPanel = new ActionButtonsPanel(movePanel, this);
+    // request 36: a failed autosave shows one line in the bottom bar
+    games.strategy.engine.framework.RollingAutoSave.setFailureListener(
+        message -> SwingUtilities.invokeLater(() -> setStatusErrorMessage(message)));
 
     final CollapsiblePanel placementsPanel =
         new PlacementUnitsCollapsiblePanel(data, uiContext).getPanel();
