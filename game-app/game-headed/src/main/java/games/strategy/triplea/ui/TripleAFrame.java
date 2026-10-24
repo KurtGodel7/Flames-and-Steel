@@ -1720,7 +1720,7 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
                         JOptionPane.showMessageDialog(
                             TripleAFrame.this,
                             "<html><h2>Pass to the "
-                                + gamePlayer.getName()
+                                + games.strategy.triplea.formatter.PlayerNames.display(gamePlayer)
                                 + " player</h2>"
                                 + (stage == Stage.BOMBERS ? "Bomber" : "Fighter")
                                 + " allocation is hidden from enemies.<br>"
