@@ -47,7 +47,9 @@ public class AirCombat {
     /** A factory territory of the bombed nation (strategic bombing). */
     STRATEGIC,
     /** Request 30: fighter-types placed over a territory, to escort or defend (see AirCover). */
-    COVER
+    COVER,
+    /** Request 35: aircraft that move to the named air box with no target (see AirStage). */
+    MOVE
   }
 
   /** A target a nation's bombers in an air zone may attack. */
@@ -61,6 +63,7 @@ public class AirCombat {
         case SUBS -> territory.getName() + ": submarines";
         case STRATEGIC -> territory.getName() + ": strategic bombing";
         case COVER -> territory.getName() + ": fighter cover";
+        case MOVE -> "move to " + AirAllocation.zoneName(territory);
       };
     }
   }

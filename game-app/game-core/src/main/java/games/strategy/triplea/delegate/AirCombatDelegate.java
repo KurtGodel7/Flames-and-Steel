@@ -87,12 +87,22 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
     super.start();
     // request 27: "airDogfights" does nothing; the whole fight is in the strike step
     if (stepName().startsWith("airStrikes")) {
-      if (!hasCoverSteps()) {
+      if (!hasCoverSteps() && !AirStageDelegate.usesStages(getData())) {
         askForCover();
       }
       resolveAirPhase();
       returnRaiders();
     }
+  }
+
+  /** Request 35: the bomber targets chosen in the simultaneous bomber stage. */
+  void setStageBombers(final Map<GamePlayer, List<TargetAssignment>> targets) {
+    pending = copy(targets);
+  }
+
+  /** Request 35: the fighter placements chosen in the simultaneous fighter stage. */
+  void setStageCover(final Map<GamePlayer, List<TargetAssignment>> cover) {
+    pendingCover = copy(cover);
   }
 
   private boolean isTargetStep() {
@@ -895,7 +905,7 @@ public class AirCombatDelegate extends BaseTripleADelegate implements IAirCombat
                           AirCombat.atWar(attacker, u.getOwner())
                               && (Matches.unitCanProduceUnits().test(u)
                                   || ApcAttachment.isApc(u.getType())));
-          case COVER -> List.of(); // fighter cover is never a strike
+          case COVER, MOVE -> List.of(); // fighter cover and moves are never strikes
         };
     final List<Unit> defenders = new ArrayList<>(targets);
     aaGuns.stream().filter(u -> !defenders.contains(u)).forEach(defenders::add);

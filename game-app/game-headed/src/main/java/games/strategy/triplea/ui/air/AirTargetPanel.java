@@ -114,6 +114,9 @@ public final class AirTargetPanel extends ActionPanel {
   private @Nullable PickTargetDialog pickDialog;
   // request 30: the fighter cover step uses this panel too
   private boolean coverMode;
+  // request 35: the simultaneous air stage this screen belongs to (null: the per-nation steps).
+  // Choices are kept by the box the aircraft start in; a target in an adjacent box moves them.
+  private @Nullable games.strategy.triplea.delegate.air.AirAllocation.Stage stage;
   // request 30: every nation's bomber targets (cover step) and the allies' choices so far
   private Map<GamePlayer, List<TargetAssignment>> revealed = Map.of();
   private Map<GamePlayer, List<TargetAssignment>> allied = Map.of();
@@ -252,8 +255,40 @@ public final class AirTargetPanel extends ActionPanel {
       final boolean cover,
       final Map<GamePlayer, List<TargetAssignment>> revealed,
       final Map<GamePlayer, List<TargetAssignment>> allied) {
+    start(player, start, store, cover, revealed, allied, null);
+  }
+
+  /**
+   * Request 35: the nation's screen in a simultaneous air stage: bombers (move and target) or
+   * fighters (move and place). The choices are returned in origin form; see {@link
+   * games.strategy.triplea.delegate.air.AirStage#toChoice}.
+   */
+  public void startStage(
+      final GamePlayer player,
+      final games.strategy.triplea.delegate.air.AirAllocation.Stage stage,
+      final List<TargetAssignment> start,
+      final Map<GamePlayer, List<TargetAssignment>> bombers) {
+    start(
+        player,
+        start,
+        staged -> {},
+        stage == games.strategy.triplea.delegate.air.AirAllocation.Stage.FIGHTERS,
+        bombers,
+        Map.of(),
+        stage);
+  }
+
+  private void start(
+      final GamePlayer player,
+      final List<TargetAssignment> start,
+      final Consumer<List<TargetAssignment>> store,
+      final boolean cover,
+      final Map<GamePlayer, List<TargetAssignment>> revealed,
+      final Map<GamePlayer, List<TargetAssignment>> allied,
+      final @Nullable games.strategy.triplea.delegate.air.AirAllocation.Stage stage) {
     SwingUtilities.invokeLater(
         () -> {
+          this.stage = stage;
           coverMode = cover;
           this.revealed = new HashMap<>(revealed);
           this.allied = new HashMap<>(allied);
@@ -330,6 +365,17 @@ public final class AirTargetPanel extends ActionPanel {
 
   /** What this nation's aircraft of the type in the zone may be sent to. */
   private List<Target> targetsFor(final GamePlayer player, final Territory zone, final UnitType type) {
+    if (stage != null) {
+      // request 35: targets in this box and in the boxes it may move to, and the moves themselves
+      final List<Target> result =
+          new ArrayList<>(
+              games.strategy.triplea.delegate.air.AirStage.candidates(
+                      player, zone, type, stage, revealed)
+                  .keySet());
+      games.strategy.triplea.delegate.air.AirStage.neighbours(player, zone, type)
+          .forEach(box -> result.add(games.strategy.triplea.delegate.air.AirStage.moveTo(box)));
+      return result;
+    }
     if (coverMode) {
       return AirCover.places(player, zone, type, revealed).stream().map(AirCover::over).toList();
     }
@@ -338,7 +384,7 @@ public final class AirTargetPanel extends ActionPanel {
 
   /** Every target in the zone for the step's aircraft there. */
   private List<Target> allTargets(final GamePlayer player, final Territory zone) {
-    if (!coverMode) {
+    if (!coverMode && stage == null) {
       return AirCombat.getTargets(player, zone);
     }
     final java.util.Set<Target> result = new java.util.LinkedHashSet<>();
@@ -351,7 +397,7 @@ public final class AirTargetPanel extends ActionPanel {
 
   private boolean mayGo(
       final GamePlayer player, final Territory zone, final UnitType type, final Target target) {
-    return coverMode
+    return coverMode || stage != null
         ? targetsFor(player, zone, type).contains(target)
         : AirCombat.mayAttack(player, zone, type, target);
   }
@@ -359,12 +405,42 @@ public final class AirTargetPanel extends ActionPanel {
   /** The nation's own choices and its allies', for the caps. */
   private Map<GamePlayer, List<TargetAssignment>> sideChoices(final GamePlayer player) {
     final Map<GamePlayer, List<TargetAssignment>> all = new HashMap<>(allied);
-    all.put(player, List.copyOf(staged));
+    all.put(
+        player,
+        stage == null
+            ? List.copyOf(staged)
+            : games.strategy.triplea.delegate.air.AirStage.toChoice(player, stage, staged, revealed)
+                .targets());
     return all;
   }
 
+  /**
+   * Request 35: the box whose battle a place belongs to, for aircraft starting in this box: the box
+   * itself if it covers the place, else the adjacent box that does.
+   */
+  private Territory placeBox(final GamePlayer player, final Territory origin, final Territory t) {
+    if (stage == null || origin == null) {
+      return origin;
+    }
+    for (final Unit u : myAircraft(player, origin)) {
+      for (final var e :
+          games.strategy.triplea.delegate.air.AirStage.candidates(
+                  player, origin, u.getType(), stage, revealed)
+              .entrySet()) {
+        if (e.getKey().territory().equals(t)) {
+          return e.getValue();
+        }
+      }
+    }
+    return origin;
+  }
+
   /** How many more of this step's aircraft the nation's side may send over the territory. */
-  private int room(final GamePlayer player, final Territory zone, final Territory t) {
+  private int room(final GamePlayer player, final Territory origin, final Territory t) {
+    if (AirZoneAttachment.isAirZone(t)) {
+      return Integer.MAX_VALUE; // request 35: a move to a box has no cap
+    }
+    final Territory zone = placeBox(player, origin, t);
     final int cap = AirCover.cap(player, zone, t, coverMode, revealed);
     if (cap == AirCover.NO_CAP) {
       return Integer.MAX_VALUE;
@@ -376,7 +452,8 @@ public final class AirTargetPanel extends ActionPanel {
    * Request 30: a place's counts against the caps for the nation's side, e.g. "B 3/4 F 2/4"; in the
    * cover step bombers are the side's revealed bombers, and the enemy's follow ("enemy B 2").
    */
-  private String badge(final GamePlayer player, final Territory zone, final Territory t) {
+  private String badge(final GamePlayer player, final Territory origin, final Territory t) {
+    final Territory zone = placeBox(player, origin, t);
     final Map<GamePlayer, List<TargetAssignment>> bombers =
         coverMode ? revealed : sideChoices(player);
     final int b = AirCover.sideCount(player, zone, t, false, bombers);
@@ -559,6 +636,15 @@ public final class AirTargetPanel extends ActionPanel {
       return;
     }
     if (AirZoneAttachment.isAirZone(territory)) {
+      // request 35: in a stage, with aircraft picked, a click on a box they may move to moves them
+      if (stage != null
+          && selectedZone != null
+          && !territory.equals(selectedZone)
+          && sendable(player, selectedZone, games.strategy.triplea.delegate.air.AirStage.moveTo(territory))
+              > 0) {
+        assign(games.strategy.triplea.delegate.air.AirStage.moveTo(territory));
+        return;
+      }
       selectBombers(player, territory, units, md);
       return;
     }
@@ -698,7 +784,8 @@ public final class AirTargetPanel extends ActionPanel {
         staged.add(new TargetAssignment(zone, type, count, target));
       }
     }
-    selectedTarget = target;
+    // a move with no target has nothing to show in the target block
+    selectedTarget = target.kind() == TargetKind.MOVE ? null : target;
     resetSend(zone);
     selectionChanged();
     strikesChanged();
@@ -728,7 +815,9 @@ public final class AirTargetPanel extends ActionPanel {
       for (final Territory zone : AirZoneAttachment.getAirZones(getData().getMap())) {
         final IntegerMap<UnitType> free = available(player, zone);
         for (final UnitType type : free.keySet()) {
-          if (free.getInt(type) > 0 && !targetsFor(player, zone, type).isEmpty()) {
+          if (free.getInt(type) > 0
+              && targetsFor(player, zone, type).stream()
+                  .anyMatch(t -> t.kind() != TargetKind.MOVE)) {
             result.add(new Group(zone, type));
           }
         }
@@ -923,6 +1012,7 @@ public final class AirTargetPanel extends ActionPanel {
               + "; "
               + badge(player, selectedZone, t);
       case COVER -> coverText(player, t, aaText);
+      case MOVE -> "Move to " + AirAllocation.zoneName(t) + " with no target";
     };
   }
 
@@ -934,7 +1024,7 @@ public final class AirTargetPanel extends ActionPanel {
     final List<String> enemy = new ArrayList<>();
     for (final Map.Entry<GamePlayer, List<TargetAssignment>> e : revealed.entrySet()) {
       for (final TargetAssignment a : e.getValue()) {
-        if (a.zone().equals(selectedZone) && a.target().territory().equals(t)) {
+        if (a.zone().equals(placeBox(player, selectedZone, t)) && a.target().territory().equals(t)) {
           enemy.add(
               (AirCombat.atWar(player, e.getKey()) ? "enemy " : "own side ")
                   + a.count()
@@ -1024,6 +1114,7 @@ public final class AirTargetPanel extends ActionPanel {
       case SUBS -> "Submarines";
       case STRATEGIC -> "Strategic bombing";
       case COVER -> "Fighter cover";
+      case MOVE -> "Move (no target)";
     };
   }
 
@@ -1063,6 +1154,10 @@ public final class AirTargetPanel extends ActionPanel {
   private static final int ROW_HEIGHT = 26;
 
   private String stepTitle() {
+    if (stage != null) {
+      // request 35: one screen for moving and choosing
+      return coverMode ? "Fighters: Move and Place" : "Bombers: Move and Target";
+    }
     return coverMode ? "Place Fighters" : "Assign Bomber Targets";
   }
 
@@ -1117,9 +1212,11 @@ public final class AirTargetPanel extends ActionPanel {
                     : waiting + (waiting == 1 ? " group waiting" : " groups waiting"))
                 + " · "
                 + staged.size()
-                + (coverMode
-                    ? (staged.size() == 1 ? " placement made" : " placements made")
-                    : (staged.size() == 1 ? " strike made" : " strikes made")));
+                + (stage != null
+                    ? (staged.size() == 1 ? " choice made" : " choices made")
+                    : coverMode
+                        ? (staged.size() == 1 ? " placement made" : " placements made")
+                        : (staged.size() == 1 ? " strike made" : " strikes made")));
     status.setBorder(BorderFactory.createEmptyBorder(2, 5, 2, 0));
     layout.top().add(leftAligned(status));
     // 3. moves made, always in view, newest first
@@ -1203,6 +1300,17 @@ public final class AirTargetPanel extends ActionPanel {
    * cover step "Bialystok ← 2 fighters (escort)"; the front is named when it is not the one shown.
    */
   String moveText(final GamePlayer player, final TargetAssignment a) {
+    if (a.target().kind() == TargetKind.MOVE) {
+      return "→ "
+          + AirAllocation.zoneName(a.target().territory())
+          + ": "
+          + a.count()
+          + " "
+          + typeName(a.unitType(), a.count())
+          + " (move, no target)"
+          + (a.zone().equals(selectedZone) ? "" : " from " + AirAllocation.zoneName(a.zone()));
+    }
+    final Territory endBox = placeBox(player, a.zone(), a.target().territory());
     final String kind =
         switch (a.target().kind()) {
           case SURFACE -> " (surface ships)";
@@ -1213,9 +1321,9 @@ public final class AirTargetPanel extends ActionPanel {
     final String role;
     if (!coverMode) {
       role = "";
-    } else if (AirCover.sideCount(player, a.zone(), a.target().territory(), false, revealed) > 0) {
+    } else if (AirCover.sideCount(player, endBox, a.target().territory(), false, revealed) > 0) {
       role = " (escort)";
-    } else if (enemyBombers(player, a.zone(), a.target().territory()) > 0) {
+    } else if (enemyBombers(player, endBox, a.target().territory()) > 0) {
       role = " (defend)";
     } else {
       role = " (cover)";
@@ -1227,6 +1335,7 @@ public final class AirTargetPanel extends ActionPanel {
         + " "
         + typeName(a.unitType(), a.count())
         + role
+        + (endBox.equals(a.zone()) ? "" : " (moves to " + AirAllocation.zoneName(endBox) + ")")
         + (a.zone().equals(selectedZone) ? "" : " from " + AirAllocation.zoneName(a.zone()));
   }
 
@@ -2068,7 +2177,17 @@ public final class AirTargetPanel extends ActionPanel {
       if (selectedZone != null) {
         final AirZoneAttachment zone = AirZoneAttachment.get(selectedZone).orElseThrow();
         final Map<Territory, Boolean> legalPlaces = new HashMap<>();
-        targets.forEach((t, legal) -> legalPlaces.merge(t.territory(), legal, Boolean::logicalOr));
+        targets.forEach(
+            (t, legal) -> {
+              if (t.kind() == TargetKind.MOVE) {
+                // request 35: a box the picked aircraft may move to is outlined
+                if (legal) {
+                  draw.outlineBox(g, t.territory(), AirDraw.LEGAL_LINE, 3f);
+                }
+              } else {
+                legalPlaces.merge(t.territory(), legal, Boolean::logicalOr);
+              }
+            });
         for (final Territory t : zone.getCoveredTerritories()) {
           if (!legalPlaces.getOrDefault(t, false)) {
             fill(g, t, DIM_FILL);
@@ -2119,6 +2238,9 @@ public final class AirTargetPanel extends ActionPanel {
         revealed.values().forEach(withBadges::addAll);
       }
       for (final TargetAssignment a : withBadges) {
+        if (a.target().kind() == TargetKind.MOVE) {
+          continue;
+        }
         if (badged.add(a.zone().getName() + "|" + a.target().territory().getName())) {
           final Point end = draw.middle(a.target().territory());
           AirDraw.tag(
@@ -2131,6 +2253,13 @@ public final class AirTargetPanel extends ActionPanel {
       }
       // strikes: arrow from the box to the target, with the bombers and count at the target
       for (final TargetAssignment a : staged) {
+        if (a.target().kind() == TargetKind.MOVE) {
+          // request 35: a move with no target, box to box
+          AirDraw.arrow(
+              g, draw.center(a.zone()), draw.center(a.target().territory()), STRIKE_LINE, 4f, false,
+              "", 6);
+          continue;
+        }
         final Point end = draw.middle(a.target().territory());
         final int n = perTarget.merge(a.target().territory(), 1, Integer::sum) - 1;
         final Point icon = new Point(end.x - 16 + n * 34, end.y - 16);

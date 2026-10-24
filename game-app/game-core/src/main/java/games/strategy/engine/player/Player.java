@@ -276,6 +276,43 @@ public interface Player extends IRemote {
   }
 
   /**
+   * Flames and Steel (request 35): the nation's choice in a simultaneous air stage (bombers: moves
+   * and targets; fighters: moves and placements). Every nation is asked at once; a computer playing
+   * several nations shows them one after another in the given order. Players that don't ask (AI)
+   * make no moves.
+   *
+   * @param stage the stage
+   * @param order the nations being asked, in turn order
+   * @param start the choice so far (empty, or the last one refused)
+   * @param bombers every nation's bomber targets (fighter stage; empty in the bomber stage)
+   * @param bomberMoves every nation's bomber moves (fighter stage; empty in the bomber stage)
+   * @param problem why the last choice was refused, or ""
+   */
+  @RemoteActionCode(32)
+  default games.strategy.triplea.delegate.air.AirStage.Choice selectAirStage(
+      final games.strategy.triplea.delegate.air.AirAllocation.Stage stage,
+      final java.util.List<GamePlayer> order,
+      final games.strategy.triplea.delegate.air.AirStage.Choice start,
+      final java.util.Map<
+              GamePlayer,
+              java.util.List<games.strategy.triplea.delegate.air.AirCombat.TargetAssignment>>
+          bombers,
+      final java.util.Map<
+              GamePlayer,
+              java.util.List<games.strategy.triplea.delegate.air.AirAllocation.AirMove>>
+          bomberMoves,
+      final String problem) {
+    return games.strategy.triplea.delegate.air.AirStage.Choice.none();
+  }
+
+  /**
+   * Flames and Steel (request 35): the nations a simultaneous air stage still waits for, so a
+   * player whose nations are done can see who is left (names only, never choices).
+   */
+  @RemoteActionCode(33)
+  default void airStageWaiting(final java.util.List<String> waitingFor) {}
+
+  /**
    * Ask the player if he wishes to retreat.
    *
    * @param battleId - the battle

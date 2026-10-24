@@ -910,6 +910,27 @@ public class TripleAPlayer extends AbstractBasePlayer {
     return ui.getAirTargets(getGamePlayer(), start, staged -> {}, true, bombers, allied);
   }
 
+  /** Request 35: this nation's screen in a simultaneous air stage. */
+  @Override
+  public games.strategy.triplea.delegate.air.AirStage.Choice selectAirStage(
+      final Stage stage,
+      final List<GamePlayer> order,
+      final games.strategy.triplea.delegate.air.AirStage.Choice start,
+      final Map<GamePlayer, List<TargetAssignment>> bombers,
+      final Map<GamePlayer, List<AirMove>> bomberMoves,
+      final String problem) {
+    if (getPlayerBridge().isGameOver()) {
+      return games.strategy.triplea.delegate.air.AirStage.Choice.none();
+    }
+    return ui.getAirStage(getGamePlayer(), stage, order, bombers, problem);
+  }
+
+  /** Request 35: who a simultaneous air stage still waits for. */
+  @Override
+  public void airStageWaiting(final List<String> waitingFor) {
+    ui.airStageWaiting(waitingFor);
+  }
+
   @Override
   public IntegerMap<UnitType> selectFleetAircraft(
       final IntegerMap<UnitType> available,

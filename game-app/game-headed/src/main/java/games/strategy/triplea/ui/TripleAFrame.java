@@ -206,6 +206,12 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
   private @Nullable AirPanel airPanel;
   @Getter private @Nullable AirMapMode airMapMode;
   private @Nullable GamePlayer lastAirAllocator;
+  // request 35: this computer's nations in a simultaneous air stage go one at a time, in turn order
+  private final games.strategy.triplea.ui.air.AirStageTurnstile airStageTurnstile =
+      new games.strategy.triplea.ui.air.AirStageTurnstile();
+  // request 35: each nation's last choices on its stage screen, restored if the host refuses them
+  private final Map<GamePlayer, List<TargetAssignment>> airStageLast =
+      new java.util.concurrent.ConcurrentHashMap<>();
   private final EconomyPanel economyPanel;
   private final Runnable clientLeftGame;
   private @Nullable ObjectivePanel objectivePanel;
@@ -1738,6 +1744,116 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
     actionButtonsPanel.changeToAirAllocation(gamePlayer);
     panel.start(gamePlayer, stage, start, allied, revealed, store);
     return panel.waitForAllocation();
+  }
+
+  /**
+   * Request 35: one nation's screen in a simultaneous air stage. Waits until every earlier nation
+   * this computer plays has finished, shows the "pass to the next player" screen between enemies on
+   * one computer, then the stage screen until Done.
+   */
+  public games.strategy.triplea.delegate.air.AirStage.Choice getAirStage(
+      final GamePlayer gamePlayer,
+      final games.strategy.triplea.delegate.air.AirAllocation.Stage stage,
+      final List<GamePlayer> order,
+      final Map<GamePlayer, List<TargetAssignment>> bombers,
+      final String problem) {
+    final int round;
+    try (GameData.Unlocker ignored = data.acquireReadLock()) {
+      round = data.getSequence().getRound();
+    }
+    final java.util.function.Predicate<GamePlayer> local = p -> getLocalPlayers().playing(p);
+    try {
+      airStageTurnstile.await(stage + " round " + round, order, gamePlayer, local);
+    } catch (final InterruptedException e) {
+      Thread.currentThread().interrupt();
+      return games.strategy.triplea.delegate.air.AirStage.Choice.none();
+    }
+    try {
+      messageAndDialogThreadPool.waitForAll();
+      passToNextPlayer(
+          gamePlayer,
+          stage == games.strategy.triplea.delegate.air.AirAllocation.Stage.BOMBERS
+              ? "Bomber moves and targets"
+              : "Fighter moves and placements");
+      if (!problem.isEmpty()) {
+        notifyError(problem);
+      }
+      requestWindowFocus();
+      final AirTargetPanel panel = actionButtonsPanel.getAirTargetPanel();
+      if (panel == null) {
+        return games.strategy.triplea.delegate.air.AirStage.Choice.none();
+      }
+      actionButtonsPanel.changeToAirTargets(gamePlayer);
+      SwingUtilities.invokeLater(this::showActionPanelTab);
+      panel.startStage(
+          gamePlayer,
+          stage,
+          problem.isEmpty() ? List.of() : airStageLast.getOrDefault(gamePlayer, List.of()),
+          bombers);
+      final List<TargetAssignment> origin = panel.waitForTargets();
+      airStageLast.put(gamePlayer, origin);
+      try (GameData.Unlocker ignored = data.acquireReadLock()) {
+        return games.strategy.triplea.delegate.air.AirStage.toChoice(
+            gamePlayer, stage, origin, bombers);
+      }
+    } finally {
+      airStageTurnstile.finish(gamePlayer);
+      if (airStageTurnstile.localLeft(order, local).isEmpty()) {
+        airStageWaiting(List.of("the other players"));
+      }
+    }
+  }
+
+  /** Request 35: the stage is still waiting for these nations (names only). */
+  public void airStageWaiting(final List<String> waitingFor) {
+    if (actionButtonsPanel == null || airStageTurnstile.isBusy()) {
+      return;
+    }
+    final String step;
+    try (GameData.Unlocker ignored = data.acquireReadLock()) {
+      step = data.getSequence().getStep().getDisplayName();
+    }
+    actionButtonsPanel.changeToStepInfo(
+        null,
+        step,
+        waitingFor.isEmpty()
+            ? "Everyone has chosen."
+            : "Done. Waiting for: " + String.join(", ", waitingFor));
+  }
+
+  /**
+   * On one computer playing both sides: before an enemy's hidden choice, "Pass to the ... player".
+   */
+  private void passToNextPlayer(final GamePlayer gamePlayer, final String what) {
+    final long localHumans =
+        getLocalPlayers().getLocalPlayers().stream().filter(p -> !p.isAi()).count();
+    final GamePlayer previous = lastAirAllocator;
+    lastAirAllocator = gamePlayer;
+    if (localHumans <= 1 || previous == null || previous.equals(gamePlayer)) {
+      return;
+    }
+    final boolean enemies;
+    try (GameData.Unlocker ignored = data.acquireReadLock()) {
+      enemies = data.getRelationshipTracker().isAtWar(previous, gamePlayer);
+    }
+    if (!enemies) {
+      return;
+    }
+    Interruptibles.await(
+        () ->
+            SwingAction.invokeAndWait(
+                () ->
+                    JOptionPane.showMessageDialog(
+                        TripleAFrame.this,
+                        "<html><h2>Pass to the "
+                            + games.strategy.triplea.formatter.PlayerNames.display(gamePlayer)
+                            + " player</h2>"
+                            + what
+                            + " are hidden from enemies.<br>"
+                            + games.strategy.triplea.formatter.PlayerNames.display(previous)
+                            + ": please look away.</html>",
+                        games.strategy.triplea.formatter.PlayerNames.display(gamePlayer),
+                        JOptionPane.INFORMATION_MESSAGE)));
   }
 
   /**

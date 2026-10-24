@@ -79,6 +79,9 @@ class Request35Test {
 
   /** What the cloud session will add to the Soviet techAttachment. */
   private void sovietInterceptionPenalty() throws Exception {
+    if (!russians.getTechAttachment().getInterceptionBonus().isEmpty()) {
+      return; // the XML has it now
+    }
     for (final String type : FIGHTER_TYPES) {
       russians.getTechAttachment().getPropertyOrThrow("interceptionBonus").setValue("-2:" + type);
     }

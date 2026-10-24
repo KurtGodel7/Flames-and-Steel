@@ -394,7 +394,7 @@ public final class AirMapMode implements MapOverlay {
 
   // the map XML's names for the air allocation and air combat delegates
   private static final Set<String> AIR_DELEGATE_NAMES =
-      java.util.Set.of("airAllocation", "airCombat");
+      java.util.Set.of("airAllocation", "airCombat", "airStage");
 
   static boolean isAirStep(final @Nullable GameStep step) {
     if (step == null) {
@@ -404,7 +404,9 @@ public final class AirMapMode implements MapOverlay {
     // that may be missing; go by the delegate's name there
     final IDelegate delegate = step.getDelegateOptional().orElse(null);
     if (delegate != null) {
-      return delegate instanceof AirAllocationDelegate || delegate instanceof AirCombatDelegate;
+      return delegate instanceof AirAllocationDelegate
+          || delegate instanceof AirCombatDelegate
+          || delegate instanceof games.strategy.triplea.delegate.AirStageDelegate;
     }
     return AIR_DELEGATE_NAMES.contains(step.getDelegateName());
   }

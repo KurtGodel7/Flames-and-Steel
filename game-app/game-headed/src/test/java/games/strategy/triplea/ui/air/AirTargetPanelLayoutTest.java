@@ -361,6 +361,105 @@ class AirTargetPanelLayoutTest {
   }
 
   @Test
+  void theBomberStageTargetsAnAdjacentFrontAndRepositions() throws Exception {
+    data.performChange(
+        games.strategy.engine.data.changefactory.ChangeFactory.relationshipChange(
+            germans,
+            data.getPlayerList().getPlayerId("Russians"),
+            data.getRelationshipTracker()
+                .getRelationshipType(germans, data.getPlayerList().getPlayerId("Russians")),
+            data.getRelationshipTypeList().getRelationshipType("War")));
+    // a German bomber with a target in an adjacent box
+    Territory origin = null;
+    UnitType type = null;
+    Target target = null;
+    Territory into = null;
+    search:
+    for (final Territory box : AirZoneAttachment.getAirZones(data.getMap())) {
+      for (final var u : AirCombat.getBombers(germans, box)) {
+        for (final var e :
+            games.strategy.triplea.delegate.air.AirStage.candidates(
+                    germans,
+                    box,
+                    u.getType(),
+                    games.strategy.triplea.delegate.air.AirAllocation.Stage.BOMBERS,
+                    Map.of())
+                .entrySet()) {
+          if (!e.getValue().equals(box)) {
+            origin = box;
+            type = u.getType();
+            target = e.getKey();
+            into = e.getValue();
+            break search;
+          }
+        }
+      }
+    }
+    Assumptions.assumeTrue(origin != null, "no adjacent target");
+    // a second bomber of the type, so one can attack and one can move
+    data.performChange(
+        games.strategy.engine.data.changefactory.ChangeFactory.addUnits(
+            origin, type.create(1, germans)));
+    final Territory from = origin;
+    final Target far = target;
+    final IntegerMap<UnitType> one = new IntegerMap<>();
+    one.put(type, 1);
+    SwingUtilities.invokeAndWait(
+        () -> {
+          panel.display(germans);
+          panel.startStage(
+              germans,
+              games.strategy.triplea.delegate.air.AirAllocation.Stage.BOMBERS,
+              List.of(),
+              Map.of());
+        });
+    flush();
+    SwingUtilities.invokeAndWait(
+        () -> {
+          panel.chooseFront(germans, from, false);
+          panel.assign(far, one);
+        });
+    flush();
+    final var choice =
+        games.strategy.triplea.delegate.air.AirStage.toChoice(
+            germans,
+            games.strategy.triplea.delegate.air.AirAllocation.Stage.BOMBERS,
+            panel.staged(),
+            Map.of());
+    assertThat(choice.moves().size(), is(1));
+    assertThat(choice.moves().get(0).to(), is(into));
+    assertThat(choice.targets().get(0).zone(), is(into));
+    assertThat(
+        all(panel).stream()
+            .filter(c -> c instanceof JLabel l && l.getText() != null)
+            .map(c -> ((JLabel) c).getText())
+            .anyMatch(t -> t.contains("(moves to ")),
+        is(true));
+    // a move with no target: to any box it may move to
+    final Territory box =
+        games.strategy.triplea.delegate.air.AirStage.neighbours(germans, from, type).get(0);
+    SwingUtilities.invokeAndWait(
+        () -> {
+          panel.chooseFront(germans, from, false);
+          panel.assign(games.strategy.triplea.delegate.air.AirStage.moveTo(box), one);
+        });
+    flush();
+    final BufferedImage shot = render(panel, WIDTH, HEIGHT);
+    ImageIO.write(shot, "png", SHOTS.resolve("request35_bomber_stage.png").toFile());
+    final var both =
+        games.strategy.triplea.delegate.air.AirStage.toChoice(
+            germans,
+            games.strategy.triplea.delegate.air.AirAllocation.Stage.BOMBERS,
+            panel.staged(),
+            Map.of());
+    assertThat(panel.staged().size(), is(2));
+    assertThat(
+        panel.staged().stream().anyMatch(games.strategy.triplea.delegate.air.AirStage::isMove),
+        is(true));
+    assertThat(both.moves().stream().anyMatch(m -> m.to().equals(box)), is(true));
+  }
+
+  @Test
   void placeFightersUsesTheSameLayout() throws Exception {
     startPanel(true);
     flush();
