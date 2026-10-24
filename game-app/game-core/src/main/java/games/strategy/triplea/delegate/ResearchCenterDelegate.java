@@ -13,6 +13,7 @@ import games.strategy.triplea.delegate.data.ResearchResults.Breakthrough;
 import games.strategy.triplea.delegate.remote.IResearchDelegate;
 import games.strategy.triplea.delegate.research.ResearchCenters;
 import games.strategy.triplea.delegate.research.ResearchCenters.Mode;
+import games.strategy.triplea.formatter.TechNames;
 import java.io.Serial;
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -208,10 +209,12 @@ public class ResearchCenterDelegate extends BaseTripleADelegate implements IRese
               DiceType.NONCOMBAT,
               player.getName() + " " + tech.getName() + " research roll");
       if (roll < attachment.getBonusResearchChance()) {
-        addStar(category.get(), 0, tech.getName(), turn);
+        addStar(category.get(), 0, TechNames.display(tech, player), turn);
       } else {
-        turn.lines.add(tech.getName() + ": no breakthrough");
-        turn.details.add(new Breakthrough(0, tech.getName(), category.get().getName(), null, 0, 0));
+        turn.lines.add(TechNames.display(tech, player) + ": no breakthrough");
+        turn.details.add(
+            new Breakthrough(
+                0, TechNames.display(tech, player), category.get().getName(), null, 0, 0));
       }
     }
   }
@@ -238,7 +241,8 @@ public class ResearchCenterDelegate extends BaseTripleADelegate implements IRese
         (center > 0 ? "Research centre " + center + " (" + source + "): " : source + ": ")
             + category.getName()
             + " -> "
-            + tech.getName()
+            // request 37: the name the nation knows it by
+            + TechNames.display(tech, player)
             + " "
             + stars
             + "/"

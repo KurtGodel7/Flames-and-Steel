@@ -1024,7 +1024,8 @@ public class TriggerAttachment extends AbstractTriggerAttachment {
                   + ": "
                   + player.getName()
                   + " activates "
-                  + ta);
+                  // request 37: the name the nation knows it by
+                  + games.strategy.triplea.formatter.TechNames.display(ta, player));
           TechTracker.addAdvance(player, bridge, ta);
         }
       }

@@ -6,7 +6,7 @@ import games.strategy.engine.data.TechnologyFrontier;
 import games.strategy.triplea.delegate.TechAdvance;
 import games.strategy.triplea.delegate.research.ResearchCenters;
 import games.strategy.triplea.delegate.research.ResearchCenters.Mode;
-import games.strategy.triplea.formatter.UnitNames;
+import games.strategy.triplea.formatter.TechNames;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -41,36 +41,20 @@ public record ResearchView(
    * @param fixedRound the round the XML grants this tech on (China), or 0
    */
   public record Tech(
-      String name, int stars, int required, State state, int fixedRound, String description) {
-    public String displayName() {
-      return ResearchView.displayName(name);
-    }
-  }
+      String name,
+      int stars,
+      int required,
+      State state,
+      int fixedRound,
+      String description,
+      String displayName) {}
 
   /**
    * A readable tech name from the XML name: "MechanizedInfantry" becomes "Mechanized Infantry",
    * "TypeXXIUboat" "Type XXI Uboat", "Propaganda1" "Propaganda 1".
    */
   public static String displayName(final String name) {
-    if (UnitNames.isRenamed(name)) {
-      return UnitNames.of(name);
-    }
-    final StringBuilder sb = new StringBuilder();
-    for (int i = 0; i < name.length(); i++) {
-      final char c = name.charAt(i);
-      if (i > 0 && sb.charAt(sb.length() - 1) != ' ') {
-        final char prev = name.charAt(i - 1);
-        final boolean nextLower =
-            i + 1 < name.length() && Character.isLowerCase(name.charAt(i + 1));
-        if ((Character.isUpperCase(c) && Character.isLowerCase(prev))
-            || (Character.isUpperCase(c) && Character.isUpperCase(prev) && nextLower)
-            || (Character.isDigit(c) && Character.isLowerCase(prev))) {
-          sb.append(' ');
-        }
-      }
-      sb.append(c);
-    }
-    return sb.toString();
+    return TechNames.readable(name);
   }
 
   /**
@@ -113,7 +97,9 @@ public record ResearchView(
                   state,
                   fixedRounds.getOrDefault(tech, 0),
                   // request 35: the XML's description first
-                  games.strategy.triplea.delegate.TechDescriptions.describe(tech, player)));
+                  games.strategy.triplea.delegate.TechDescriptions.describe(tech, player),
+                  // request 37: the XML's name for this nation first
+                  TechNames.display(tech, player)));
         }
         categories.add(new Category(frontier.getName(), List.copyOf(techs), next));
       }

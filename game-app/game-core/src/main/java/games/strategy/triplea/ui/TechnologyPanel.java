@@ -94,15 +94,26 @@ class TechnologyPanel extends JPanel implements GameDataChangeListener {
           tech == null
               ? ""
               : games.strategy.triplea.delegate.TechDescriptions.describeAnyNation(tech);
+      // request 37: the XML's name, plus any nation's own name for it
+      final String shown =
+          tech == null ? name : games.strategy.triplea.formatter.TechNames.display(tech, null);
+      final List<String> nationNames =
+          tech == null
+              ? java.util.List.of()
+              : games.strategy.triplea.formatter.TechNames.nationNames(
+                  tech, data.getPlayerList().getPlayers());
+      final StringBuilder tip = new StringBuilder();
+      if (!nationNames.isEmpty()) {
+        tip.append("<br><i>").append(String.join("<br>", nationNames)).append("</i>");
+      }
+      if (!description.isEmpty()) {
+        tip.append("<br>").append(description);
+      }
       setToolTipText(
-          description.isEmpty()
-              ? name
-              : "<html><div style='width:320px'><b>"
-                  + name
-                  + "</b><br>"
-                  + description
-                  + "</div></html>");
-      super.setValue(aValue);
+          tip.isEmpty()
+              ? shown
+              : "<html><div style='width:320px'><b>" + shown + "</b>" + tip + "</div></html>");
+      super.setValue(shown);
     }
   }
 

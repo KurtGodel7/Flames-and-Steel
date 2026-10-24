@@ -81,7 +81,9 @@ public class TechTracker {
     return getCached(player, type, "getDogfightBonus", getter);
   }
 
-  /** Flames and Steel (request 27): added interception value from the nation's techs for this type. */
+  /**
+   * Flames and Steel (request 27): added interception value from the nation's techs for this type.
+   */
   public int getInterceptionBonus(GamePlayer player, UnitType type) {
     final Supplier<Integer> getter =
         () ->
@@ -101,21 +103,27 @@ public class TechTracker {
     return getCached(player, type, "getInterceptionPenaltyAgainst", getter);
   }
 
-  /** Flames and Steel (request 27): added interception dice from the nation's techs for this type. */
+  /**
+   * Flames and Steel (request 27): added interception dice from the nation's techs for this type.
+   */
   public int getInterceptionRollsBonus(GamePlayer player, UnitType type) {
     final Supplier<Integer> getter =
         () -> getSumOfBonuses(TechAbilityAttachment::getInterceptionRollsBonus, type, player);
     return getCached(player, type, "getInterceptionRollsBonus", getter);
   }
 
-  /** Flames and Steel (request 27): added air defense value from the nation's techs for this type. */
+  /**
+   * Flames and Steel (request 27): added air defense value from the nation's techs for this type.
+   */
   public int getBomberAirDefenseBonus(GamePlayer player, UnitType type) {
     final Supplier<Integer> getter =
         () -> getSumOfBonuses(TechAbilityAttachment::getBomberAirDefenseBonus, type, player);
     return getCached(player, type, "getBomberAirDefenseBonus", getter);
   }
 
-  /** Flames and Steel (request 27): added air defense dice from the nation's techs for this type. */
+  /**
+   * Flames and Steel (request 27): added air defense dice from the nation's techs for this type.
+   */
   public int getBomberAirDefenseRollsBonus(GamePlayer player, UnitType type) {
     final Supplier<Integer> getter =
         () -> getSumOfBonuses(TechAbilityAttachment::getBomberAirDefenseRollsBonus, type, player);
@@ -131,8 +139,19 @@ public class TechTracker {
 
   public int getAttackBonus(GamePlayer player, UnitType type) {
     final Supplier<Integer> getter =
-        () -> getSumOfBonuses(TechAbilityAttachment::getAttackBonus, type, player);
+        () ->
+            getSumOfBonuses(TechAbilityAttachment::getAttackBonus, type, player)
+                // request 37: plus the nation's own (the Soviet -1 dive bomber)
+                + nationBonus(player, TechAttachment::getAttackBonus, type);
     return getCached(player, type, "getAttackBonus", getter);
+  }
+
+  /** Request 37: a bonus from the player's own techAttachment (none for a null player). */
+  private static int nationBonus(
+      final GamePlayer player,
+      final Function<TechAttachment, IntegerMap<UnitType>> getter,
+      final UnitType type) {
+    return player == null ? 0 : getter.apply(player.getTechAttachment()).getInt(type);
   }
 
   public int getAttackRollsBonus(GamePlayer player, UnitType type) {
@@ -143,7 +162,9 @@ public class TechTracker {
 
   public int getDefenseBonus(GamePlayer player, UnitType type) {
     final Supplier<Integer> getter =
-        () -> getSumOfBonuses(TechAbilityAttachment::getDefenseBonus, type, player);
+        () ->
+            getSumOfBonuses(TechAbilityAttachment::getDefenseBonus, type, player)
+                + nationBonus(player, TechAttachment::getDefenseBonus, type);
     return getCached(player, type, "getDefenseBonus", getter);
   }
 

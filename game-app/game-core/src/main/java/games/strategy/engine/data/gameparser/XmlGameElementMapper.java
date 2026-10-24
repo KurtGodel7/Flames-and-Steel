@@ -28,6 +28,7 @@ import games.strategy.triplea.attachments.UserActionAttachment;
 import games.strategy.triplea.delegate.AirAllocationDelegate;
 import games.strategy.triplea.delegate.AirCarrierCheckDelegate;
 import games.strategy.triplea.delegate.AirCombatDelegate;
+import games.strategy.triplea.delegate.AirStageDelegate;
 import games.strategy.triplea.delegate.ApcDelegate;
 import games.strategy.triplea.delegate.BidPlaceDelegate;
 import games.strategy.triplea.delegate.BidPurchaseDelegate;
@@ -94,6 +95,7 @@ public final class XmlGameElementMapper {
         .put("AirAllocationDelegate", AirAllocationDelegate::new)
         .put("AirCarrierCheckDelegate", AirCarrierCheckDelegate::new)
         .put("AirCombatDelegate", AirCombatDelegate::new)
+        .put("AirStageDelegate", AirStageDelegate::new)
         .put("ApcDelegate", ApcDelegate::new)
         .put("BattleDelegate", BattleDelegate::new)
         .put("BidPlaceDelegate", BidPlaceDelegate::new)

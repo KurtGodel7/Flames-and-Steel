@@ -589,6 +589,7 @@ class EditPanel extends ActionPanel {
             }
             final JList<TechAdvance> techList = new JList<>(SwingComponents.newListModel(techs));
             techList.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
+            techList.setCellRenderer(techNameRenderer(player));
             techList.setLayoutOrientation(JList.VERTICAL);
             techList.setVisibleRowCount(10);
             final JScrollPane scroll = new JScrollPane(techList);
@@ -654,6 +655,7 @@ class EditPanel extends ActionPanel {
             }
             final JList<TechAdvance> techList = new JList<>(SwingComponents.newListModel(techs));
             techList.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
+            techList.setCellRenderer(techNameRenderer(player));
             techList.setLayoutOrientation(JList.VERTICAL);
             techList.setVisibleRowCount(10);
             final JScrollPane scroll = new JScrollPane(techList);
@@ -1060,5 +1062,27 @@ class EditPanel extends ActionPanel {
   @Override
   public void performDone() {
     // no-op, no done button to be clicked, instead user should turn edit mode off.
+  }
+
+  /** Request 37: techs listed by the name the nation knows them by, the XML name after it. */
+  private static javax.swing.ListCellRenderer<Object> techNameRenderer(final GamePlayer player) {
+    return new javax.swing.DefaultListCellRenderer() {
+      private static final long serialVersionUID = 1L;
+
+      @Override
+      public java.awt.Component getListCellRendererComponent(
+          final JList<?> list,
+          final Object value,
+          final int index,
+          final boolean isSelected,
+          final boolean cellHasFocus) {
+        Object shown = value;
+        if (value instanceof TechAdvance tech) {
+          final String name = games.strategy.triplea.formatter.TechNames.display(tech, player);
+          shown = name.equals(tech.getName()) ? name : name + " (" + tech.getName() + ")";
+        }
+        return super.getListCellRendererComponent(list, shown, index, isSelected, cellHasFocus);
+      }
+    };
   }
 }

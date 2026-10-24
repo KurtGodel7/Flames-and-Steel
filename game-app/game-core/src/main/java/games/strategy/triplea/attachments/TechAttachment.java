@@ -62,6 +62,10 @@ public class TechAttachment extends DefaultAttachment {
   // Flames and Steel (request 35): the nation's own interception bonus or penalty per unit type,
   // e.g. "-2:fighter"
   private @Nullable IntegerMap<UnitType> interceptionBonus = null;
+  // Flames and Steel (request 37): the nation's own attack and defense bonus or penalty per unit
+  // type, e.g. "-1:diveBomber" (the Soviet Il-2)
+  private @Nullable IntegerMap<UnitType> attackBonus = null;
+  private @Nullable IntegerMap<UnitType> defenseBonus = null;
   // Focus of each research centre, one entry per centre: "primary|secondary" (either may be "").
   private @Nullable List<String> researchFocus = null;
 
@@ -464,6 +468,45 @@ public class TechAttachment extends DefaultAttachment {
     return getIntegerMapProperty(interceptionBonus);
   }
 
+  private IntegerMap<UnitType> parseBonus(
+      final String name, final String value, final @Nullable IntegerMap<UnitType> existing)
+      throws GameParseException {
+    final String[] s = splitOnColon(value);
+    if (s.length != 2) {
+      throw new GameParseException(
+          name + " must be a number and a unit type, e.g. -1:diveBomber" + thisErrorMsg());
+    }
+    final IntegerMap<UnitType> map = existing == null ? new IntegerMap<>() : existing;
+    map.add(getUnitTypeOrThrow(s[1]), getInt(s[0]));
+    return map;
+  }
+
+  private void setAttackBonus(final String value) throws GameParseException {
+    attackBonus = parseBonus("attackBonus", value, attackBonus);
+  }
+
+  private void setAttackBonus(final IntegerMap<UnitType> value) {
+    attackBonus = value;
+  }
+
+  /** Request 37: the nation's own attack bonus or penalty, by unit type. */
+  public IntegerMap<UnitType> getAttackBonus() {
+    return getIntegerMapProperty(attackBonus);
+  }
+
+  private void setDefenseBonus(final String value) throws GameParseException {
+    defenseBonus = parseBonus("defenseBonus", value, defenseBonus);
+  }
+
+  private void setDefenseBonus(final IntegerMap<UnitType> value) {
+    defenseBonus = value;
+  }
+
+  /** Request 37: the nation's own defense bonus or penalty, by unit type. */
+  public IntegerMap<UnitType> getDefenseBonus() {
+    return getIntegerMapProperty(defenseBonus);
+  }
+
   private void setResearchFocus(final String value) {
     if (researchFocus == null) {
       researchFocus = new ArrayList<>();
@@ -611,6 +654,20 @@ public class TechAttachment extends DefaultAttachment {
                   this::setResearchStars,
                   this::getResearchStars,
                   this::resetResearchStars));
+      case "attackBonus" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setAttackBonus,
+                  this::setAttackBonus,
+                  this::getAttackBonus,
+                  () -> attackBonus = null));
+      case "defenseBonus" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setDefenseBonus,
+                  this::setDefenseBonus,
+                  this::getDefenseBonus,
+                  () -> defenseBonus = null));
       case "interceptionBonus" ->
           Optional.of(
               MutableProperty.of(

@@ -220,7 +220,12 @@ public class EditDelegate extends BasePersistentDelegate implements IEditDelegat
       return result;
     }
     for (final TechAdvance advance : advances) {
-      logEvent("Adding Technology " + advance.getName() + " for " + player.getName(), null);
+      logEvent(
+          "Adding Technology "
+              + games.strategy.triplea.formatter.TechNames.display(advance, player)
+              + " for "
+              + player.getName(),
+          null);
       TechTracker.addAdvance(player, bridge, advance);
     }
     return null;
@@ -237,7 +242,12 @@ public class EditDelegate extends BasePersistentDelegate implements IEditDelegat
       return result;
     }
     for (final TechAdvance advance : advances) {
-      logEvent("Removing Technology " + advance.getName() + " for " + player.getName(), null);
+      logEvent(
+          "Removing Technology "
+              + games.strategy.triplea.formatter.TechNames.display(advance, player)
+              + " for "
+              + player.getName(),
+          null);
       TechTracker.removeAdvance(player, bridge, advance);
     }
     return null;

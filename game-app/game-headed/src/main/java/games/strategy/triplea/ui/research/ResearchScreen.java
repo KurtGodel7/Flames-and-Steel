@@ -628,7 +628,7 @@ public final class ResearchScreen extends JDialog {
                     + "</html>"));
       }
       for (final Breakthrough b : results.getDetails()) {
-        resultsPanel.add(new JLabel(resultLine(b)));
+        resultsPanel.add(new JLabel(resultLine(b, view.player())));
       }
       if (results.getDetails().stream().anyMatch(Breakthrough::unlocked)) {
         final JLabel note =
@@ -643,7 +643,7 @@ public final class ResearchScreen extends JDialog {
     resultsPanel.repaint();
   }
 
-  private static String resultLine(final Breakthrough b) {
+  private static String resultLine(final Breakthrough b, final GamePlayer player) {
     final StringBuilder sb = new StringBuilder("<html><b>");
     sb.append(
         b.center() > 0
@@ -656,7 +656,8 @@ public final class ResearchScreen extends JDialog {
     }
     sb.append(b.category())
         .append(" &rarr; ")
-        .append(ResearchView.displayName(b.tech()))
+        .append(
+            games.strategy.triplea.formatter.TechNames.display(player.getData(), b.tech(), player))
         .append(" ");
     for (int s = 0; s < b.required(); s++) {
       if (s == b.stars() - 1) {

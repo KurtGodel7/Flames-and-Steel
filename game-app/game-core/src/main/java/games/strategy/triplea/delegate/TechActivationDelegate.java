@@ -36,7 +36,11 @@ public class TechActivationDelegate extends BaseTripleADelegate {
       // Start event
       bridge
           .getHistoryWriter()
-          .startEvent(player.getName() + " activating " + advancesAsString(advances));
+          .startEvent(
+              player.getName()
+                  + " activating "
+                  // request 37: the names the nation knows them by
+                  + games.strategy.triplea.formatter.TechNames.list(advances, player));
       for (final TechAdvance advance : advances) {
         TechTracker.addAdvance(player, bridge, advance);
       }
@@ -117,7 +121,7 @@ public class TechActivationDelegate extends BaseTripleADelegate {
                     + " giving technology to "
                     + p.getName()
                     + ": "
-                    + advancesAsString(toGive));
+                    + games.strategy.triplea.formatter.TechNames.list(toGive, p));
         for (final TechAdvance advance : toGive) {
           TechTracker.addAdvance(p, bridge, advance);
         }
@@ -138,23 +142,6 @@ public class TechActivationDelegate extends BaseTripleADelegate {
     final TechActivationExtendedDelegateState s = (TechActivationExtendedDelegateState) state;
     super.loadState(s.superState);
     needToInitialize = s.needToInitialize;
-  }
-
-  // Return string representing all advances in collection
-  private static String advancesAsString(final Collection<TechAdvance> advances) {
-    int count = advances.size();
-    final StringBuilder text = new StringBuilder();
-    for (final TechAdvance advance : advances) {
-      text.append(advance.getName());
-      count--;
-      if (count > 1) {
-        text.append(", ");
-      }
-      if (count == 1) {
-        text.append(" and ");
-      }
-    }
-    return text.toString();
   }
 
   @Override
