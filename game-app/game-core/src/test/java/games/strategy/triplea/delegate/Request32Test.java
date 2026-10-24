@@ -305,20 +305,19 @@ class Request32Test {
     removeFrom(bombUsa, bombUsa.getUnits());
     addTo(bombUsa, data.getUnitTypeList().getUnitTypeOrThrow("flyingWing").create(1, germans));
     final var delegate = (AirCombatDelegate) data.getDelegate("airCombat");
-    final IDelegateBridge targets = newDelegateBridge(germans);
-    advanceToStep(targets, "germanAirTargets");
-    delegate.setDelegateBridgeAndPlayer(targets);
-    delegate.start();
+    // request 35: the target is chosen in the simultaneous bomber stage
     assertThat(
-        delegate.assignTargets(
-            List.of(
+        new AirStageRunner(data)
+            .bombers(
+                germans,
                 new TargetAssignment(
                     bombUsa,
                     data.getUnitTypeList().getUnitTypeOrThrow("flyingWing"),
                     1,
-                    new Target(detroit, TargetKind.STRATEGIC)))),
-        is((String) null));
-    delegate.end();
+                    new Target(detroit, TargetKind.STRATEGIC)))
+            .run()
+            .problems(),
+        is(List.of()));
     final int pacificBefore = pus(pacific);
     final int atlanticBefore = pus(atlantic);
     final IDelegateBridge strikes = newDelegateBridge(germans);

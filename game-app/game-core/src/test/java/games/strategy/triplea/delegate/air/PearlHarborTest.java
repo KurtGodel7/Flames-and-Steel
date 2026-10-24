@@ -114,8 +114,8 @@ class PearlHarborTest {
     usEndTurn(2);
     assertThat(data.getRelationshipTracker().isAtWar(japanese, americans), is(true));
 
-    // round 3 air phase, up to Japan's target step
-    runRound3AirPhaseTo("japaneseAirTargets");
+    // round 3 air phase, up to the bomber stage where Japan chooses its targets (request 35)
+    runRound3AirPhaseTo("airBomberStage");
     assertThat(japaneseAircraft(hawaiianWaters, "torpedoBomber"), is(8));
     final UnitType torpedo = type("torpedoBomber");
     final List<Target> targets = AirCombat.getTargets(japanese, hawaiianWaters, torpedo);

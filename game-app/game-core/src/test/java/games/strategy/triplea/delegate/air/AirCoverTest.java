@@ -5,6 +5,9 @@ import static games.strategy.triplea.delegate.GameDataTestUtil.removeFrom;
 import static games.strategy.triplea.delegate.MockDelegateBridge.advanceToStep;
 import static games.strategy.triplea.delegate.MockDelegateBridge.newDelegateBridge;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
@@ -27,6 +30,7 @@ import games.strategy.engine.data.gameparser.GameParser;
 import games.strategy.engine.delegate.IDelegateBridge;
 import games.strategy.triplea.attachments.AirZoneAttachment;
 import games.strategy.triplea.delegate.AirCombatDelegate;
+import games.strategy.triplea.delegate.AirStageRunner;
 import games.strategy.triplea.delegate.InitializationDelegate;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.TechTracker;
@@ -168,19 +172,17 @@ class AirCoverTest {
         .getEditablePropertiesByName()
         .get(AirCombat.DOGFIGHT_ROUNDS)
         .setValueIfValid(1);
-    assertThat(
-        run(
-            "germanAirTargets",
-            germans,
-            new TargetAssignment(
-                easternFront, type("diveBomber"), 4, new Target(t, TargetKind.LAND))),
-        is((String) null));
-    assertThat(
-        run("germanAirCover", germans, cover(easternFront, type("fighter"), 4, t)),
-        is((String) null));
-    assertThat(
-        run("russianAirCover", russians, cover(easternFront, type("fighter"), 4, t)),
-        is((String) null));
+    // request 35: chosen in the simultaneous bomber and fighter stages
+    final AirStageRunner stages =
+        new AirStageRunner(data)
+            .bombers(
+                germans,
+                new TargetAssignment(
+                    easternFront, type("diveBomber"), 4, new Target(t, TargetKind.LAND)))
+            .cover(germans, cover(easternFront, type("fighter"), 4, t))
+            .cover(russians, cover(easternFront, type("fighter"), 4, t))
+            .run();
+    assertThat(stages.problems(), is(empty()));
     final IDelegateBridge strikes = bridge(germans);
     advanceToStep(strikes, "airStrikes");
     delegate.setDelegateBridgeAndPlayer(strikes);
@@ -235,24 +237,26 @@ class AirCoverTest {
     addTo(t, type("infantry").create(1, russians));
     final Target land = new Target(t, TargetKind.LAND);
 
+    // request 35: the stage refuses the fifth and tells the nation why
+    final AirStageRunner five =
+        new AirStageRunner(data)
+            .bombers(germans, new TargetAssignment(easternFront, type("diveBomber"), 5, land))
+            .run();
+    assertThat(five.problems(), contains(containsString("at most 4 bombers")));
+    final AirStageRunner four =
+        new AirStageRunner(data)
+            .bombers(germans, new TargetAssignment(easternFront, type("diveBomber"), 4, land))
+            .cover(germans, cover(easternFront, type("fighter"), 5, t))
+            .run();
+    // the bombers were fine; the fifth fighter was refused
+    assertThat(four.problems(), contains(containsString("fighter")));
     assertThat(
-        run(
-            "germanAirTargets",
-            germans,
-            new TargetAssignment(easternFront, type("diveBomber"), 5, land)),
-        is(not((String) null)));
-    assertThat(
-        run(
-            "germanAirTargets",
-            germans,
-            new TargetAssignment(easternFront, type("diveBomber"), 4, land)),
-        is((String) null));
-    assertThat(
-        run("germanAirCover", germans, cover(easternFront, type("fighter"), 5, t)),
-        is(not((String) null)));
-    assertThat(
-        run("germanAirCover", germans, cover(easternFront, type("fighter"), 4, t)),
-        is((String) null));
+        new AirStageRunner(data)
+            .bombers(germans, new TargetAssignment(easternFront, type("diveBomber"), 4, land))
+            .cover(germans, cover(easternFront, type("fighter"), 4, t))
+            .run()
+            .problems(),
+        is(empty()));
   }
 
   @Test

@@ -7,10 +7,9 @@ import static games.strategy.triplea.delegate.MockDelegateBridge.newDelegateBrid
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
-import static org.hamcrest.Matchers.notNullValue;
-import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -28,6 +27,7 @@ import games.strategy.engine.data.gameparser.GameParser;
 import games.strategy.engine.delegate.IDelegateBridge;
 import games.strategy.engine.history.IDelegateHistoryWriter;
 import games.strategy.triplea.delegate.AirCombatDelegate;
+import games.strategy.triplea.delegate.AirStageRunner;
 import games.strategy.triplea.delegate.InitializationDelegate;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.air.AirAllocation.AirMove;
@@ -41,6 +41,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -167,48 +168,33 @@ class LongRangeRaidTest {
     add(bombUsa, "fighter", americans);
     final AirCombatDelegate delegate = (AirCombatDelegate) data.getDelegate("airCombat");
 
-    final IDelegateBridge targets = bridge(germans);
-    advanceToStep(targets, "germanAirTargets");
-    delegate.setDelegateBridgeAndPlayer(targets);
-    delegate.start();
+    // request 35: San Francisco is refused in the bomber stage; Detroit is accepted, and the US
+    // fighter defends Detroit in the fighter stage
+    final Target sanFrancisco =
+        new Target(data.getMap().getTerritoryOrThrow("San Francisco"), TargetKind.STRATEGIC);
     assertThat(
-        delegate.assignTargets(
-            List.of(
-                new TargetAssignment(
-                    bombUsa,
-                    type("flyingWing"),
-                    1,
-                    new Target(
-                        data.getMap().getTerritoryOrThrow("San Francisco"),
-                        TargetKind.STRATEGIC)))),
-        is(notNullValue()));
+        AirStage.problem(
+                germans,
+                AirAllocation.Stage.BOMBERS,
+                new AirStage.Choice(
+                    List.of(),
+                    List.of(new TargetAssignment(bombUsa, type("flyingWing"), 1, sanFrancisco))),
+                Map.of(),
+                Map.of())
+            .isPresent(),
+        is(true));
     assertThat(
-        delegate.assignTargets(
-            List.of(
+        new AirStageRunner(data)
+            .bombers(
+                germans,
                 new TargetAssignment(
-                    bombUsa, type("flyingWing"), 1, new Target(detroit, TargetKind.STRATEGIC)))),
-        is(nullValue()));
-    delegate.end();
-
-    // request 30: the US fighter defends Detroit
-    data.getSequence()
-        .addStep(
-            new games.strategy.engine.data.GameStep(
-                "americanAirCover",
-                "americanAirCover",
+                    bombUsa, type("flyingWing"), 1, new Target(detroit, TargetKind.STRATEGIC)))
+            .cover(
                 americans,
-                delegate,
-                data,
-                new java.util.Properties()));
-    final IDelegateBridge cover = bridge(americans);
-    advanceToStep(cover, "americanAirCover");
-    delegate.setDelegateBridgeAndPlayer(cover);
-    delegate.start();
-    assertThat(
-        delegate.assignTargets(
-            List.of(new TargetAssignment(bombUsa, type("fighter"), 1, AirCover.over(detroit)))),
-        is(nullValue()));
-    delegate.end();
+                new TargetAssignment(bombUsa, type("fighter"), 1, AirCover.over(detroit)))
+            .run()
+            .problems(),
+        is(empty()));
 
     final int before = americans.getResources().getQuantity("PUs");
     final IDelegateBridge strikes = bridge(germans);

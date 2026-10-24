@@ -7,8 +7,8 @@ import static games.strategy.triplea.delegate.MockDelegateBridge.newDelegateBrid
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -26,6 +26,7 @@ import games.strategy.engine.data.gameparser.GameParser;
 import games.strategy.engine.delegate.IDelegateBridge;
 import games.strategy.engine.history.IDelegateHistoryWriter;
 import games.strategy.triplea.delegate.AirCombatDelegate;
+import games.strategy.triplea.delegate.AirStageRunner;
 import games.strategy.triplea.delegate.InitializationDelegate;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.air.AirCombat.Roll;
@@ -88,20 +89,19 @@ class BombingResultsTest {
 
   private void raid(final String type, final int count) {
     addTo(bombGermany, data.getUnitTypeList().getUnitTypeOrThrow(type).create(count, british));
-    final IDelegateBridge targets = bridge(british);
-    advanceToStep(targets, "britishAirTargets");
-    delegate.setDelegateBridgeAndPlayer(targets);
-    delegate.start();
+    // request 35: the target is chosen in the simultaneous bomber stage
     assertThat(
-        delegate.assignTargets(
-            List.of(
+        new AirStageRunner(data)
+            .bombers(
+                british,
                 new TargetAssignment(
                     bombGermany,
                     data.getUnitTypeList().getUnitTypeOrThrow(type),
                     count,
-                    new Target(hamburg, TargetKind.STRATEGIC)))),
-        is(nullValue()));
-    delegate.end();
+                    new Target(hamburg, TargetKind.STRATEGIC)))
+            .run()
+            .problems(),
+        is(empty()));
     final IDelegateBridge strikes = bridge(british);
     advanceToStep(strikes, "airStrikes");
     delegate.setDelegateBridgeAndPlayer(strikes);

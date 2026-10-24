@@ -2,7 +2,9 @@ package games.strategy.triplea.delegate;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.greaterThan;
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
 
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
@@ -12,10 +14,13 @@ import games.strategy.engine.data.gameparser.GameParser;
 import games.strategy.engine.delegate.IDelegateBridge;
 import games.strategy.triplea.Constants;
 import games.strategy.triplea.attachments.AirZoneAttachment;
+import games.strategy.triplea.delegate.air.AirAllocation.Stage;
 import games.strategy.triplea.delegate.air.AirCombat;
 import games.strategy.triplea.delegate.air.AirCombat.TargetKind;
+import games.strategy.triplea.delegate.air.AirStage;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -87,13 +92,23 @@ class Draft40Test {
 
   @Test
   void usMoveAndAirStepsAreSkipped() {
-    for (final String step :
-        new String[] {"americanCombatMove", "americanAirBombers", "americanAirTargets"}) {
-      goToStep(step);
-      final var delegate = data.getSequence().getStep().getDelegate();
-      delegate.setDelegateBridgeAndPlayer(MockDelegateBridge.newDelegateBridge(americans));
-      assertThat(step, delegate.delegateCurrentlyRequiresUserInput(), is(false));
-    }
+    goToStep("americanCombatMove");
+    final var delegate = data.getSequence().getStep().getDelegate();
+    delegate.setDelegateBridgeAndPlayer(MockDelegateBridge.newDelegateBridge(americans));
+    assertThat(delegate.delegateCurrentlyRequiresUserInput(), is(false));
+  }
+
+  @Test
+  void theAirStagesNeverAskTheUsAtPeace() {
+    // request 35: the bomber and fighter stages ask every nation at once, but not one at peace
+    assertThat(Peacetime.isAtPeace(americans), is(true));
+    final boolean hasWork =
+        AirStage.hasWork(americans, Stage.BOMBERS, Map.of(), data.getMap())
+            || AirStage.hasWork(americans, Stage.FIGHTERS, Map.of(), data.getMap());
+    Assumptions.assumeTrue(hasWork, "no US aircraft in an air box: nothing to ask anyway");
+    final AirStageRunner stages = new AirStageRunner(data).run();
+    assertThat(stages.asked(), not(hasItem(americans)));
+    assertThat(stages.asked().isEmpty(), is(false));
   }
 
   @Test

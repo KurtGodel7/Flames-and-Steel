@@ -168,7 +168,8 @@ class Draft60Test {
     data.performChange(
         games.strategy.engine.data.changefactory.ChangeFactory.addUnits(
             hawaii, type("diveBomber").create(2, japan)));
-    goTo("japaneseAirTargets", 3);
+    // request 35: Japan chooses its targets in the round's bomber stage
+    goTo("airBomberStage", 3);
     final var targets =
         games.strategy.triplea.delegate.air.AirCombat.getTargets(japan, hawaii, type("diveBomber"));
     assertThat("targets " + targets, targets.isEmpty(), is(false));

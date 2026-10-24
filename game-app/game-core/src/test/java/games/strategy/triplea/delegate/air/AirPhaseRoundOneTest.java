@@ -5,11 +5,12 @@ import static games.strategy.triplea.delegate.MockDelegateBridge.newDelegateBrid
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.lessThan;
-import static org.hamcrest.Matchers.nullValue;
+import static org.hamcrest.Matchers.empty;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import games.strategy.engine.data.GameData;
@@ -20,7 +21,7 @@ import games.strategy.engine.data.UnitType;
 import games.strategy.engine.data.gameparser.GameParser;
 import games.strategy.engine.delegate.IDelegate;
 import games.strategy.engine.delegate.IDelegateBridge;
-import games.strategy.triplea.delegate.AirCombatDelegate;
+import games.strategy.engine.player.Player;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.air.AirCombat.Target;
 import games.strategy.triplea.delegate.air.AirCombat.TargetAssignment;
@@ -29,6 +30,8 @@ import games.strategy.triplea.delegate.data.CasualtyDetails;
 import games.strategy.triplea.delegate.data.CasualtyList;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,7 +39,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Flames and Steel request 16 on the installed map: the round 1 air phase runs step by step to
- * Germany's research, and the Italian strikes on Tobruk chosen in Italy's target step are fought in
+ * Germany's research, and the Italian strikes on Tobruk chosen in the bomber stage are fought in
  * the strike step before Germany's turn begins. Skipped when the map is not installed.
  */
 class AirPhaseRoundOneTest {
@@ -61,6 +64,23 @@ class AirPhaseRoundOneTest {
     final int britishInTobruk =
         tobruk.getUnitCollection().countMatches(Matches.unitIsOwnedBy(british));
 
+    // the strikes James chose: a torpedo bomber and a dive bomber from the Mediterranean
+    for (final String type : List.of("torpedoBomber", "diveBomber")) {
+      if (AirCombat.getBombers(italians, med).stream()
+          .noneMatch(u -> u.getType().getName().equals(type))) {
+        addTo(med, unitType(type).create(1, italians));
+      }
+    }
+    final Target target = new Target(tobruk, TargetKind.LAND);
+    // request 35: Italy chooses them in the simultaneous bomber stage; everyone else passes
+    final AirStage.Choice italianChoice =
+        new AirStage.Choice(
+            List.of(),
+            List.of(
+                new TargetAssignment(med, unitType("torpedoBomber"), 1, target),
+                new TargetAssignment(med, unitType("diveBomber"), 1, target)));
+    final List<String> problems = Collections.synchronizedList(new ArrayList<>());
+
     String reached = null;
     for (int i = 0; i < 200; i++) {
       final GameStep step = data.getSequence().getStep();
@@ -73,29 +93,33 @@ class AirPhaseRoundOneTest {
               ? data.getPlayerList().getPlayerId("Germans")
               : step.getPlayerId();
       final IDelegate delegate = step.getDelegate();
-      delegate.setDelegateBridgeAndPlayer(bridge(player));
-      delegate.start();
-      if (step.getName().equals("italianAirTargets")) {
-        // the strikes James chose: a torpedo bomber and a dive bomber from the Mediterranean
-        for (final String type : List.of("torpedoBomber", "diveBomber")) {
-          if (AirCombat.getBombers(italians, med).stream()
-              .noneMatch(u -> u.getType().getName().equals(type))) {
-            addTo(med, unitType(type).create(1, italians));
-          }
-        }
-        final Target target = new Target(tobruk, TargetKind.LAND);
-        final String error =
-            ((AirCombatDelegate) delegate)
-                .assignTargets(
-                    List.of(
-                        new TargetAssignment(med, unitType("torpedoBomber"), 1, target),
-                        new TargetAssignment(med, unitType("diveBomber"), 1, target)));
-        assertThat(error, is(nullValue()));
+      final IDelegateBridge bridge = bridge(player);
+      if (step.getName().equals("airBomberStage")) {
+        when(bridge.getRemotePlayer(any(GamePlayer.class)))
+            .thenAnswer(
+                inv -> {
+                  final GamePlayer asked = inv.getArgument(0);
+                  final Player client = mock(Player.class);
+                  when(client.selectAirStage(any(), any(), any(), any(), any(), anyString()))
+                      .thenAnswer(
+                          q -> {
+                            final String problem = q.getArgument(5);
+                            if (!problem.isEmpty()) {
+                              problems.add(problem);
+                              return AirStage.Choice.none();
+                            }
+                            return asked.equals(italians) ? italianChoice : AirStage.Choice.none();
+                          });
+                  return client;
+                });
       }
+      delegate.setDelegateBridgeAndPlayer(bridge);
+      delegate.start();
       delegate.end();
       data.getSequence().next();
     }
 
+    assertThat(problems, is(empty()));
     assertThat(reached, is("germanResearch"));
     assertThat(
         tobruk.getUnitCollection().countMatches(Matches.unitIsOwnedBy(british)),
