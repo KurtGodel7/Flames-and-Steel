@@ -564,7 +564,12 @@ class Request38Test {
         new AirStageRunner(data).bridge(), true, "Carrier lost in " + gulf.getName());
     assertThat(count(gulf, germans, "fighter"), is(0));
     assertThat(count(next, germans, "fighter"), is(2));
-    assertThat(AirBases.basedAircraft(germans).values().stream().mapToInt(List::size).sum(), is(2));
+    // the third had no room within one space: lost
+    int near = count(gulf, germans, "fighter");
+    for (final Territory n : data.getMap().getNeighbors(gulf)) {
+      near += count(n, germans, "fighter");
+    }
+    assertThat(near, is(2));
   }
 
   /** The Germans' non-combat move with a move delegate ready. */
