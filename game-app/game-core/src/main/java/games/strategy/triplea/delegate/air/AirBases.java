@@ -183,6 +183,114 @@ public class AirBases {
         : isLandBase(player, t);
   }
 
+  // ---- the stock rules (request 38 sections 1 and 3)
+
+  /** Whether the unit takes part in ordinary land and sea battles: aircraft never do. */
+  public static Predicate<Unit> inOrdinaryBattles(final GameState data) {
+    final boolean bases = usesBases(data);
+    return u -> !bases || !isAircraft(u);
+  }
+
+  /** Why these units can't be moved in an ordinary move, or empty: aircraft fly in the air phase. */
+  public static Optional<String> ordinaryMoveProblem(final GameState data, final Collection<Unit> units) {
+    if (!usesBases(data) || units.stream().noneMatch(AirBases::isAircraft)) {
+      return Optional.empty();
+    }
+    return Optional.of(
+        "Aircraft fly only in the air phase and at round end; carriers take the aircraft on them"
+            + " with them.");
+  }
+
+  /**
+   * The nation's aircraft in the sea zone that sail with these carriers: the carriers carry as
+   * many as they hold, jets on fleet carriers first.
+   */
+  public static List<Unit> carriedWith(
+      final GamePlayer player, final Territory zone, final Collection<Unit> moving) {
+    final List<Unit> carriers =
+        moving.stream().filter(u -> u.isOwnedBy(player) && isCarrier(u)).toList();
+    if (!zone.isWater() || carriers.isEmpty() || !usesBases(zone.getData())) {
+      return List.of();
+    }
+    int fleet = 0;
+    int other = 0;
+    for (final Unit c : carriers) {
+      if (AirUnitAttachment.isFleetCarrier(c)) {
+        fleet += c.getUnitAttachment().getCarrierCapacity();
+      } else {
+        other += c.getUnitAttachment().getCarrierCapacity();
+      }
+    }
+    final List<Unit> planes =
+        new ArrayList<>(
+            zone.getUnitCollection()
+                .getMatches(u -> u.isOwnedBy(player) && isAircraft(u) && !moving.contains(u)));
+    planes.sort(java.util.Comparator.comparing((Unit u) -> !AirUnitAttachment.isFleetCarrierOnly(u)));
+    final List<Unit> result = new ArrayList<>();
+    for (final Unit u : planes) {
+      final int cost = u.getUnitAttachment().getCarrierCost();
+      if (cost <= 0) {
+        continue;
+      }
+      if (AirUnitAttachment.isFleetCarrierOnly(u)) {
+        if (fleet >= cost) {
+          fleet -= cost;
+          result.add(u);
+        }
+      } else if (other >= cost) {
+        other -= cost;
+        result.add(u);
+      } else if (fleet >= cost) {
+        fleet -= cost;
+        result.add(u);
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Request 38 section 6: why these new units can't all be placed in the sea zone, or empty: new
+   * aircraft go only on the nation's own carriers there (old or new), within their room, counting
+   * the aircraft already on them.
+   */
+  public static Optional<String> newAircraftProblem(
+      final GamePlayer player, final Territory zone, final Collection<Unit> units) {
+    final List<Unit> planes = units.stream().filter(AirBases::isAircraft).toList();
+    if (planes.isEmpty()) {
+      return Optional.empty();
+    }
+    int fleet = 0;
+    int other = 0;
+    final List<Unit> carriers = new ArrayList<>(units.stream().filter(AirBases::isCarrier).toList());
+    carriers.addAll(zone.getUnitCollection().getMatches(u -> u.isOwnedBy(player) && isCarrier(u)));
+    for (final Unit c : carriers) {
+      if (AirUnitAttachment.isFleetCarrier(c)) {
+        fleet += c.getUnitAttachment().getCarrierCapacity();
+      } else {
+        other += c.getUnitAttachment().getCarrierCapacity();
+      }
+    }
+    int jets = 0;
+    int rest = 0;
+    final List<Unit> all = new ArrayList<>(planes);
+    all.addAll(zone.getUnitCollection().getMatches(u -> u.isOwnedBy(player) && isAircraft(u)));
+    for (final Unit u : all) {
+      if (!canUseCarriers(u.getType())) {
+        return Optional.of(AirStage.typeName(u.getType()) + " can't be placed at sea: no carrier takes it.");
+      }
+      if (AirUnitAttachment.isFleetCarrierOnly(u)) {
+        jets += u.getUnitAttachment().getCarrierCost();
+      } else {
+        rest += u.getUnitAttachment().getCarrierCost();
+      }
+    }
+    if (jets > fleet || jets + rest > fleet + other) {
+      return Optional.of(
+          "Not enough room on your own carriers in " + zone.getName() + " for the new aircraft.");
+    }
+    return Optional.empty();
+  }
+
   // ---- distances
 
   /** Whether the nation's aircraft may fly over the territory on the way somewhere else. */

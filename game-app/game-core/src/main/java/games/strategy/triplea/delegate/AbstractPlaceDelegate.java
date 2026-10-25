@@ -874,7 +874,10 @@ public abstract class AbstractPlaceDelegate extends BaseTripleADelegate
       return Optional.of("Cannot place these units outside of the capital");
     }
     if (to.isWater()) {
-      final Optional<String> canLand = validateNewAirCanLandOnCarriers(to, units);
+      final Optional<String> canLand =
+          games.strategy.triplea.delegate.air.AirBases.usesBases(getData())
+              ? games.strategy.triplea.delegate.air.AirBases.newAircraftProblem(player, to, units)
+              : validateNewAirCanLandOnCarriers(to, units);
       if (canLand.isPresent()) {
         return canLand;
       }
@@ -971,10 +974,12 @@ public abstract class AbstractPlaceDelegate extends BaseTripleADelegate
             CollectionUtils.getMatches(
                 units, Matches.unitIsAir().and(Matches.unitIsNotConstruction())));
       } else {
+        // Flames and Steel (request 38): new aircraft may go on new or old carriers alike
         final boolean canProduceFightersOnCarriers =
             isBid
                 || Properties.getProduceFightersOnCarriers(properties)
-                || Properties.getLhtrCarrierProductionRules(properties);
+                || Properties.getLhtrCarrierProductionRules(properties)
+                || games.strategy.triplea.delegate.air.AirBases.usesBases(getData());
         if (canProduceFightersOnCarriers
                 && (allProducedUnits.stream().anyMatch(Matches.unitIsCarrier()))
             || to.anyUnitsMatch(unitIsCarrierOwnedByCombinedPlayers(player))) {

@@ -626,6 +626,15 @@ public class MoveDelegate extends AbstractMoveDelegate {
     if (Peacetime.isAtPeace(player) && !EditDelegate.getEditMode(data.getProperties())) {
       return Optional.of(Peacetime.noMoveMessage(player));
     }
+    // Flames and Steel (request 38): aircraft fly only in the air phase; carriers carry theirs
+    final Optional<String> airProblem =
+        games.strategy.triplea.delegate.air.AirBases.ordinaryMoveProblem(data, move.getUnits());
+    if (airProblem.isPresent()) {
+      return airProblem;
+    }
+    final List<Unit> carried =
+        games.strategy.triplea.delegate.air.AirBases.carriedWith(
+            player, move.getRoute().getStart(), move.getUnits());
     final MoveValidationResult result =
         new MoveValidator(data, GameStepPropertiesHelper.isNonCombatMove(data, false))
             .validateMove(move, player, movesToUndo);
@@ -697,6 +706,16 @@ public class MoveDelegate extends AbstractMoveDelegate {
     tempMovePerformer.initialize(this);
     tempMovePerformer.moveUnits(move, player, currentMove);
     tempMovePerformer = null;
+    if (!carried.isEmpty()) {
+      // part of the same move, so undoing the carriers' move brings the aircraft back too
+      final Change carry = ChangeFactory.moveUnits(route.getStart(), route.getEnd(), carried);
+      currentMove.addChange(carry);
+      bridge.addChange(carry);
+      bridge
+          .getHistoryWriter()
+          .addChildToEvent(
+              MyFormatter.unitsToTextNoOwner(carried) + " go with their carriers", carried);
+    }
     // Flames and Steel (request 32): munitions remember when they arrived, newest absorbed first
     final Change arrival = Munitions.stampArrival(data, move.getUnits());
     if (!arrival.isEmpty()) {

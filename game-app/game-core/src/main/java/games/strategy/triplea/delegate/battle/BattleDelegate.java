@@ -128,6 +128,8 @@ public class BattleDelegate extends BaseTripleADelegate implements IBattleDelega
 
   @Override
   public void end() {
+    // Flames and Steel (request 38): aircraft on captured land (or sunk carriers) move one space
+    games.strategy.triplea.delegate.air.AirBaseLoss.freeMoves(bridge, false, "End of combat");
     if (needToRecordBattleStatistics) {
       getBattleTracker().sendBattleRecordsToGameData(bridge);
       needToRecordBattleStatistics = false;
@@ -259,6 +261,11 @@ public class BattleDelegate extends BaseTripleADelegate implements IBattleDelega
     }
     currentBattle = battle;
     battle.fight(bridge);
+    // Flames and Steel (request 38): aircraft on carriers sunk in the battle move one space
+    if (territory.isWater()) {
+      games.strategy.triplea.delegate.air.AirBaseLoss.freeMoves(
+          bridge, true, "Carrier lost in " + territory.getName());
+    }
     return null;
   }
 

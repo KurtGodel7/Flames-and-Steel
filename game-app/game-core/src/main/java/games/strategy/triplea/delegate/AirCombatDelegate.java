@@ -156,6 +156,9 @@ public class AirCombatDelegate extends BaseTripleADelegate {
     }
     reportAirPhase();
     healAircraft();
+    // request 38: aircraft on carriers sunk by air strikes move one space
+    games.strategy.triplea.delegate.air.AirBaseLoss.freeMoves(
+        bridge, true, "Carriers sunk by air strikes");
   }
 
   /**

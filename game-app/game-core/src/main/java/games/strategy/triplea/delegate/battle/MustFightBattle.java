@@ -162,7 +162,11 @@ public class MustFightBattle extends DependentBattle
       final GameData data,
       final BattleTracker battleTracker) {
     super(battleSite, attacker, battleTracker, data);
-    defendingUnits.addAll(this.battleSite.getMatches(Matches.enemyUnit(attacker)));
+    // Flames and Steel (request 38): aircraft on the map never fight in ordinary battles
+    defendingUnits.addAll(
+        this.battleSite.getMatches(
+            Matches.enemyUnit(attacker)
+                .and(games.strategy.triplea.delegate.air.AirBases.inOrdinaryBattles(data))));
     maxRounds =
         battleSite.isWater()
             ? Properties.getSeaBattleRounds(data.getProperties())
@@ -171,7 +175,10 @@ public class MustFightBattle extends DependentBattle
 
   void resetDefendingUnits(final GamePlayer attacker) {
     defendingUnits.clear();
-    defendingUnits.addAll(battleSite.getMatches(Matches.enemyUnit(attacker)));
+    defendingUnits.addAll(
+        battleSite.getMatches(
+            Matches.enemyUnit(attacker)
+                .and(games.strategy.triplea.delegate.air.AirBases.inOrdinaryBattles(gameData))));
   }
 
   /** Used for head-less battles. */
@@ -200,9 +207,11 @@ public class MustFightBattle extends DependentBattle
     // Filter out allied units if WW2V2
     final Predicate<Unit> ownedBy = Matches.unitIsOwnedBy(attacker);
     final Collection<Unit> attackingUnits =
-        Properties.getWW2V2(gameData.getProperties())
-            ? CollectionUtils.getMatches(units, ownedBy)
-            : units;
+        CollectionUtils.getMatches(
+            Properties.getWW2V2(gameData.getProperties())
+                ? CollectionUtils.getMatches(units, ownedBy)
+                : units,
+            games.strategy.triplea.delegate.air.AirBases.inOrdinaryBattles(gameData));
     final Territory attackingFrom = route.getTerritoryBeforeEnd();
     this.attackingUnits.addAll(attackingUnits);
     attackingFromMap.computeIfAbsent(attackingFrom, k -> new ArrayList<>()).addAll(attackingUnits);

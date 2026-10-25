@@ -488,4 +488,119 @@ class Request38Test {
     assertThat(up.size(), is(2));
     assertThat(up.get(0).getFlightRangeLeft() > 0, is(true));
   }
+
+  // ---- stage 4: the stock rules
+
+  @Test
+  void aircraftOnATerritoryTakeNoPartInItsGroundBattle() {
+    cleanBoard();
+    final Territory lwow = t("Lwow");
+    lwow.setOwner(germans);
+    removeFrom(lwow, lwow.getUnits());
+    final List<Unit> infantry = add(lwow, germans, "infantry", 2);
+    add(lwow, germans, "fighter", 3);
+    final var battle =
+        new games.strategy.triplea.delegate.battle.MustFightBattle(
+            lwow, british, data, new games.strategy.triplea.delegate.battle.BattleTracker());
+    assertThat(battle.getDefendingUnits().size(), is(infantry.size()));
+    assertThat(battle.getDefendingUnits().stream().anyMatch(Matches.unitIsAir()), is(false));
+  }
+
+  @Test
+  void aCapturedBaseGivesItsAircraftAFreeMoveOfOneSpace() {
+    cleanBoard();
+    final Territory lwow = t("Lwow");
+    final Territory next =
+        data.getMap().getNeighbors(lwow).stream().filter(n -> !n.isWater()).findFirst().orElseThrow();
+    next.setOwner(germans);
+    add(lwow, germans, "fighter", 2);
+    // Lwow stays British (captured): the fighters must move; nobody answers, so the default
+    games.strategy.triplea.delegate.air.AirBaseLoss.freeMoves(
+        new AirStageRunner(data).bridge(), false, "End of combat");
+    assertThat(count(lwow, germans, "fighter"), is(0));
+    assertThat(count(next, germans, "fighter"), is(2));
+  }
+
+  @Test
+  void aCapturedIslandBaseLosesItsAircraft() {
+    cleanBoard();
+    final Territory lwow = t("Lwow");
+    add(lwow, germans, "fighter", 1);
+    games.strategy.triplea.delegate.air.AirBaseLoss.freeMoves(
+        new AirStageRunner(data).bridge(), false, "End of combat");
+    assertThat(count(lwow, germans, "fighter"), is(0));
+    assertThat(AirBases.basedAircraft(germans).isEmpty(), is(true));
+  }
+
+  @Test
+  void aSunkCarriersAircraftMoveOneSpaceAndOneThatCantLandIsLost() {
+    cleanBoard();
+    final Territory gulf = t("Sea Zone 104 Persian Gulf");
+    final Territory next =
+        data.getMap().getNeighbors(gulf).stream().filter(Territory::isWater).findFirst().orElseThrow();
+    removeFrom(next, next.getUnits());
+    add(next, germans, "carrier", 1); // room for 2
+    add(gulf, germans, "fighter", 3); // their carrier was sunk
+    games.strategy.triplea.delegate.air.AirBaseLoss.freeMoves(
+        new AirStageRunner(data).bridge(), true, "Carrier lost in " + gulf.getName());
+    assertThat(count(gulf, germans, "fighter"), is(0));
+    assertThat(count(next, germans, "fighter"), is(2));
+    assertThat(AirBases.basedAircraft(germans).values().stream().mapToInt(List::size).sum(), is(2));
+  }
+
+  /** The Germans' non-combat move with a move delegate ready. */
+  private MoveDelegate germanMove() {
+    final var sequence = data.getSequence();
+    for (int i = 0; i < 10_000 && !sequence.getStep().getName().equals("germanNonCombatMove"); i++) {
+      sequence.next();
+    }
+    final MoveDelegate move = (MoveDelegate) data.getDelegate("move");
+    move.setDelegateBridgeAndPlayer(new AirStageRunner(data).bridge());
+    move.start();
+    return move;
+  }
+
+  @Test
+  void aircraftCannotMakeOrdinaryMovesButSailWithTheirCarriers() {
+    final Territory a = t("Sea Zone 76 Helgoland Bight");
+    final Territory b =
+        data.getMap().getNeighbors(a).stream().filter(Territory::isWater).findFirst().orElseThrow();
+    removeFrom(a, a.getUnits());
+    removeFrom(b, b.getUnits());
+    final List<Unit> carrier = add(a, germans, "carrier", 1);
+    final List<Unit> fighters = add(a, germans, "fighter", 2);
+    final MoveDelegate move = germanMove();
+    final Optional<String> refused =
+        move.performMove(
+            new games.strategy.engine.data.MoveDescription(
+                fighters, new games.strategy.engine.data.Route(a, b)));
+    assertThat(refused.isPresent(), is(true));
+    final Optional<String> sailed =
+        move.performMove(
+            new games.strategy.engine.data.MoveDescription(
+                carrier, new games.strategy.engine.data.Route(a, b)));
+    assertThat(sailed, is(Optional.empty()));
+    assertThat(count(b, germans, "fighter"), is(2));
+    assertThat(count(a, germans, "fighter"), is(0));
+    move.end();
+  }
+
+  @Test
+  void newAircraftGoOnlyOnTheNationsOwnCarriersWithRoom() {
+    final Territory zone = t("Sea Zone 76 Helgoland Bight");
+    removeFrom(zone, zone.getUnits());
+    final List<Unit> two = type("fighter").create(2, germans);
+    assertThat(AirBases.newAircraftProblem(germans, zone, two).isPresent(), is(true));
+    add(zone, BasedMap.p(data, "Italians"), "carrier", 1); // an ally's carrier is no base
+    assertThat(AirBases.newAircraftProblem(germans, zone, two).isPresent(), is(true));
+    add(zone, germans, "carrier", 1);
+    assertThat(AirBases.newAircraftProblem(germans, zone, two), is(Optional.empty()));
+    assertThat(
+        AirBases.newAircraftProblem(germans, zone, type("fighter").create(3, germans)).isPresent(),
+        is(true));
+    // a new carrier placed with them counts too
+    final List<Unit> withCarrier = new java.util.ArrayList<>(type("fighter").create(4, germans));
+    withCarrier.addAll(type("carrier").create(1, germans));
+    assertThat(AirBases.newAircraftProblem(germans, zone, withCarrier), is(Optional.empty()));
+  }
 }
