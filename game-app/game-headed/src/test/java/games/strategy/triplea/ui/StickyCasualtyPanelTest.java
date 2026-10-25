@@ -45,7 +45,7 @@ class StickyCasualtyPanelTest {
   static void load() {
     Assumptions.assumeTrue(Files.exists(XML), "Flames and Steel map not installed");
     ClientSetting.initialize();
-    data = GameParser.parse(XML, false).orElseThrow();
+    data = games.strategy.triplea.ui.TestMaps.load();
     germans = data.getPlayerList().getPlayerId("Germans");
     ui = new UiContext(data);
   }

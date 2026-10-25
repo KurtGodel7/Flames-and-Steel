@@ -40,7 +40,7 @@ class BattleshipSupportBoardTest {
   void supportedShipsAreMarked() throws Exception {
     Assumptions.assumeTrue(Files.exists(XML), "Flames and Steel map not installed");
     ClientSetting.initialize();
-    final GameData data = GameParser.parse(XML, false).orElseThrow();
+    final GameData data = games.strategy.triplea.ui.TestMaps.load();
     final GamePlayer americans = data.getPlayerList().getPlayerId("Americans");
     final GamePlayer japanese = data.getPlayerList().getPlayerId("Japanese");
     final Territory sea =

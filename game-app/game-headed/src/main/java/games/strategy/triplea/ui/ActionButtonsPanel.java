@@ -18,7 +18,7 @@ import games.strategy.triplea.delegate.data.FightBattleDetails;
 import games.strategy.triplea.delegate.data.TechRoll;
 import games.strategy.triplea.delegate.remote.IPoliticsDelegate;
 import games.strategy.triplea.delegate.remote.IUserActionDelegate;
-import games.strategy.triplea.ui.air.AirAllocationPanel;
+import games.strategy.triplea.ui.air.AirHomePanel;
 import games.strategy.triplea.ui.air.AirTargetPanel;
 import games.strategy.triplea.ui.panel.move.MovePanel;
 import games.strategy.triplea.ui.panels.map.MapPanel;
@@ -64,7 +64,7 @@ public class ActionButtonsPanel extends JPanel {
   private @Nullable PoliticsPanel politicsPanel;
   private @Nullable UserActionPanel userActionPanel;
   private @Nullable PickTerritoryAndUnitsPanel pickTerritoryAndUnitsPanel;
-  @Getter private @Nullable AirAllocationPanel airAllocationPanel;
+  @Getter private @Nullable AirHomePanel airHomePanel;
   @Getter private @Nullable AirTargetPanel airTargetPanel;
   private @Nullable StepInfoPanel stepInfoPanel;
 
@@ -85,7 +85,7 @@ public class ActionButtonsPanel extends JPanel {
     politicsPanel = new PoliticsPanel(frame);
     userActionPanel = new UserActionPanel(frame);
     pickTerritoryAndUnitsPanel = new PickTerritoryAndUnitsPanel(frame);
-    airAllocationPanel = new AirAllocationPanel(frame);
+    airHomePanel = new AirHomePanel(frame);
     airTargetPanel = new AirTargetPanel(frame);
     stepInfoPanel = new StepInfoPanel(gameData, mapPanel);
     actionPanel = techPanel;
@@ -102,7 +102,7 @@ public class ActionButtonsPanel extends JPanel {
     add(politicsPanel, politicsPanel.toString());
     add(userActionPanel, userActionPanel.toString());
     add(pickTerritoryAndUnitsPanel, pickTerritoryAndUnitsPanel.toString());
-    add(airAllocationPanel, airAllocationPanel.toString());
+    add(airHomePanel, airHomePanel.toString());
     add(airTargetPanel, airTargetPanel.toString());
     add(stepInfoPanel, stepInfoPanel.toString());
     // this should not be necessary, but it makes tracking down garbage leaks easier in the profiler
@@ -136,7 +136,7 @@ public class ActionButtonsPanel extends JPanel {
               politicsPanel = null;
               userActionPanel = null;
               pickTerritoryAndUnitsPanel = null;
-              airAllocationPanel = null;
+              airHomePanel = null;
               airTargetPanel = null;
               stepInfoPanel = null;
             });
@@ -207,9 +207,9 @@ public class ActionButtonsPanel extends JPanel {
     }
   }
 
-  /** Flames and Steel: shows the air allocation panel. */
-  public void changeToAirAllocation(final GamePlayer gamePlayer) {
-    changeTo(gamePlayer, airAllocationPanel);
+  /** Flames and Steel (request 38): shows the planes go home panel. */
+  public void changeToAirHome(final GamePlayer gamePlayer) {
+    changeTo(gamePlayer, airHomePanel);
   }
 
   /**

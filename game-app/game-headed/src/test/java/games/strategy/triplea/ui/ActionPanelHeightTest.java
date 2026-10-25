@@ -11,9 +11,9 @@ import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.gameparser.GameParser;
 import games.strategy.engine.framework.IGame;
 import games.strategy.engine.framework.LocalPlayers;
-import games.strategy.triplea.delegate.air.AirAllocation.Stage;
+import games.strategy.triplea.delegate.air.AirStage.Stage;
 import games.strategy.triplea.settings.ClientSetting;
-import games.strategy.triplea.ui.air.AirAllocationPanel;
+import games.strategy.triplea.ui.air.AirHomePanel;
 import games.strategy.triplea.ui.air.AirTargetPanel;
 import java.awt.Component;
 import java.awt.Container;
@@ -66,7 +66,7 @@ class ActionPanelHeightTest {
     Assumptions.assumeTrue(Files.exists(XML), "Flames and Steel map not installed");
     Assumptions.assumeFalse(GraphicsEnvironment.isHeadless(), "needs a screen");
     ClientSetting.initialize();
-    data = GameParser.parse(XML, false).orElseThrow();
+    data = games.strategy.triplea.ui.TestMaps.load();
     final IGame game = mock(IGame.class);
     when(game.getData()).thenReturn(data);
     frame = TripleAFrame.create(game, new LocalPlayers(Set.of()), null, () -> {});
@@ -110,13 +110,18 @@ class ActionPanelHeightTest {
     for (final Stage stage : Stage.values()) {
       runStep(
           nation + "-" + stage.name().toLowerCase(java.util.Locale.ROOT),
-          AirAllocationPanel.class,
-          () -> frame.getAirAllocation(player, stage, List.of(), Map.of(), Map.of(), moves -> {}));
+          stage == Stage.HOME ? AirHomePanel.class : AirTargetPanel.class,
+          () ->
+              frame.getAirStage(
+                  player,
+                  stage,
+                  List.of(player),
+                  games.strategy.triplea.delegate.air.AirStage.Choice.none(),
+                  Map.of(),
+                  Map.of(),
+                  "",
+                  staged -> {}));
     }
-    runStep(
-        nation + "-targets",
-        AirTargetPanel.class,
-        () -> frame.getAirTargets(player, List.of(), strikes -> {}));
   }
 
   /** Starts the step, checks its Done button is wholly on screen, saves a picture, clicks Done. */

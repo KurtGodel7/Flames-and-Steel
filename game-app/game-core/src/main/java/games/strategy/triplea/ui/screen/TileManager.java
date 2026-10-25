@@ -329,6 +329,10 @@ public class TileManager {
       final MapData mapData,
       final Set<Tile> drawnOn,
       final Set<IDrawable> drawing) {
+    // Flames and Steel (request 38): aircraft in the air are drawn over their territory instead
+    if (games.strategy.triplea.delegate.air.AirBases.isAirborneTerritory(territory)) {
+      return;
+    }
     final Iterator<Point> placementPoints = mapData.getPlacementPoints(territory).iterator();
     if (!placementPoints.hasNext()) {
       throw new IllegalStateException("No where to place units: " + territory.getName());

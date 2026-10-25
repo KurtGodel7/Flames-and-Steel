@@ -116,6 +116,13 @@ public class UnitsDrawer extends AbstractDrawable {
 
     final Image img = factory.getImage(imageKey);
     final int maxRange = new Unit(unitType, owner, data).getMaxMovementAllowed();
+    // Flames and Steel (request 38): aircraft on land sit on an airfield plate; they don't defend
+    if (territory != null
+        && !territory.isWater()
+        && unitType.getUnitAttachment().isAir()
+        && games.strategy.triplea.delegate.air.AirBases.usesBases(data)) {
+      drawAirfield(bounds, graphics, factory.getUnitImageWidth(), factory.getUnitImageHeight());
+    }
 
     drawUnitByDrawMode(bounds, graphics, maxRange, owner, img);
 
@@ -204,6 +211,21 @@ public class UnitsDrawer extends AbstractDrawable {
           placementPoint.y - bounds.y + factory.getUnitCounterOffsetHeight(),
           MapImage.getPropertyUnitCountColor(),
           MapImage.getPropertyUnitCountOutline());
+    }
+  }
+
+  /** A small grey runway under an aircraft stack on land (request 38). */
+  private void drawAirfield(
+      final Rectangle bounds, final Graphics2D graphics, final int width, final int height) {
+    final int x = placementPoint.x - bounds.x - 2;
+    final int y = placementPoint.y - bounds.y + height * 2 / 3;
+    final int h = Math.max(6, height / 4);
+    graphics.setColor(new Color(60, 60, 60, 210));
+    graphics.fillRoundRect(x, y, width + 4, h, 4, 4);
+    graphics.setColor(new Color(235, 235, 235, 230));
+    final int mid = y + h / 2;
+    for (int dx = 3; dx < width; dx += 7) {
+      graphics.drawLine(x + dx, mid, x + dx + 3, mid);
     }
   }
 

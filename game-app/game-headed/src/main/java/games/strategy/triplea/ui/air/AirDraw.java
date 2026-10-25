@@ -1,6 +1,5 @@
 package games.strategy.triplea.ui.air;
 
-import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.UnitType;
@@ -9,7 +8,6 @@ import games.strategy.triplea.image.UnitImageFactory;
 import games.strategy.triplea.image.UnitImageFactory.ImageKey;
 import games.strategy.triplea.ui.UiContext;
 import games.strategy.triplea.ui.mapdata.MapData;
-import games.strategy.triplea.util.UnitSeparator;
 import java.awt.AlphaComposite;
 import java.awt.BasicStroke;
 import java.awt.Color;
@@ -24,9 +22,7 @@ import java.awt.Rectangle;
 import java.awt.Stroke;
 import java.awt.geom.Point2D;
 import java.awt.geom.QuadCurve2D;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /** Flames and Steel: drawing helpers for the air phase overlays, in map coordinates. */
 final class AirDraw {
@@ -38,140 +34,31 @@ final class AirDraw {
   private static final float[] DASH = {10f, 7f};
 
   private final UiContext uiContext;
-  private @javax.annotation.Nullable AirMapMode airMapMode;
-
-  /** Next free unit spot per zone while one overlay paints. */
-  private final Map<Territory, Integer> nextSlot = new HashMap<>();
 
   AirDraw(final UiContext uiContext) {
     this.uiContext = uiContext;
-  }
-
-  /** In air map mode, zones are drawn on the map (their area and stack) instead of their box. */
-  void setAirMapMode(final @javax.annotation.Nullable AirMapMode airMapMode) {
-    this.airMapMode = airMapMode;
   }
 
   MapData mapData() {
     return uiContext.getMapData();
   }
 
-  /** Call at the start of each paint: ghost stacks start after the units already drawn. */
-  void resetSlots() {
-    nextSlot.clear();
-  }
-
   void fillBox(final Graphics2D g, final Territory zone, final Color fill) {
-    if (airMapMode != null && airMapMode.fillZone(g, zone, fill)) {
-      return;
-    }
     g.setColor(fill);
     for (final Polygon p : mapData().getPolygons(zone)) {
       g.fillPolygon(p);
     }
   }
 
+  /** Outlines a territory or sea zone. */
   void outlineBox(final Graphics2D g, final Territory zone, final Color color, final float width) {
-    if (airMapMode != null && airMapMode.outlineZone(g, zone, color, width)) {
-      return;
+    final Stroke old = g.getStroke();
+    g.setColor(color);
+    g.setStroke(new BasicStroke(width));
+    for (final Polygon p : mapData().getPolygons(zone)) {
+      g.drawPolygon(p);
     }
-    AirZoneOverlay.outline(g, mapData(), zone, color, width);
-  }
-
-  /**
-   * Draws a faded stack of unit icons with a count in the next free spot of the zone, outlined to
-   * show it is not there yet. Returns the centre of the stack.
-   */
-  Point ghostStack(
-      final Graphics2D g,
-      final GameData data,
-      final Territory zone,
-      final GamePlayer owner,
-      final UnitType type,
-      final int count,
-      final Color outline,
-      final boolean dashed) {
-    final UnitImageFactory imageFactory = uiContext.getUnitImageFactory();
-    if (airMapMode != null) {
-      final java.util.Optional<Point> onMap =
-          airMapMode.takePendingSpot(zone, imageFactory.getUnitImageWidth());
-      if (onMap.isPresent()) {
-        final Point p = onMap.get();
-        g.setColor(new Color(255, 255, 255, 70));
-        g.fillRoundRect(
-            p.x - 1,
-            p.y - 1,
-            imageFactory.getUnitImageWidth() + 2,
-            imageFactory.getUnitImageHeight() + 2,
-            6,
-            6);
-        final Composite oldComposite = g.getComposite();
-        g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.75f));
-        g.drawImage(
-            imageFactory.getImage(ImageKey.builder().player(owner).type(type).build()),
-            p.x,
-            p.y,
-            null);
-        g.setComposite(oldComposite);
-        g.setColor(outline);
-        g.setStroke(
-            new BasicStroke(
-                2f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10f, new float[] {4f, 3f}, 0f));
-        g.drawRoundRect(
-            p.x - 1,
-            p.y - 1,
-            imageFactory.getUnitImageWidth() + 2,
-            imageFactory.getUnitImageHeight() + 2,
-            6,
-            6);
-        countLabel(
-            g,
-            String.valueOf(count),
-            p.x + imageFactory.getUnitImageWidth() + 14,
-            p.y + imageFactory.getUnitImageHeight());
-        return new Point(
-            p.x + imageFactory.getUnitImageWidth() / 2,
-            p.y + imageFactory.getUnitImageHeight() / 2);
-      }
-    }
-    final List<Point> spots = mapData().getPlacementPoints(zone);
-    final int slot =
-        nextSlot.computeIfAbsent(
-            zone, z -> UnitSeparator.getSortedUnitCategories(z.getUnits(), data, mapData()).size());
-    nextSlot.put(zone, slot + 1);
-    final UnitImageFactory images = uiContext.getUnitImageFactory();
-    final int w = images.getUnitImageWidth();
-    final int h = images.getUnitImageHeight();
-    final Point spot;
-    if (spots.isEmpty()) {
-      final Point c = mapData().getCenter(zone);
-      spot = new Point(c.x + slot * (w + 4), c.y);
-    } else if (slot < spots.size()) {
-      spot = spots.get(slot);
-    } else {
-      final Point last = spots.get(spots.size() - 1);
-      spot = new Point(last.x, last.y + (slot - spots.size() + 1) * (h + 4));
-    }
-    final Image image = images.getImage(ImageKey.builder().player(owner).type(type).build());
-    g.setColor(new Color(255, 255, 255, 70));
-    g.fillRoundRect(spot.x - 1, spot.y - 1, w + 2, h + 2, 6, 6);
-    final Composite old = g.getComposite();
-    g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.75f));
-    g.drawImage(image, spot.x, spot.y, null);
-    g.setComposite(old);
-    final Stroke oldStroke = g.getStroke();
-    g.setColor(outline);
-    g.setStroke(
-        dashed
-            ? new BasicStroke(
-                2f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10f, new float[] {4f, 3f}, 0f)
-            : new BasicStroke(2f));
-    g.drawRoundRect(spot.x - 1, spot.y - 1, w + 2, h + 2, 6, 6);
-    g.setStroke(oldStroke);
-    if (count > 1) {
-      countLabel(g, String.valueOf(count), spot.x + w, spot.y + h);
-    }
-    return new Point(spot.x + w / 2, spot.y + h / 2);
+    g.setStroke(old);
   }
 
   /** A unit icon with a count and a light backing, its top left corner at the point. */
@@ -282,12 +169,6 @@ final class AirDraw {
 
   /** The point where an arrow leaves a box: its centre. */
   Point center(final Territory t) {
-    if (airMapMode != null) {
-      final java.util.Optional<Point> onMap = airMapMode.anchorOf(t);
-      if (onMap.isPresent()) {
-        return onMap.get();
-      }
-    }
     return mapData().getCenter(t);
   }
 

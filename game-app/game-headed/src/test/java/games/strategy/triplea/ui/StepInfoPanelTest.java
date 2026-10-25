@@ -50,7 +50,7 @@ class StepInfoPanelTest {
   void researchStepHasAReopenButtonAndDisplayNames() throws Exception {
     Assumptions.assumeTrue(Files.exists(XML), "Flames and Steel map not installed");
     ClientSetting.initialize();
-    final GameData data = GameParser.parse(XML, false).orElseThrow();
+    final GameData data = games.strategy.triplea.ui.TestMaps.load();
     final GamePlayer atlantic = data.getPlayerList().getPlayerId("Americans");
     SwingUtilities.invokeAndWait(
         () -> {

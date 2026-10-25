@@ -44,7 +44,11 @@ public final class BasedMap {
       if (Files.exists(dtd) && !Files.exists(dtdCopy)) {
         Files.copy(dtd, dtdCopy);
       }
-      return GameParser.parse(copy, false).orElseThrow();
+      final GameData data = GameParser.parse(copy, false).orElseThrow();
+      // the copy is outside the map folder: name the map as its map.yml does
+      data.setMapName("flames_and_steel");
+      data.setGameName("Flames and Steel");
+      return data;
     } catch (final IOException e) {
       throw new IllegalStateException(e);
     }
@@ -54,7 +58,8 @@ public final class BasedMap {
     String s = xml;
     s = remove(s, "<attachment name=\"airZoneAttachment\"[^>]*>.*?</attachment>");
     s = remove(s, "<attachment [^>]*attachTo=\"Air - [^\"]*\"[^>]*>.*?</attachment>");
-    s = remove(s, "<territory name=\"Air - [^\"]*\"[^>]*/>");
+    // one old box stays, as the hidden airborne territory: the map files can draw it
+    s = remove(s, "<territory name=\"Air - (?!Western Europe\")[^\"]*\"[^>]*/>");
     s = remove(s, "<connection t1=\"[^\"]*\" t2=\"[^\"]*\"\\s*/>", "Air - ");
     s = remove(s, "<unitPlacement [^>]*territory=\"Air - [^\"]*\"[^>]*/>");
     s = remove(s, "<territoryOwner territory=\"Air - [^\"]*\"[^>]*/>");
@@ -64,7 +69,11 @@ public final class BasedMap {
     s = remove(s, "<step name=\"[^\"]*\" delegate=\"airAllocation\"[^>]*/>");
     s = remove(s, "<property name=\"FS Long Range Raid[^\"]*\"[^>]*/>");
     s = remove(s, "<property name=\"FS Long Range Raid[^\"]*\"[^>]*[^/]>.*?</property>");
-    s = s.replaceFirst("<map>", "<map>\n    <territory name=\"Air - Airborne\" water=\"true\"/>");
+    s =
+        s.replaceFirst(
+            "<propertyList>",
+            "<propertyList>\n    <property name=\"FS Airborne Territory\""
+                + " value=\"Air - Western Europe\" editable=\"false\"><string/></property>");
     s =
         s.replaceFirst(
             "(\\s*)<step name=\"endRoundStep\"",

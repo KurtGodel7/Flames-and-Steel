@@ -53,8 +53,6 @@ import games.strategy.triplea.delegate.GameStepPropertiesHelper;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.TechAdvance;
 import games.strategy.triplea.delegate.TerritoryEffectHelper;
-import games.strategy.triplea.delegate.air.AirAllocation.AirMove;
-import games.strategy.triplea.delegate.air.AirAllocation.Stage;
 import games.strategy.triplea.delegate.air.AirCombat.TargetAssignment;
 import games.strategy.triplea.delegate.battle.AirBattle;
 import games.strategy.triplea.delegate.battle.BattleState;
@@ -73,11 +71,8 @@ import games.strategy.triplea.formatter.MyFormatter;
 import games.strategy.triplea.image.MapImage;
 import games.strategy.triplea.image.TileImageFactory;
 import games.strategy.triplea.settings.ClientSetting;
-import games.strategy.triplea.ui.air.AirAllocationPanel;
 import games.strategy.triplea.ui.air.AirMapMode;
-import games.strategy.triplea.ui.air.AirPanel;
 import games.strategy.triplea.ui.air.AirTargetPanel;
-import games.strategy.triplea.ui.air.AirZoneOverlay;
 import games.strategy.triplea.ui.export.ScreenshotExporter;
 import games.strategy.triplea.ui.history.HistoryDetailsPanel;
 import games.strategy.triplea.ui.history.HistoryLog;
@@ -202,16 +197,12 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
   private final TechnologyPanel technologyPanel;
   private final ResearchPanel researchPanel;
   private @Nullable ResearchScreen researchScreen;
-  @Getter private @Nullable AirZoneOverlay airZoneOverlay;
-  private @Nullable AirPanel airPanel;
   @Getter private @Nullable AirMapMode airMapMode;
   private @Nullable GamePlayer lastAirAllocator;
   // request 35: this computer's nations in a simultaneous air stage go one at a time, in turn order
   private final games.strategy.triplea.ui.air.AirStageTurnstile airStageTurnstile =
       new games.strategy.triplea.ui.air.AirStageTurnstile();
   // request 35: each nation's last choices on its stage screen, restored if the host refuses them
-  private final Map<GamePlayer, List<TargetAssignment>> airStageLast =
-      new java.util.concurrent.ConcurrentHashMap<>();
   private final EconomyPanel economyPanel;
   private final Runnable clientLeftGame;
   private @Nullable ObjectivePanel objectivePanel;
@@ -439,14 +430,13 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
     statsPanel = new StatPanel(data, uiContext);
     technologyPanel = new TechnologyPanel(data, uiContext);
     researchPanel = new ResearchPanel(data, this::openResearchScreen);
-    if (AirZoneOverlay.isUsed(data)) {
-      airZoneOverlay = new AirZoneOverlay(uiContext, mapPanel, data);
-      mapPanel.addOverlay(airZoneOverlay);
+    if (AirMapMode.isUsed(data)) {
       airMapMode = new AirMapMode(uiContext, mapPanel, data, this::setStatusMessage);
       mapPanel.addOverlay(airMapMode);
       final JToggleButton airMapToggle = new JToggleButton("Air map");
       airMapToggle.setToolTipText(
-          "Show the air war on the map (Ctrl+I). On by itself during the air phase.");
+          "Show the air war on the map: aircraft in the air and their battles (Ctrl+I). On by"
+              + " itself during the air phase.");
       airMapToggle.setFocusable(false);
       airMapToggle.addActionListener(e -> airMapMode.toggle());
       airMapMode.addModeListener(
@@ -477,8 +467,6 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
           on -> SwingUtilities.invokeLater(() -> nationFilter.setVisible(on)));
       bottomBar.addStepControl(airControls);
       SwingKeyBinding.addKeyBindingWithMetaAndCtrlMasks(this, KeyCode.I, airMapMode::toggle);
-      airPanel = new AirPanel(data, mapPanel, airZoneOverlay::setSelectedZone);
-      data.addGameDataEventListener(GameDataEvent.GAME_STEP_CHANGED, airPanel::followTurn);
     }
     economyPanel = new EconomyPanel(data, uiContext);
     objectivePanel = new ObjectivePanel(data, uiContext);
@@ -642,9 +630,6 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
     }
     if (ResearchPanel.isUsed(data)) {
       tabsPanel.addTab("Research", null, researchPanel, "Research centres and stars");
-    }
-    if (airPanel != null) {
-      tabsPanel.addTab("Air", null, airPanel, "Aircraft per air box and nation");
     }
     addTab("Resources", economyPanel, KeyCode.R);
     if (objectivePanel != null) {
@@ -1698,68 +1683,23 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
   }
 
   /**
-   * Flames and Steel: the nation allocates its aircraft on the map (Actions tab). On a shared
-   * computer, when the previous local nation to allocate was an enemy, first asks to pass the
-   * computer on, so nothing hidden is on screen when the next player sits down.
+   * Requests 35 and 38: one nation's screen in a simultaneous air stage or planes go home. Waits
+   * until every earlier nation this computer plays has finished, shows the "pass to the next
+   * player" screen between enemies on one computer (not for planes go home: nothing is hidden),
+   * then the screen until Done.
    *
-   * @param store called with the staged moves after every change, so a save keeps them
-   */
-  public List<AirMove> getAirAllocation(
-      final GamePlayer gamePlayer,
-      final Stage stage,
-      final List<AirMove> start,
-      final Map<GamePlayer, List<AirMove>> allied,
-      final Map<GamePlayer, List<AirMove>> revealed,
-      final Consumer<List<AirMove>> store) {
-    messageAndDialogThreadPool.waitForAll();
-    final long localHumans =
-        getLocalPlayers().getLocalPlayers().stream().filter(p -> !p.isAi()).count();
-    final GamePlayer previous = lastAirAllocator;
-    lastAirAllocator = gamePlayer;
-    if (localHumans > 1 && previous != null && !previous.equals(gamePlayer)) {
-      final boolean enemies;
-      try (GameData.Unlocker ignored = data.acquireReadLock()) {
-        enemies = data.getRelationshipTracker().isAtWar(previous, gamePlayer);
-      }
-      if (enemies) {
-        Interruptibles.await(
-            () ->
-                SwingAction.invokeAndWait(
-                    () ->
-                        JOptionPane.showMessageDialog(
-                            TripleAFrame.this,
-                            "<html><h2>Pass to the "
-                                + games.strategy.triplea.formatter.PlayerNames.display(gamePlayer)
-                                + " player</h2>"
-                                + (stage == Stage.BOMBERS ? "Bomber" : "Fighter")
-                                + " allocation is hidden from enemies.<br>"
-                                + games.strategy.triplea.formatter.PlayerNames.display(previous)
-                                + ": please look away.</html>",
-                            games.strategy.triplea.formatter.PlayerNames.display(gamePlayer) + " air allocation",
-                            JOptionPane.INFORMATION_MESSAGE)));
-      }
-    }
-    requestWindowFocus();
-    final AirAllocationPanel panel = actionButtonsPanel.getAirAllocationPanel();
-    if (panel == null) {
-      return List.of();
-    }
-    actionButtonsPanel.changeToAirAllocation(gamePlayer);
-    panel.start(gamePlayer, stage, start, allied, revealed, store);
-    return panel.waitForAllocation();
-  }
-
-  /**
-   * Request 35: one nation's screen in a simultaneous air stage. Waits until every earlier nation
-   * this computer plays has finished, shows the "pass to the next player" screen between enemies on
-   * one computer, then the stage screen until Done.
+   * @param allied the allies' choices so far this stage
+   * @param store gets the choices after every change (sent to the host for the allies)
    */
   public games.strategy.triplea.delegate.air.AirStage.Choice getAirStage(
       final GamePlayer gamePlayer,
-      final games.strategy.triplea.delegate.air.AirAllocation.Stage stage,
+      final games.strategy.triplea.delegate.air.AirStage.Stage stage,
       final List<GamePlayer> order,
+      final games.strategy.triplea.delegate.air.AirStage.Choice start,
       final Map<GamePlayer, List<TargetAssignment>> bombers,
-      final String problem) {
+      final Map<GamePlayer, List<TargetAssignment>> allied,
+      final String problem,
+      final Consumer<List<TargetAssignment>> store) {
     final int round;
     try (GameData.Unlocker ignored = data.acquireReadLock()) {
       round = data.getSequence().getRound();
@@ -1773,38 +1713,68 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
     }
     try {
       messageAndDialogThreadPool.waitForAll();
-      passToNextPlayer(
-          gamePlayer,
-          stage == games.strategy.triplea.delegate.air.AirAllocation.Stage.BOMBERS
-              ? "Bomber moves and targets"
-              : "Fighter moves and placements");
+      final boolean home = stage == games.strategy.triplea.delegate.air.AirStage.Stage.HOME;
+      if (!home) {
+        passToNextPlayer(
+            gamePlayer,
+            stage == games.strategy.triplea.delegate.air.AirStage.Stage.BOMBERS
+                ? "Bomber targets"
+                : "Fighters: escort and defend");
+      }
       if (!problem.isEmpty()) {
         notifyError(problem);
       }
       requestWindowFocus();
+      SwingUtilities.invokeLater(this::showActionPanelTab);
+      if (home) {
+        final games.strategy.triplea.ui.air.AirHomePanel panel = actionButtonsPanel.getAirHomePanel();
+        if (panel == null) {
+          return games.strategy.triplea.delegate.air.AirStage.Choice.none();
+        }
+        actionButtonsPanel.changeToAirHome(gamePlayer);
+        panel.start(gamePlayer, start.landings());
+        return new games.strategy.triplea.delegate.air.AirStage.Choice(
+            List.of(), panel.waitForLandings());
+      }
       final AirTargetPanel panel = actionButtonsPanel.getAirTargetPanel();
       if (panel == null) {
         return games.strategy.triplea.delegate.air.AirStage.Choice.none();
       }
       actionButtonsPanel.changeToAirTargets(gamePlayer);
-      SwingUtilities.invokeLater(this::showActionPanelTab);
-      panel.startStage(
-          gamePlayer,
-          stage,
-          problem.isEmpty() ? List.of() : airStageLast.getOrDefault(gamePlayer, List.of()),
-          bombers);
-      final List<TargetAssignment> origin = panel.waitForTargets();
-      airStageLast.put(gamePlayer, origin);
-      try (GameData.Unlocker ignored = data.acquireReadLock()) {
-        return games.strategy.triplea.delegate.air.AirStage.toChoice(
-            gamePlayer, stage, origin, bombers);
-      }
+      panel.setAllied(gamePlayer, allied);
+      panel.startStage(gamePlayer, stage, start.targets(), bombers, store);
+      return games.strategy.triplea.delegate.air.AirStage.Choice.of(panel.waitForTargets());
     } finally {
       airStageTurnstile.finish(gamePlayer);
       if (airStageTurnstile.localLeft(order, local).isEmpty()) {
         airStageWaiting(List.of("the other players"));
       }
     }
+  }
+
+  /** Request 38 section 12: the allies' choices so far, for the nation's open screen. */
+  public void airStageAllied(
+      final GamePlayer gamePlayer, final Map<GamePlayer, List<TargetAssignment>> allied) {
+    final AirTargetPanel panel =
+        actionButtonsPanel == null ? null : actionButtonsPanel.getAirTargetPanel();
+    if (panel != null) {
+      panel.setAllied(gamePlayer, allied);
+    }
+  }
+
+  /** Request 38 section 5: where aircraft that lost their base land with their free move. */
+  public Map<Unit, games.strategy.engine.data.Territory> selectFreeLandings(
+      final Map<Unit, List<games.strategy.engine.data.Territory>> options, final String why) {
+    messageAndDialogThreadPool.waitForAll();
+    requestWindowFocus();
+    return Interruptibles.awaitResult(
+            () ->
+                SwingAction.invokeAndWaitResult(
+                    () ->
+                        games.strategy.triplea.ui.air.FreeLandingDialog.show(
+                            TripleAFrame.this, options, why)))
+        .result
+        .orElse(Map.of());
   }
 
   /** Request 35: the stage is still waiting for these nations (names only). */
@@ -1860,47 +1830,6 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
   }
 
   /**
-   * Flames and Steel: the nation sends its surviving bombers against targets on the map (Actions
-   * tab).
-   *
-   * @param store called with the strikes after every change, so a save keeps them
-   */
-  public List<TargetAssignment> getAirTargets(
-      final GamePlayer gamePlayer,
-      final List<TargetAssignment> start,
-      final Consumer<List<TargetAssignment>> store) {
-    return getAirTargets(gamePlayer, start, store, false, Map.of(), Map.of());
-  }
-
-  /**
-   * Flames and Steel: the nation's bomber targets or (request 30) its fighter cover, chosen on the
-   * map (Actions tab).
-   *
-   * @param cover whether this is the fighter cover step
-   * @param revealed every nation's bomber targets (cover step only)
-   * @param allied the allies' choices so far, which share the caps
-   */
-  public List<TargetAssignment> getAirTargets(
-      final GamePlayer gamePlayer,
-      final List<TargetAssignment> start,
-      final Consumer<List<TargetAssignment>> store,
-      final boolean cover,
-      final Map<GamePlayer, List<TargetAssignment>> revealed,
-      final Map<GamePlayer, List<TargetAssignment>> allied) {
-    messageAndDialogThreadPool.waitForAll();
-    requestWindowFocus();
-    final AirTargetPanel panel = actionButtonsPanel.getAirTargetPanel();
-    if (panel == null) {
-      return List.of();
-    }
-    actionButtonsPanel.changeToAirTargets(gamePlayer);
-    // request 22: the target list is on the Actions tab; show it whatever tab was open
-    SwingUtilities.invokeLater(this::showActionPanelTab);
-    panel.start(gamePlayer, start, store, cover, revealed, allied);
-    return panel.waitForTargets();
-  }
-
-  /**
    * Flames and Steel (request 16): for a step played in its own window, the Actions tab says so
    * instead of keeping the last step's panel.
    */
@@ -1942,25 +1871,6 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
                     () -> ApcProductionDialog.show(TripleAFrame.this, gamePlayer, data)))
         .result
         .orElse(Map.of());
-  }
-
-  /** Flames and Steel: which aircraft sail with carriers changing front; null cancels the move. */
-  public @Nullable IntegerMap<UnitType> selectFleetAircraft(
-      final IntegerMap<UnitType> available,
-      final IntegerMap<UnitType> suggested,
-      final String description) {
-    messageAndDialogThreadPool.waitForAll();
-    requestWindowFocus();
-    return Interruptibles.awaitResult(
-            () ->
-                SwingAction.invokeAndWaitResult(
-                    () ->
-                        Optional.ofNullable(
-                            games.strategy.triplea.ui.air.FleetAircraftDialog.show(
-                                TripleAFrame.this, available, suggested, description))))
-        .result
-        .flatMap(o -> o)
-        .orElse(null);
   }
 
   private ResearchScreen researchScreen() {
@@ -2182,8 +2092,11 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
       final Unit unit = mapPanel.getMouseHoverUnits().get(0);
       // Flames and Steel (request 28): British and US units on Chinese land are sold to China
       final String sale;
+      final String base;
       try (GameData.Unlocker ignored = data.acquireReadLock()) {
         sale = games.strategy.triplea.delegate.ChineseLiberation.garrisonNote(unit, data);
+        // request 38: where an aircraft is based, and that it doesn't defend
+        base = games.strategy.triplea.delegate.air.AirBases.note(unit);
       }
       return MapUnitTooltipManager.getTooltipTextForUnit(
               unit.getType(),
@@ -2192,7 +2105,8 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
               unit.getHits(),
               Unit.maxHitPoints(unit),
               uiContext)
-          + (sale.isEmpty() ? "" : "<br /><b>" + sale + "</b>");
+          + (sale.isEmpty() ? "" : "<br /><b>" + sale + "</b>")
+          + (base.isEmpty() ? "" : "<br /><i>" + base + "</i>");
     }
     return "";
   }
@@ -2310,10 +2224,8 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
       }
     }
     statsPanel.setGameData(newGameData);
-    if (airZoneOverlay != null) {
-      switchSafely("air front boxes", () -> airZoneOverlay.setGameData(newGameData));
+    if (airMapMode != null) {
       switchSafely("air map mode", () -> airMapMode.setGameData(newGameData));
-      switchSafely("air tab", () -> airPanel.setGameData(newGameData));
     }
     economyPanel.setGameData(newGameData);
     if (objectivePanel != null) {

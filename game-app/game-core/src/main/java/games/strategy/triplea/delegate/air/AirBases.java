@@ -291,6 +291,35 @@ public class AirBases {
     return Optional.empty();
   }
 
+  /**
+   * Request 38: the tooltip line for an aircraft on the map: "On its airfield in Warsaw: aircraft
+   * never defend a territory in a ground battle.", "On its carrier in Sea Zone 12: sails with it.",
+   * or for one in the air "In the air over Hamburg: lands at round end, 3 steps of range left.".
+   */
+  public static String note(final Unit unit) {
+    if (!isAircraft(unit) || !usesBases(unit.getData())) {
+      return "";
+    }
+    if (isAirborne(unit)) {
+      return "In the air over "
+          + unit.getFlightOver().getName()
+          + ": lands at round end, "
+          + unit.getFlightRangeLeft()
+          + steps(unit.getFlightRangeLeft())
+          + " of range left.";
+    }
+    for (final Territory t : unit.getData().getMap().getTerritories()) {
+      if (t.getUnitCollection().contains(unit)) {
+        return t.isWater()
+            ? "On its carrier in " + t.getName() + ": sails with it; never fights in sea battles."
+            : "On its airfield in "
+                + t.getName()
+                + ": aircraft never defend a territory in a ground battle.";
+      }
+    }
+    return "";
+  }
+
   // ---- distances
 
   /** Whether the nation's aircraft may fly over the territory on the way somewhere else. */

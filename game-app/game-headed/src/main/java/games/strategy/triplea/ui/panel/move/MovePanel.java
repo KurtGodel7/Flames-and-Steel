@@ -18,7 +18,6 @@ import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.OwnTransports;
 import games.strategy.triplea.delegate.TransportTracker;
 import games.strategy.triplea.delegate.UnitComparator;
-import games.strategy.triplea.delegate.air.FleetAircraft;
 import games.strategy.triplea.delegate.battle.ScrambleLogic;
 import games.strategy.triplea.delegate.data.MustMoveWithDetails;
 import games.strategy.triplea.delegate.move.validation.MoveValidator;
@@ -1460,12 +1459,18 @@ public class MovePanel extends AbstractMovePanel {
       case ALL_UNITS_CAN_MOVE:
         if (result.getUnitsWithDependents().containsAll(selectedUnits)) {
           clearStatusMessage();
-          // Flames and Steel: carriers changing front say what room they give and who sails along
-          final Optional<String> fleet;
+          // Flames and Steel (request 38): carriers say which aircraft sail with them
+          final List<Unit> carried;
           try (GameData.Unlocker ignored = getData().acquireReadLock()) {
-            fleet = FleetAircraft.hint(getUnitOwner(units), units, route, getData().getMap());
+            carried =
+                games.strategy.triplea.delegate.air.AirBases.carriedWith(
+                    getUnitOwner(units), route.getStart(), units);
           }
-          fleet.ifPresent(this::setStatusInfoMessage);
+          if (!carried.isEmpty()) {
+            setStatusInfoMessage(
+                games.strategy.triplea.formatter.MyFormatter.unitsToTextNoOwner(carried)
+                    + " sail with these carriers.");
+          }
           currentCursorImage = null;
         } else {
           setStatusWarningMessage("Not all units can move there");

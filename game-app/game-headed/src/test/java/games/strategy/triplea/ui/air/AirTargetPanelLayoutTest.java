@@ -13,7 +13,6 @@ import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.UnitType;
 import games.strategy.engine.data.gameparser.GameParser;
-import games.strategy.triplea.attachments.AirZoneAttachment;
 import games.strategy.triplea.delegate.air.AirCombat;
 import games.strategy.triplea.delegate.air.AirCombat.Target;
 import games.strategy.triplea.delegate.air.AirCombat.TargetAssignment;
@@ -64,7 +63,7 @@ class AirTargetPanelLayoutTest {
   void setUp() throws Exception {
     Assumptions.assumeTrue(Files.exists(XML), "Flames and Steel map not installed");
     ClientSetting.initialize();
-    data = GameParser.parse(XML, false).orElseThrow();
+    data = games.strategy.triplea.ui.TestMaps.load();
     germans = data.getPlayerList().getPlayerId("Germans");
     SwingUtilities.invokeAndWait(
         () -> {
@@ -106,36 +105,77 @@ class AirTargetPanelLayoutTest {
           @Override
           public void clearStatusMessage() {}
         };
+    prepareBase();
     final AtomicReference<AirTargetPanel> made = new AtomicReference<>();
     SwingUtilities.invokeAndWait(() -> made.set(new AirTargetPanel(frame)));
     panel = made.get();
   }
 
-  /** The German front with the most targets in reach of its bombers. */
-  private Territory busiestFront() {
-    Territory best = null;
-    int most = -1;
-    for (final Territory zone : AirZoneAttachment.getAirZones(data.getMap())) {
-      if (AirCombat.getBombers(germans, zone).isEmpty()) {
-        continue;
-      }
-      final int n = AirCombat.getTargets(germans, zone).size();
-      if (n > most) {
-        most = n;
-        best = zone;
+  // request 38: German bombers on a base next to Soviet land, at war
+  private Territory base;
+
+  private void prepareBase() {
+    final GamePlayer russians = data.getPlayerList().getPlayerId("Russians");
+    data.performChange(
+        games.strategy.engine.data.changefactory.ChangeFactory.relationshipChange(
+            germans,
+            russians,
+            data.getRelationshipTracker().getRelationshipType(germans, russians),
+            data.getRelationshipTypeList().getRelationshipType("War")));
+    for (final Territory t : data.getMap().getTerritories()) {
+      if (!t.isWater()
+          && t.isOwnedBy(germans)
+          && data.getMap().getNeighbors(t).stream().anyMatch(n -> n.isOwnedBy(russians))) {
+        base = t;
+        break;
       }
     }
-    Assumptions.assumeTrue(best != null, "Germany has no bombers in a front");
-    return best;
+    Assumptions.assumeTrue(base != null, "no German land next to the Soviets");
+    data.performChange(
+        games.strategy.engine.data.changefactory.ChangeFactory.addUnits(
+            base, data.getUnitTypeList().getUnitTypeOrThrow("mediumBomber").create(12, germans)));
+    data.performChange(
+        games.strategy.engine.data.changefactory.ChangeFactory.addUnits(
+            base, data.getUnitTypeList().getUnitTypeOrThrow("fighter").create(4, germans)));
+  }
+
+  /** The German base with the bombers. */
+  private Territory busiestFront() {
+    return base;
   }
 
   private void startPanel(final boolean cover) throws Exception {
+    final Map<GamePlayer, List<TargetAssignment>> bombers =
+        cover
+            ? Map.of(germans, List.of(new TargetAssignment(base, medium(), 1, firstTarget())))
+            : Map.of();
     SwingUtilities.invokeAndWait(
         () -> {
           panel.display(germans);
-          panel.start(germans, List.of(), staged -> {}, cover, Map.of(), Map.of());
+          panel.startStage(
+              germans,
+              cover
+                  ? games.strategy.triplea.delegate.air.AirStage.Stage.FIGHTERS
+                  : games.strategy.triplea.delegate.air.AirStage.Stage.BOMBERS,
+              List.of(),
+              bombers,
+              staged -> {});
         });
     flush();
+  }
+
+  private UnitType medium() {
+    return data.getUnitTypeList().getUnitTypeOrThrow("mediumBomber");
+  }
+
+  private Target firstTarget() {
+    return games.strategy.triplea.delegate.air.AirStage.candidates(
+            germans,
+            base,
+            medium(),
+            games.strategy.triplea.delegate.air.AirStage.Stage.BOMBERS,
+            Map.of())
+        .get(0);
   }
 
   private static void flush() throws Exception {
@@ -200,7 +240,13 @@ class AirTargetPanelLayoutTest {
     final List<Target> targets = panel.targetsInReach(germans, zone);
     final Target target = targets.get(0);
     for (final UnitType type : panel.unassigned(germans, zone).keySet()) {
-      if (AirCombat.mayAttack(germans, zone, type, target)) {
+      if (games.strategy.triplea.delegate.air.AirStage.candidates(
+              germans,
+              zone,
+              type,
+              games.strategy.triplea.delegate.air.AirStage.Stage.BOMBERS,
+              Map.of())
+          .contains(target)) {
         return new TargetAssignment(zone, type, 1, target);
       }
     }
@@ -221,7 +267,7 @@ class AirTargetPanelLayoutTest {
         });
     flush();
     final BufferedImage shot = render(panel, WIDTH, HEIGHT);
-    ImageIO.write(shot, "png", SHOTS.resolve("request33_bomber_panel.png").toFile());
+    ImageIO.write(shot, "png", SHOTS.resolve("request38_bomber_panel.png").toFile());
 
     assertThat(
         "targets in reach: " + panel.targetsInReach(germans, zone).size(),
@@ -275,17 +321,14 @@ class AirTargetPanelLayoutTest {
   @Test
   void tenMovesMadeStillFitAt1080() throws Exception {
     final Territory zone = busiestFront();
-    final UnitType dive = data.getUnitTypeList().getUnitTypeOrThrow("diveBomber");
-    data.performChange(
-        games.strategy.engine.data.changefactory.ChangeFactory.addUnits(
-            zone, dive.create(12, germans)));
+    final UnitType dive = medium();
     startPanel(false);
     final List<Target> reach =
         panel.targetsInReach(germans, zone).stream()
-            .filter(t -> AirCombat.mayAttack(germans, zone, dive, t))
+            .filter(t -> t.kind() == games.strategy.triplea.delegate.air.AirCombat.TargetKind.LAND)
             .limit(10)
             .toList();
-    Assumptions.assumeTrue(reach.size() == 10, "fewer than 10 dive bomber targets");
+    Assumptions.assumeTrue(reach.size() == 10, "fewer than 10 medium bomber targets");
     final IntegerMap<UnitType> one = new IntegerMap<>();
     one.put(dive, 1);
     SwingUtilities.invokeAndWait(
@@ -295,7 +338,7 @@ class AirTargetPanelLayoutTest {
         });
     flush();
     final BufferedImage shot = render(panel, WIDTH, HEIGHT);
-    ImageIO.write(shot, "png", SHOTS.resolve("request33_bomber_panel_10_moves.png").toFile());
+    ImageIO.write(shot, "png", SHOTS.resolve("request38_bomber_panel_10_moves.png").toFile());
     assertThat(panel.staged().size(), is(10));
     for (final AbstractButton undo : buttons("Undo")) {
       assertThat("every Undo is in view", inView(undo), is(true));
@@ -346,7 +389,7 @@ class AirTargetPanelLayoutTest {
     flush();
     assertThat("selecting in the list selects on the map", panel.selectedTarget(), is(move.target()));
     final BufferedImage shot = render(dialog.getContentPane(), 820, 480);
-    ImageIO.write(shot, "png", SHOTS.resolve("request33_pick_window.png").toFile());
+    ImageIO.write(shot, "png", SHOTS.resolve("request38_pick_window.png").toFile());
     SwingUtilities.invokeAndWait(
         () ->
             all(dialog.getContentPane()).stream()
@@ -361,115 +404,16 @@ class AirTargetPanelLayoutTest {
   }
 
   @Test
-  void theBomberStageTargetsAnAdjacentFrontAndRepositions() throws Exception {
-    data.performChange(
-        games.strategy.engine.data.changefactory.ChangeFactory.relationshipChange(
-            germans,
-            data.getPlayerList().getPlayerId("Russians"),
-            data.getRelationshipTracker()
-                .getRelationshipType(germans, data.getPlayerList().getPlayerId("Russians")),
-            data.getRelationshipTypeList().getRelationshipType("War")));
-    // a German bomber with a target in an adjacent box
-    Territory origin = null;
-    UnitType type = null;
-    Target target = null;
-    Territory into = null;
-    search:
-    for (final Territory box : AirZoneAttachment.getAirZones(data.getMap())) {
-      for (final var u : AirCombat.getBombers(germans, box)) {
-        for (final var e :
-            games.strategy.triplea.delegate.air.AirStage.candidates(
-                    germans,
-                    box,
-                    u.getType(),
-                    games.strategy.triplea.delegate.air.AirAllocation.Stage.BOMBERS,
-                    Map.of())
-                .entrySet()) {
-          if (!e.getValue().equals(box)) {
-            origin = box;
-            type = u.getType();
-            target = e.getKey();
-            into = e.getValue();
-            break search;
-          }
-        }
-      }
-    }
-    Assumptions.assumeTrue(origin != null, "no adjacent target");
-    // a second bomber of the type, so one can attack and one can move
-    data.performChange(
-        games.strategy.engine.data.changefactory.ChangeFactory.addUnits(
-            origin, type.create(1, germans)));
-    final Territory from = origin;
-    final Target far = target;
-    final IntegerMap<UnitType> one = new IntegerMap<>();
-    one.put(type, 1);
-    SwingUtilities.invokeAndWait(
-        () -> {
-          panel.display(germans);
-          panel.startStage(
-              germans,
-              games.strategy.triplea.delegate.air.AirAllocation.Stage.BOMBERS,
-              List.of(),
-              Map.of());
-        });
-    flush();
-    SwingUtilities.invokeAndWait(
-        () -> {
-          panel.chooseFront(germans, from, false);
-          panel.assign(far, one);
-        });
-    flush();
-    final var choice =
-        games.strategy.triplea.delegate.air.AirStage.toChoice(
-            germans,
-            games.strategy.triplea.delegate.air.AirAllocation.Stage.BOMBERS,
-            panel.staged(),
-            Map.of());
-    assertThat(choice.moves().size(), is(1));
-    assertThat(choice.moves().get(0).to(), is(into));
-    assertThat(choice.targets().get(0).zone(), is(into));
-    assertThat(
-        all(panel).stream()
-            .filter(c -> c instanceof JLabel l && l.getText() != null)
-            .map(c -> ((JLabel) c).getText())
-            .anyMatch(t -> t.contains("(moves to ")),
-        is(true));
-    // a move with no target: to any box it may move to
-    final Territory box =
-        games.strategy.triplea.delegate.air.AirStage.neighbours(germans, from, type).get(0);
-    SwingUtilities.invokeAndWait(
-        () -> {
-          panel.chooseFront(germans, from, false);
-          panel.assign(games.strategy.triplea.delegate.air.AirStage.moveTo(box), one);
-        });
-    flush();
-    final BufferedImage shot = render(panel, WIDTH, HEIGHT);
-    ImageIO.write(shot, "png", SHOTS.resolve("request35_bomber_stage.png").toFile());
-    final var both =
-        games.strategy.triplea.delegate.air.AirStage.toChoice(
-            germans,
-            games.strategy.triplea.delegate.air.AirAllocation.Stage.BOMBERS,
-            panel.staged(),
-            Map.of());
-    assertThat(panel.staged().size(), is(2));
-    assertThat(
-        panel.staged().stream().anyMatch(games.strategy.triplea.delegate.air.AirStage::isMove),
-        is(true));
-    assertThat(both.moves().stream().anyMatch(m -> m.to().equals(box)), is(true));
-  }
-
-  @Test
   void placeFightersUsesTheSameLayout() throws Exception {
     startPanel(true);
     flush();
     final BufferedImage shot = render(panel, WIDTH, HEIGHT);
-    ImageIO.write(shot, "png", SHOTS.resolve("request33_fighter_panel.png").toFile());
+    ImageIO.write(shot, "png", SHOTS.resolve("request38_fighter_panel.png").toFile());
     assertThat(
         all(panel).stream()
             .filter(c -> c instanceof JLabel l && l.getText() != null)
             .map(c -> ((JLabel) c).getText())
-            .anyMatch(t -> t.contains("Place Fighters")),
+            .anyMatch(t -> t.contains("Fighters: Escort and Defend")),
         is(true));
     assertThat(buttons("Pick from list…").size(), is(1));
   }

@@ -18,8 +18,7 @@ import games.strategy.triplea.attachments.UserActionAttachment;
 import games.strategy.triplea.delegate.DiceRoll;
 import games.strategy.triplea.delegate.GameStepPropertiesHelper;
 import games.strategy.triplea.delegate.Matches;
-import games.strategy.triplea.delegate.air.AirAllocation.AirMove;
-import games.strategy.triplea.delegate.air.AirAllocation.Stage;
+import games.strategy.triplea.delegate.air.AirStage.Stage;
 import games.strategy.triplea.delegate.air.AirCombat.TargetAssignment;
 import games.strategy.triplea.delegate.data.BattleListing;
 import games.strategy.triplea.delegate.data.CasualtyDetails;
@@ -30,8 +29,7 @@ import games.strategy.triplea.delegate.data.TechResults;
 import games.strategy.triplea.delegate.data.TechRoll;
 import games.strategy.triplea.delegate.remote.IAbstractForumPosterDelegate;
 import games.strategy.triplea.delegate.remote.IAbstractPlaceDelegate;
-import games.strategy.triplea.delegate.remote.IAirAllocationDelegate;
-import games.strategy.triplea.delegate.remote.IAirCombatDelegate;
+import games.strategy.triplea.delegate.remote.IAirStageDelegate;
 import games.strategy.triplea.delegate.remote.IApcDelegate;
 import games.strategy.triplea.delegate.remote.IBattleDelegate;
 import games.strategy.triplea.delegate.remote.IEditDelegate;
@@ -173,12 +171,6 @@ public class TripleAPlayer extends AbstractBasePlayer {
       tech();
     } else if (GameStep.isResearchStepName(name)) {
       research();
-    } else if (GameStep.isAirAllocationStepName(name)) {
-      airAllocation(name);
-    } else if (GameStep.isAirTargetStepName(name)) {
-      airTargets(false);
-    } else if (GameStep.isAirCoverStepName(name)) {
-      airTargets(true);
     } else if (GameStep.isApcProductionStepName(name)) {
       apcProduction();
     } else if (GameStep.isPurchaseOrBidStepName(name)) {
@@ -333,77 +325,6 @@ public class TripleAPlayer extends AbstractBasePlayer {
     }
   }
 
-  /**
-   * Flames and Steel: bomber targets, or (request 30, {@code cover}) fighter cover once every
-   * nation's bomber targets are revealed.
-   */
-  private void airTargets(final boolean cover) {
-    if (getPlayerBridge().isGameOver()) {
-      return;
-    }
-    final IAirCombatDelegate airDelegate =
-        (IAirCombatDelegate) getPlayerBridge().getRemoteDelegate();
-    List<TargetAssignment> assignments = airDelegate.getPendingAssignments();
-    final Map<GamePlayer, List<TargetAssignment>> revealed =
-        cover ? airDelegate.getRevealedBombers() : Map.of();
-    final Map<GamePlayer, List<TargetAssignment>> allied = airDelegate.getAlliedAssignments();
-    while (!getPlayerBridge().isGameOver()) {
-      assignments =
-          ui.getAirTargets(
-              getGamePlayer(),
-              assignments,
-              staged -> {
-                if (airDelegate.assignTargets(staged) != null) {
-                  // not storable yet; Done reports the problem
-                  log.debug("Air targets not stored: " + staged);
-                }
-              },
-              cover,
-              revealed,
-              allied);
-      final String error = airDelegate.assignTargets(assignments);
-      if (error == null) {
-        return;
-      }
-      ui.notifyError(error);
-    }
-  }
-
-  private void airAllocation(final String stepName) {
-    if (getPlayerBridge().isGameOver()) {
-      return;
-    }
-    final IAirAllocationDelegate airDelegate =
-        (IAirAllocationDelegate) getPlayerBridge().getRemoteDelegate();
-    final Stage stage = stepName.endsWith("AirFighters") ? Stage.FIGHTERS : Stage.BOMBERS;
-    // moves stored before a save, allies' moves so far, and the bombers' reveal in the fighter step
-    List<AirMove> moves = airDelegate.getPendingMoves();
-    final Map<GamePlayer, List<AirMove>> allied = airDelegate.getAlliedPendingMoves();
-    final Map<GamePlayer, List<AirMove>> revealed =
-        stage == Stage.FIGHTERS && airDelegate.getLastRevealStage() == Stage.BOMBERS
-            ? airDelegate.getLastReveal()
-            : Map.of();
-    while (!getPlayerBridge().isGameOver()) {
-      moves =
-          ui.getAirAllocation(
-              getGamePlayer(),
-              stage,
-              moves,
-              allied,
-              revealed,
-              staged -> {
-                if (airDelegate.allocate(staged) != null) {
-                  // not storable yet; Done reports the problem
-                  log.debug("Air allocation not stored: " + staged);
-                }
-              });
-      final String error = airDelegate.allocate(moves);
-      if (error == null) {
-        return;
-      }
-      ui.notifyError(error);
-    }
-  }
 
   private void research() {
     if (getPlayerBridge().isGameOver()) {
@@ -894,49 +815,77 @@ public class TripleAPlayer extends AbstractBasePlayer {
     return ui.getOk(question, question);
   }
 
-  /** Request 30, for game XML without fighter cover steps: asked during the air battles step. */
-  @Override
-  public List<TargetAssignment> selectAirCover(
-      final List<TargetAssignment> start,
-      final Map<GamePlayer, List<TargetAssignment>> bombers,
-      final Map<GamePlayer, List<TargetAssignment>> allied,
-      final String problem) {
-    if (getPlayerBridge().isGameOver()) {
-      return List.of();
-    }
-    if (problem != null && !problem.isEmpty()) {
-      ui.notifyError(problem);
-    }
-    return ui.getAirTargets(getGamePlayer(), start, staged -> {}, true, bombers, allied);
-  }
-
-  /** Request 35: this nation's screen in a simultaneous air stage. */
+  /** Requests 35 and 38: this nation's screen in a simultaneous air stage or planes go home. */
   @Override
   public games.strategy.triplea.delegate.air.AirStage.Choice selectAirStage(
       final Stage stage,
       final List<GamePlayer> order,
       final games.strategy.triplea.delegate.air.AirStage.Choice start,
       final Map<GamePlayer, List<TargetAssignment>> bombers,
-      final Map<GamePlayer, List<AirMove>> bomberMoves,
       final String problem) {
     if (getPlayerBridge().isGameOver()) {
       return games.strategy.triplea.delegate.air.AirStage.Choice.none();
     }
-    return ui.getAirStage(getGamePlayer(), stage, order, bombers, problem);
+    // request 38 section 12: the screen's choices go to the host as they change, for the allies
+    final IAirStageDelegate host = airStageDelegate();
+    Map<GamePlayer, List<TargetAssignment>> allied = Map.of();
+    if (host != null && stage != Stage.HOME) {
+      try {
+        allied = host.getAlliedChoices(getGamePlayer());
+      } catch (final RuntimeException e) {
+        log.debug("Allied air choices not available", e);
+      }
+    }
+    return ui.getAirStage(
+        getGamePlayer(),
+        stage,
+        order,
+        start == null ? games.strategy.triplea.delegate.air.AirStage.Choice.none() : start,
+        bombers,
+        allied,
+        problem == null ? "" : problem,
+        staged -> {
+          if (host != null && stage != Stage.HOME) {
+            try {
+              host.draft(getGamePlayer(), staged);
+            } catch (final RuntimeException e) {
+              log.debug("Air choices not sent", e);
+            }
+          }
+        });
+  }
+
+  private @javax.annotation.Nullable IAirStageDelegate airStageDelegate() {
+    try {
+      return getPlayerBridge().getRemoteDelegate() instanceof IAirStageDelegate d ? d : null;
+    } catch (final RuntimeException e) {
+      return null;
+    }
+  }
+
+  /** Request 38 section 12: the allies' choices so far. */
+  @Override
+  public void airStageAllied(
+      final GamePlayer player, final Map<GamePlayer, List<TargetAssignment>> allied) {
+    if (player.equals(getGamePlayer())) {
+      ui.airStageAllied(player, allied);
+    }
+  }
+
+  /** Request 38 section 5: where aircraft without a base land. */
+  @Override
+  public Map<games.strategy.engine.data.Unit, Territory> selectFreeLandings(
+      final Map<games.strategy.engine.data.Unit, List<Territory>> options, final String why) {
+    if (getPlayerBridge().isGameOver()) {
+      return Map.of();
+    }
+    return ui.selectFreeLandings(options, why);
   }
 
   /** Request 35: who a simultaneous air stage still waits for. */
   @Override
   public void airStageWaiting(final List<String> waitingFor) {
     ui.airStageWaiting(waitingFor);
-  }
-
-  @Override
-  public IntegerMap<UnitType> selectFleetAircraft(
-      final IntegerMap<UnitType> available,
-      final IntegerMap<UnitType> suggested,
-      final String description) {
-    return ui.selectFleetAircraft(available, suggested, description);
   }
 
   @Override
