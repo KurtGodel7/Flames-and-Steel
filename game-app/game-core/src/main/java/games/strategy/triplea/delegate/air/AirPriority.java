@@ -16,8 +16,9 @@ import lombok.experimental.UtilityClass;
  * always has priority. Game property {@value #PROPERTY}, e.g. {@code
  * Russians|British:AmericansPacific:Americans:Chinese}: once the first nation sends aircraft to a
  * territory or sea zone this round (a bomber target, or fighters escorting or defending there), the
- * listed nations may not send any there. Never the other way round. Several rules are separated by
- * ";".
+ * listed nations may not send any there. Never the other way round, with one exception (James, 25
+ * October): its fighters may not join a battle the listed nations' bombers were already sent to in the
+ * bomber stage. Several rules are separated by ";".
  */
 @UtilityClass
 public class AirPriority {
@@ -85,6 +86,37 @@ public class AirPriority {
       }
     }
     return Optional.empty();
+  }
+
+  /**
+   * James, 25 October: priority does not reach back into the bomber stage. A nation's fighters may
+   * not go where a nation it locks out already sent bombers (revealed before the fighters choose):
+   * the bombers' battle stands. Returns that nation, if any.
+   */
+  public static Optional<GamePlayer> bombersAlreadyThere(
+      final GamePlayer player,
+      final Territory t,
+      final Map<GamePlayer, ? extends Collection<TargetAssignment>> bombers) {
+    for (final Rule rule : rules(player.getData())) {
+      if (!rule.first().equals(player)) {
+        continue;
+      }
+      for (final GamePlayer other : rule.lockedOut()) {
+        final Collection<TargetAssignment> theirs = bombers.get(other);
+        if (theirs != null && theirs.stream().anyMatch(a -> a.target().territory().equals(t))) {
+          return Optional.of(other);
+        }
+      }
+    }
+    return Optional.empty();
+  }
+
+  /** "Hamburg: British bombers were sent there in the bomber stage; ..." */
+  public static String bombersThereText(final Territory t, final GamePlayer other) {
+    return t.getName()
+        + ": "
+        + AirCombat.adjective(other)
+        + " bombers were sent there in the bomber stage, so it is their battle this round.";
   }
 
   /** "Hamburg is a Soviet air battle this round." */

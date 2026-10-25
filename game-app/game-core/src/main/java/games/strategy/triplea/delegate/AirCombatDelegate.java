@@ -81,18 +81,6 @@ public class AirCombatDelegate extends BaseTripleADelegate {
     pendingCover = copy(cover);
   }
 
-  /** Request 38 section 12: these nations' bomber missions over these territories are cancelled. */
-  void dropBombers(final Map<GamePlayer, Set<Territory>> cancelled) {
-    cancelled.forEach(
-        (p, places) -> {
-          final List<TargetAssignment> kept =
-              pending.getOrDefault(p, List.of()).stream()
-                  .filter(a -> !places.contains(a.target().territory()))
-                  .toList();
-          pending.put(p, kept);
-        });
-  }
-
   @Override
   public boolean delegateCurrentlyRequiresUserInput() {
     return false;

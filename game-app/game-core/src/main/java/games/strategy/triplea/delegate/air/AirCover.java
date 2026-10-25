@@ -123,6 +123,10 @@ public class AirCover {
     if (!AirCombat.mayAttack(type, TargetKind.COVER)) {
       return Optional.of(AirStage.typeName(type) + " can't escort or defend.");
     }
+    final Optional<GamePlayer> first = AirPriority.bombersAlreadyThere(player, t, bombers);
+    if (first.isPresent()) {
+      return Optional.of(AirPriority.bombersThereText(t, first.get()));
+    }
     if (sideBombs(player, t, bombers) && !mayEscortBombing(player, type)) {
       return Optional.of(
           "Only fighters with the escort tech may escort the bombing of " + t.getName() + ".");

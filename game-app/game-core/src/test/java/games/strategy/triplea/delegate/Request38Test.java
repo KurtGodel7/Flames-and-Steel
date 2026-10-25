@@ -353,8 +353,9 @@ class Request38Test {
     assertThat(count(london, british, "mediumBomber"), is(1));
   }
 
+  /** James, 25 October: Soviet fighters may not join a battle British bombers were sent to. */
   @Test
-  void britishBombersGoHomeWhenSovietFightersTakeTheBattle() {
+  void sovietFightersAreDeniedABattleBritishBombersWereSentTo() {
     hamburgWithAnArmy();
     final Territory hanover = sovietHanover();
     add(hanover, russians, "fighter", 2);
@@ -365,12 +366,30 @@ class Request38Test {
             .bombers(british, a(london, type("mediumBomber"), 2, land(hamburg)))
             .cover(russians, a(hanover, type("fighter"), 2, AirCover.over(hamburg)))
             .run();
-    assertThat(stages.problems(), is(empty()));
-    assertThat(over(hamburg, british, "mediumBomber"), is(0));
-    assertThat(count(london, british, "mediumBomber"), is(2));
-    assertThat(over(hamburg, russians, "fighter"), is(2));
+    // with nowhere else to go the Soviets have nothing to choose; the British keep their battle
+    assertThat(stages.asked().contains(russians), is(false));
+    assertThat(over(hamburg, russians, "fighter"), is(0));
+    assertThat(count(hanover, russians, "fighter"), is(2));
+    assertThat(over(hamburg, british, "mediumBomber"), is(2));
+    // nor is Hamburg offered to the Soviet fighters at all
+    final Map<GamePlayer, List<TargetAssignment>> revealed =
+        Map.of(british, List.of(a(london, type("mediumBomber"), 2, land(hamburg))));
+    assertThat(
+        AirStage.candidates(russians, hanover, type("fighter"), Stage.FIGHTERS, revealed)
+            .contains(AirCover.over(hamburg)),
+        is(false));
+    // a choice sent anyway is refused with the reason
+    assertThat(
+        AirStage.problem(
+                russians,
+                Stage.FIGHTERS,
+                Choice.of(List.of(a(hanover, type("fighter"), 2, AirCover.over(hamburg)))),
+                Map.of(),
+                revealed)
+            .orElseThrow(),
+        containsString("British bombers were sent there in the bomber stage"));
     stages.battles();
-    assertThat(count(hamburg, germans, "infantry"), is(infantry)); // nobody struck
+    assertThat(count(hamburg, germans, "infantry") < infantry, is(true)); // the British struck
   }
 
   // ---- planes go home

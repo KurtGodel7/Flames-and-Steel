@@ -57,7 +57,8 @@ import lombok.extern.slf4j.Slf4j;
  * nation's screen is open its choices so far are sent here ({@link #draft}) and passed to its
  * allies only. Request 38 section 12: when a nation with priority ({@link AirPriority}) chooses a
  * territory an ally it locks out has already finished with, that ally's aircraft there are handed
- * back and it is asked again, even after Done; the stage waits for that. Answers are kept here,
+ * back and it is asked again, even after Done; the stage waits for that. In the fighter stage it
+ * may not join a battle that ally's bombers were already sent to. Answers are kept here,
  * hidden from enemies until the reveal, and saved with the game.
  */
 @Slf4j
@@ -67,8 +68,6 @@ public class AirStageDelegate extends BaseTripleADelegate implements IAirStageDe
   private Map<GamePlayer, Choice> bomberChoices = new LinkedHashMap<>();
   private Map<GamePlayer, Choice> fighterChoices = new LinkedHashMap<>();
   private Map<GamePlayer, Choice> homeChoices = new LinkedHashMap<>();
-  // the base each airborne bomber flew from (to send it back if its battle becomes another's)
-  private Map<Unit, Territory> launchedFrom = new LinkedHashMap<>();
   // the open stage's choices still being made, and who is still choosing
   private final transient Map<GamePlayer, List<TargetAssignment>> drafts = new LinkedHashMap<>();
   private final transient Set<GamePlayer> choosing = new HashSet<>();
@@ -467,9 +466,6 @@ public class AirStageDelegate extends BaseTripleADelegate implements IAirStageDe
           change.add(
               ChangeFactory.unitPropertyChange(
                   f.plane(), f.rangeLeft(), Unit.PropertyName.FLIGHT_RANGE_LEFT));
-          if (stage == Stage.BOMBERS) {
-            launchedFrom.put(f.plane(), a.zone());
-          }
         }
         byBase.computeIfAbsent(a.zone(), k -> new ArrayList<>()).addAll(these);
         bridge
@@ -496,72 +492,11 @@ public class AirStageDelegate extends BaseTripleADelegate implements IAirStageDe
     }
     if (combat != null) {
       combat.setStageCover(toBattle);
-      combat.dropBombers(sendBackLockedOut());
     }
     synchronized (lock) {
       bomberChoices.clear();
       fighterChoices.clear();
     }
-  }
-
-  /**
-   * Request 38 section 12, after the fighters take off: a battle with aircraft of a nation that has
-   * priority is that nation's. Bombers of a nation it locks out that are already over it (chosen in
-   * the bomber stage, before the fighters) don't attack: they go back to their bases, with a
-   * history line. Returns the territories and nations whose bomber missions are cancelled.
-   */
-  private Map<GamePlayer, Set<Territory>> sendBackLockedOut() {
-    final Map<GamePlayer, Set<Territory>> cancelled = new LinkedHashMap<>();
-    final Territory airborne = AirBases.airborne(getData()).orElse(null);
-    if (airborne == null) {
-      return cancelled;
-    }
-    for (final Unit u : new ArrayList<>(airborne.getUnitCollection().getUnits())) {
-      final Territory over = u.getFlightOver();
-      if (over == null || !launchedFrom.containsKey(u)) {
-        continue;
-      }
-      for (final GamePlayer locker : AirPriority.lockersOf(u.getOwner())) {
-        final List<Unit> theirs = AirBases.airborneOver(locker, over);
-        if (theirs.isEmpty()) {
-          continue;
-        }
-        cancelled.computeIfAbsent(u.getOwner(), k -> new java.util.LinkedHashSet<>()).add(over);
-      }
-    }
-    for (final Map.Entry<GamePlayer, Set<Territory>> e : cancelled.entrySet()) {
-      for (final Territory over : e.getValue()) {
-        final List<Unit> back = AirBases.airborneOver(e.getKey(), over);
-        final Map<Territory, List<Unit>> byBase = new LinkedHashMap<>();
-        back.forEach(u -> byBase.computeIfAbsent(launchedFrom.get(u), k -> new ArrayList<>()).add(u));
-        final CompositeChange change = new CompositeChange();
-        for (final Map.Entry<Territory, List<Unit>> b : byBase.entrySet()) {
-          for (final Unit u : b.getValue()) {
-            change.add(ChangeFactory.unitPropertyChange(u, null, Unit.PropertyName.FLIGHT_OVER));
-            change.add(ChangeFactory.unitPropertyChange(u, 0, Unit.PropertyName.FLIGHT_RANGE_LEFT));
-            launchedFrom.remove(u);
-          }
-          change.add(ChangeFactory.moveUnits(airborne, b.getKey(), b.getValue()));
-        }
-        bridge
-            .getHistoryWriter()
-            .addChildToEvent(
-                PlayerNames.display(e.getKey())
-                    + ": "
-                    + MyFormatter.unitsToTextNoOwner(back)
-                    + " over "
-                    + over.getName()
-                    + " go back to their bases. "
-                    + AirPriority.lockedText(
-                        over, AirPriority.lockersOf(e.getKey()).stream()
-                            .filter(l -> !AirBases.airborneOver(l, over).isEmpty())
-                            .findFirst()
-                            .orElseThrow()),
-                back);
-        bridge.addChange(change);
-      }
-    }
-    return cancelled;
   }
 
   /** Planes go home: every nation's landings (with the defaults for aircraft left in the air). */
@@ -581,7 +516,6 @@ public class AirStageDelegate extends BaseTripleADelegate implements IAirStageDe
     }
     synchronized (lock) {
       homeChoices.clear();
-      launchedFrom.clear();
     }
   }
 
@@ -614,7 +548,6 @@ public class AirStageDelegate extends BaseTripleADelegate implements IAirStageDe
       state.bombers = new LinkedHashMap<>(bomberChoices);
       state.fighters = new LinkedHashMap<>(fighterChoices);
       state.home = new LinkedHashMap<>(homeChoices);
-      state.launchedFrom = new LinkedHashMap<>(launchedFrom);
     }
     return state;
   }
@@ -627,8 +560,6 @@ public class AirStageDelegate extends BaseTripleADelegate implements IAirStageDe
       bomberChoices = s.bombers == null ? new LinkedHashMap<>() : new LinkedHashMap<>(s.bombers);
       fighterChoices = s.fighters == null ? new LinkedHashMap<>() : new LinkedHashMap<>(s.fighters);
       homeChoices = s.home == null ? new LinkedHashMap<>() : new LinkedHashMap<>(s.home);
-      launchedFrom =
-          s.launchedFrom == null ? new LinkedHashMap<>() : new LinkedHashMap<>(s.launchedFrom);
     }
   }
 
@@ -644,6 +575,5 @@ public class AirStageDelegate extends BaseTripleADelegate implements IAirStageDe
     private Map<GamePlayer, Choice> bombers;
     private Map<GamePlayer, Choice> fighters;
     private Map<GamePlayer, Choice> home;
-    private Map<Unit, Territory> launchedFrom;
   }
 }
