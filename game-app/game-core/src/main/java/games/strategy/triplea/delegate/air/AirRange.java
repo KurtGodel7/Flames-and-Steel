@@ -113,7 +113,7 @@ public class AirRange {
   }
 
   /** "Torpedo bombers", "Superfortresses". */
-  private static String pluralName(final UnitType type) {
+  static String pluralName(final UnitType type) {
     final String name = AirAllocation.typeName(type);
     return name + (name.endsWith("s") ? "es" : "s");
   }
@@ -209,7 +209,10 @@ public class AirRange {
 
   /** The nation's own land, or allied land where the relationship lets its aircraft land. */
   public static boolean isLandLandingSpot(final GamePlayer player, final Territory t) {
-    if (t.isWater() || AirZoneAttachment.isAirZone(t) || t.getOwner().isNull()) {
+    if (t.isWater()
+        || AirZoneAttachment.isAirZone(t)
+        || AirBases.isAirborneTerritory(t)
+        || t.getOwner().isNull()) {
       return false;
     }
     if (t.getOwner().equals(player)) {

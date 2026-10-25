@@ -57,6 +57,9 @@ public class Unit extends GameDataComponent implements DynamicallyModifiable {
     CHARGED_FLAT_FUEL_COST("chargedFlatFuelCost"),
     // Flames and Steel (request 32): when a munition last moved, as round * 1000 + step index
     ARRIVED("arrived"),
+    // Flames and Steel (request 38): an airborne aircraft's territory and the range it has left
+    FLIGHT_OVER("flightOver"),
+    FLIGHT_RANGE_LEFT("flightRangeLeft"),
     ;
 
     private final String value;
@@ -118,6 +121,10 @@ public class Unit extends GameDataComponent implements DynamicallyModifiable {
   private boolean chargedFlatFuelCost = false;
   // Flames and Steel (request 32): when the unit last moved (round * 1000 + step index); 0 = never
   private int arrived = 0;
+  // Flames and Steel (request 38): the territory an airborne aircraft is over, or null on a base
+  @Nullable private Territory flightOver = null;
+  // Flames and Steel (request 38): the range an airborne aircraft has left to land with
+  private int flightRangeLeft = 0;
 
   /** Creates new Unit. Owner can be null. */
   public Unit(final UnitType type, @Nullable final GamePlayer owner, final GameData data) {
@@ -312,6 +319,11 @@ public class Unit extends GameDataComponent implements DynamicallyModifiable {
                             MutableProperty.ofSimple(
                                 this::setChargedFlatFuelCost, this::getChargedFlatFuelCost);
                         case ARRIVED -> MutableProperty.ofSimple(this::setArrived, this::getArrived);
+                        case FLIGHT_OVER ->
+                            MutableProperty.ofSimple(this::setFlightOver, this::getFlightOver);
+                        case FLIGHT_RANGE_LEFT ->
+                            MutableProperty.ofSimple(
+                                this::setFlightRangeLeft, this::getFlightRangeLeft);
                       });
     };
   }
@@ -383,6 +395,24 @@ public class Unit extends GameDataComponent implements DynamicallyModifiable {
 
   private void setArrived(final int value) {
     arrived = value;
+  }
+
+  /** Flames and Steel (request 38): the territory an airborne aircraft is over; null on a base. */
+  public @Nullable Territory getFlightOver() {
+    return flightOver;
+  }
+
+  private void setFlightOver(final @Nullable Territory value) {
+    flightOver = value;
+  }
+
+  /** Flames and Steel (request 38): the range an airborne aircraft has left to land with. */
+  public int getFlightRangeLeft() {
+    return flightRangeLeft;
+  }
+
+  private void setFlightRangeLeft(final int value) {
+    flightRangeLeft = value;
   }
 
   private void setWasInAirBattle(final boolean value) {
