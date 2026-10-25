@@ -31,6 +31,7 @@ import games.strategy.engine.data.DefaultAttachment;
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.GameStep;
+import games.strategy.engine.data.changefactory.ChangeFactory;
 import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.UnitType;
@@ -38,7 +39,6 @@ import games.strategy.engine.delegate.IDelegateBridge;
 import games.strategy.engine.player.Player;
 import games.strategy.triplea.Constants;
 import games.strategy.triplea.attachments.AirUnitAttachment;
-import games.strategy.triplea.attachments.AirZoneAttachment;
 import games.strategy.triplea.delegate.AirCombatDelegate;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.air.AirCombat.Target;
@@ -47,13 +47,16 @@ import games.strategy.triplea.delegate.air.AirCombat.TargetKind;
 import games.strategy.triplea.delegate.data.CasualtyDetails;
 import games.strategy.triplea.delegate.data.CasualtyList;
 import games.strategy.triplea.xml.TestMapGameData;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * Flames and Steel air combat on the Revised test map. Sea zones stand in for zone boxes. Every
+ * Flames and Steel air combat on the Revised test map, with aircraft in the air over their targets
+ * (request 38): a hidden "Air - Airborne" territory is added to the map. Every
  * remainder die rolls 0 (a hit), and casualties are the offered defaults. Unit values used: fighter
  * dogfight 3, bomber attack 4 and bombing damage 5.
  */
@@ -61,9 +64,9 @@ class AirCombatDelegateTest {
   private final GameData gameData = TestMapGameData.REVISED.getGameData();
   private final GamePlayer british = british(gameData);
   private final GamePlayer germans = germans(gameData);
-  private final Territory front = territory("1 Sea Zone", gameData);
-  private final Territory naval = territory("2 Sea Zone", gameData);
-  private final Territory bombGermany = territory("3 Sea Zone", gameData);
+  private final Territory front = airborneTerritory(gameData);
+  private final Territory naval = front;
+  private final Territory bombGermany = front;
   private final Territory karelia = territory("Karelia S.S.R.", gameData);
   private final Territory seaZone = territory("5 Sea Zone", gameData);
   private final Territory germany = territory("Germany", gameData);
@@ -72,21 +75,28 @@ class AirCombatDelegateTest {
   private AirCombatDelegate delegate;
   // the remainder die every roll gets: 0 always hits, 5 always misses
   private int die = 0;
+  // the choices of the coming air battles, by nation
+  private final Map<GamePlayer, List<TargetAssignment>> bombers = new LinkedHashMap<>();
+  private final Map<GamePlayer, List<TargetAssignment>> fighters = new LinkedHashMap<>();
+
+  /** The map's hidden airborne territory, added for the test. */
+  private static Territory airborneTerritory(final GameData data) {
+    final Territory existing = data.getMap().getTerritoryOrNull(AirBases.DEFAULT_AIRBORNE);
+    if (existing != null) {
+      return existing;
+    }
+    final Territory t = new Territory(AirBases.DEFAULT_AIRBORNE, false, data);
+    data.getMap().addTerritory(t);
+    return t;
+  }
 
   @BeforeEach
   void setUp() {
     gameData.getProperties().set(Constants.STICKY_HITS, true);
-    for (final Territory t : List.of(front, naval, bombGermany, karelia, seaZone)) {
+    for (final Territory t : List.of(front, karelia, seaZone)) {
       removeFrom(t, t.getUnits());
     }
     removeFrom(germany, germany.getUnitCollection().getMatches(Matches.unitIsAaForAnything()));
-    zone(front, "zoneType", "land");
-    zone(front, "coveredTerritories", karelia.getName());
-    zone(naval, "zoneType", "coastal");
-    zone(naval, "coveredTerritories", seaZone.getName());
-    zone(bombGermany, "zoneType", "bomb");
-    zone(bombGermany, "bombedPlayer", germans.getName());
-    zone(bombGermany, "coveredTerritories", germany.getName());
     fighter = fighter(gameData);
     bomber = bomber(gameData);
     air(fighter, "fighter", "true");
@@ -95,25 +105,9 @@ class AirCombatDelegateTest {
     air(bomber, "bombingDamage", "5");
     delegate = new AirCombatDelegate();
     delegate.initialize("airCombat", "Air combat");
-    for (final String step :
-        List.of(
-            "airDogfights",
-            "germanAirTargets",
-            "britishAirTargets",
-            "germanAirCover",
-            "britishAirCover",
-            "airStrikes")) {
-      gameData
-          .getSequence()
-          .addStep(
-              new GameStep(
-                  step,
-                  step,
-                  step.startsWith("british") ? british : germans,
-                  delegate,
-                  gameData,
-                  new Properties()));
-    }
+    gameData
+        .getSequence()
+        .addStep(new GameStep("airStrikes", "airStrikes", null, delegate, gameData, new Properties()));
     // request 30: the older tests send more than 4 aircraft to one place
     gameData.getProperties().set(AirCover.CAP_BOMBERS, 99);
     gameData.getProperties().set(AirCover.CAP_FIGHTERS, 99);
@@ -288,19 +282,6 @@ class AirCombatDelegateTest {
   }
 
   @Test
-  void targetsCannotBeChangedOnceTheFightingStarts() {
-    addTo(front, bomber.create(1, germans));
-    addTo(karelia, infantry(gameData).create(1, russians(gameData)));
-    final IDelegateBridge bridge = bridge(germans);
-    advanceToStep(bridge, "airStrikes");
-    delegate.setDelegateBridgeAndPlayer(bridge);
-
-    assertThat(
-        delegate.assignTargets(List.of(new TargetAssignment(front, bomber, 1, land(karelia)))),
-        is(notNullValue()));
-  }
-
-  @Test
   void aaHitsTheBomberAbortedInInterceptionFirst() {
     hitPoints(bomber, 2);
     air(bomber, "airDefenseRolls", "0");
@@ -325,7 +306,6 @@ class AirCombatDelegateTest {
     air(fighter, "interceptionRolls", "0"); // an air battle, but no interception hits
     final Territory archangel = territory("Archangel", gameData);
     removeFrom(archangel, archangel.getUnits());
-    zone(front, "coveredTerritories", karelia.getName() + ":" + archangel.getName());
     addTo(front, fighter.create(1, british));
     final List<Unit> bombers = bomber.create(2, germans);
     // damaged earlier; the first strike takes undamaged bombers first, so it goes to Archangel
@@ -385,7 +365,6 @@ class AirCombatDelegateTest {
     final Territory archangel = territory("Archangel", gameData);
     removeFrom(archangel, archangel.getUnits());
     addTo(archangel, infantry(gameData).create(1, russians(gameData)));
-    zone(front, "coveredTerritories", karelia.getName() + ":" + archangel.getName());
     addTo(front, fighter.create(2, british)); // interception 6: would damage a bomber
     final List<Unit> bombers = bomber.create(2, germans);
     addTo(front, bombers);
@@ -421,11 +400,21 @@ class AirCombatDelegateTest {
     addTo(karelia, infantry(gameData).create(1, russians(gameData)));
 
     assertThat(
-        assign("germanAirTargets", germans, new TargetAssignment(front, bomber, 5, land(karelia))),
-        is(notNullValue()));
+        AirCover.capProblem(
+                germans,
+                List.of(new TargetAssignment(front, bomber, 5, land(karelia))),
+                Map.of(),
+                Map.of())
+            .isPresent(),
+        is(true));
     assertThat(
-        assign("germanAirTargets", germans, new TargetAssignment(front, bomber, 4, land(karelia))),
-        is(nullValue()));
+        AirCover.capProblem(
+                germans,
+                List.of(new TargetAssignment(front, bomber, 4, land(karelia))),
+                Map.of(),
+                Map.of())
+            .isPresent(),
+        is(false));
   }
 
   private void noInterception() {
@@ -470,13 +459,8 @@ class AirCombatDelegateTest {
             });
     when(bridge.getRemotePlayer(neutral)).thenReturn(nobody);
 
-    assertThat(
-        assign("germanAirTargets", germans, new TargetAssignment(front, bomber, 3, land(karelia))),
-        is(nullValue()));
-    advanceToStep(bridge, "airStrikes");
-    delegate.setDelegateBridgeAndPlayer(bridge);
-    delegate.start();
-    delegate.end();
+    targets(germans, new TargetAssignment(front, bomber, 3, land(karelia)));
+    runStep("airStrikes", bridge);
 
     assertThat(count(karelia, neutral), is(1));
   }
@@ -489,13 +473,8 @@ class AirCombatDelegateTest {
     when(bridge.getRandom(anyInt(), any(), any(), anyString()))
         .thenThrow(new IllegalStateException("broken strike"));
 
-    assertThat(
-        assign("germanAirTargets", germans, new TargetAssignment(front, bomber, 2, land(karelia))),
-        is(nullValue()));
-    advanceToStep(bridge, "airStrikes");
-    delegate.setDelegateBridgeAndPlayer(bridge);
-    delegate.start(); // must not throw
-    delegate.end();
+    targets(germans, new TargetAssignment(front, bomber, 2, land(karelia)));
+    runStep("airStrikes", bridge); // must not throw
 
     assertThat(count(karelia, russians(gameData)), is(3));
     assertThat(count(front, germans), is(2));
@@ -569,36 +548,14 @@ class AirCombatDelegateTest {
   @Test
   void aTypesLegalTargetsAreWhatThePickerAccepts() {
     // request 8 bug 2: a zone holding only submarines has a target, but not for a plain bomber
-    addTo(naval, bomber.create(2, germans));
-    addTo(seaZone, submarine(gameData).create(1, british));
-
-    assertThat(AirCombat.getTargets(germans, naval).isEmpty(), is(false));
-    assertThat(AirCombat.getTargets(germans, naval, bomber), is(empty()));
-    assertThat(AirCombat.countTargets(germans, naval, bomber), is(0));
-
-    air(bomber, "canAttackSubs", "true");
-    final Target subs = new Target(seaZone, TargetKind.SUBS);
-    assertThat(AirCombat.getTargets(germans, naval, bomber), is(List.of(subs)));
-    assertThat(
-        assign("germanAirTargets", germans, new TargetAssignment(naval, bomber, 1, subs)),
-        is(nullValue()));
-  }
-
-  @Test
-  void onlySubHuntersMayAttackSubmarines() {
-    addTo(naval, bomber.create(1, germans));
     addTo(seaZone, submarine(gameData).create(1, british));
     final Target subs = new Target(seaZone, TargetKind.SUBS);
 
-    assertThat(AirCombat.getTargets(germans, naval).contains(subs), is(true));
-    assertThat(
-        assign("germanAirTargets", germans, new TargetAssignment(naval, bomber, 1, subs)),
-        is(notNullValue()));
+    assertThat(AirCombat.targetsIn(germans, seaZone), is(List.of(subs)));
+    assertThat(AirCombat.mayAttack(bomber, TargetKind.SUBS), is(false));
 
     air(bomber, "canAttackSubs", "true");
-    assertThat(
-        assign("germanAirTargets", germans, new TargetAssignment(naval, bomber, 1, subs)),
-        is(nullValue()));
+    assertThat(AirCombat.mayAttack(bomber, TargetKind.SUBS), is(true));
   }
 
   @Test
@@ -616,10 +573,9 @@ class AirCombatDelegateTest {
 
   @Test
   void fightersCannotBeSentAgainstTargets() {
-    addTo(front, fighter.create(1, germans));
-    addTo(karelia, infantry(gameData).create(1, russians(gameData)));
-
-    assertThat(AirCombat.getBombers(germans, front).isEmpty(), is(true));
+    assertThat(AirCombat.mayAttack(fighter, TargetKind.LAND), is(false));
+    assertThat(AirCombat.mayAttack(fighter, TargetKind.COVER), is(true));
+    assertThat(AirCombat.mayAttack(bomber, TargetKind.COVER), is(false));
   }
 
   /** Both sides put all their fighters over Karelia, and the air phase is fought. */
@@ -629,14 +585,38 @@ class AirCombatDelegateTest {
     runStep("airStrikes", germans);
   }
 
+  /** The bombers take off over their targets (as the bomber stage does). */
   private void targets(final GamePlayer attacker, final TargetAssignment... assignments) {
-    final String step = attacker.equals(british) ? "britishAirTargets" : "germanAirTargets";
-    assertThat(assign(step, attacker, assignments), is(nullValue()));
+    for (final TargetAssignment a : assignments) {
+      fly(attacker, a);
+      bombers.computeIfAbsent(attacker, k -> new java.util.ArrayList<>()).add(a);
+    }
   }
 
+  /** The fighters take off over the places they cover (as the fighter stage does). */
   private void cover(final GamePlayer player, final TargetAssignment... assignments) {
-    final String step = player.equals(british) ? "britishAirCover" : "germanAirCover";
-    assertThat(assign(step, player, assignments), is(nullValue()));
+    for (final TargetAssignment a : assignments) {
+      fly(player, a);
+      fighters.computeIfAbsent(player, k -> new java.util.ArrayList<>()).add(a);
+    }
+  }
+
+  /** That many of the nation's aircraft of the type in the air, not yet over a place, go over it. */
+  private void fly(final GamePlayer player, final TargetAssignment a) {
+    final List<Unit> units =
+        front.getUnitCollection().stream()
+            .filter(
+                u ->
+                    u.isOwnedBy(player)
+                        && u.getType().equals(a.unitType())
+                        && u.getFlightOver() == null)
+            .sorted(java.util.Comparator.comparingInt(Unit::getHits))
+            .limit(a.count())
+            .toList();
+    for (final Unit u : units) {
+      gameData.performChange(
+          ChangeFactory.unitPropertyChange(u, a.target().territory(), Unit.PropertyName.FLIGHT_OVER));
+    }
   }
 
   private static Target over(final Territory t) {
@@ -644,28 +624,27 @@ class AirCombatDelegateTest {
   }
 
   private void strike(final GamePlayer attacker, final TargetAssignment... assignments) {
-    final String targetStep = attacker.equals(british) ? "britishAirTargets" : "germanAirTargets";
-    assertThat(assign(targetStep, attacker, assignments), is(nullValue()));
+    targets(attacker, assignments);
     runStep("airStrikes", attacker);
   }
 
-  private String assign(
-      final String step, final GamePlayer player, final TargetAssignment... assignments) {
-    final IDelegateBridge bridge = bridge(player);
-    advanceToStep(bridge, step);
-    delegate.setDelegateBridgeAndPlayer(bridge);
-    delegate.start();
-    final String error = delegate.assignTargets(List.of(assignments));
-    delegate.end();
-    return error;
+  private void runStep(final String step, final GamePlayer player) {
+    runStep(step, bridge(player));
   }
 
-  private void runStep(final String step, final GamePlayer player) {
-    final IDelegateBridge bridge = bridge(player);
+  private void runStep(final String step, final IDelegateBridge bridge) {
     advanceToStep(bridge, step);
     delegate.setDelegateBridgeAndPlayer(bridge);
+    delegate.setStageBombers(bombers);
+    delegate.setStageCover(fighters);
+    bombers.clear();
+    fighters.clear();
     delegate.start();
     delegate.end();
+    // the next battle starts with nobody over anything
+    for (final Unit u : front.getUnits()) {
+      gameData.performChange(ChangeFactory.unitPropertyChange(u, null, Unit.PropertyName.FLIGHT_OVER));
+    }
   }
 
   /** A bridge whose remainder dice always roll 0 and whose players take the offered casualties. */
@@ -700,20 +679,6 @@ class AirCombatDelegateTest {
 
   private static int count(final Territory t, final GamePlayer owner) {
     return t.getUnitCollection().countMatches(Matches.unitIsOwnedBy(owner));
-  }
-
-  private void zone(final Territory territory, final String property, final String value) {
-    set(
-        AirZoneAttachment.get(territory)
-            .orElseGet(
-                () -> {
-                  final AirZoneAttachment a =
-                      new AirZoneAttachment(AirZoneAttachment.ATTACHMENT_NAME, territory, gameData);
-                  territory.addAttachment(AirZoneAttachment.ATTACHMENT_NAME, a);
-                  return a;
-                }),
-        property,
-        value);
   }
 
   private void air(final UnitType type, final String property, final String value) {

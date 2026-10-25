@@ -11,7 +11,6 @@ import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.UnitType;
 import games.strategy.engine.data.gameparser.GameParser;
-import games.strategy.triplea.attachments.AirZoneAttachment;
 import games.strategy.triplea.attachments.TechAbilityAttachment;
 import games.strategy.triplea.delegate.InitializationDelegate;
 import games.strategy.triplea.delegate.TechAdvance;
@@ -44,7 +43,7 @@ class Request31Test {
   @BeforeEach
   void setUp() {
     Assumptions.assumeTrue(Files.exists(XML), "Flames and Steel map not installed");
-    data = GameParser.parse(XML, false).orElseThrow();
+    data = games.strategy.triplea.delegate.air.BasedMap.load();
     british = data.getPlayerList().getPlayerId("British");
     americans = data.getPlayerList().getPlayerId("Americans");
     germans = data.getPlayerList().getPlayerId("Germans");
@@ -157,28 +156,9 @@ class Request31Test {
     assertThat(AirCombat.isBomber(heavy), is(false));
     assertThat(AirCombat.interceptionValue(heavy), is(4));
     assertThat(type("heavyFighter").getUnitAttachment().getCarrierCost() > 0, is(false));
-    final Territory bombGermany = data.getMap().getTerritoryOrThrow("Air - Bomb Germany");
-    // defends against strategic bombing
-    assertThat(
-        AirAllocation.entryProblem(germans, type("heavyFighter"), bombGermany).isPresent(),
-        is(false));
-    // may cover places in its front (range 6: three steps)
-    final Territory westernEurope = data.getMap().getTerritoryOrThrow("Air - Western Europe");
-    assertThat(
-        AirCover.places(germans, westernEurope, type("heavyFighter"), Map.of()).isEmpty(),
-        is(false));
-    // and never uses a carrier: an ocean front's carrier load rejects it
-    final Territory ocean =
-        AirZoneAttachment.getAirZones(data.getMap()).stream()
-            .filter(
-                z ->
-                    AirZoneAttachment.get(z).orElseThrow().getZoneType()
-                        == AirZoneAttachment.ZoneType.OCEAN)
-            .findFirst()
-            .orElseThrow();
-    assertThat(
-        AirAllocation.carrierLoad(germans, ocean, List.of(type("heavyFighter"))).unfit(),
-        is(type("heavyFighter")));
+    // request 38: it flies in the fighter stage, and never uses a carrier
+    assertThat(AirStage.isOfStage(type("heavyFighter"), AirStage.Stage.FIGHTERS), is(true));
+    assertThat(AirBases.canUseCarriers(type("heavyFighter")), is(false));
   }
 
   @Test

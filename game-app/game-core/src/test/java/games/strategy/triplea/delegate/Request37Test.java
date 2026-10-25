@@ -33,7 +33,7 @@ class Request37Test {
   @BeforeEach
   void setUp() {
     Assumptions.assumeTrue(Files.exists(XML), "Flames and Steel map not installed");
-    data = GameParser.parse(XML, false).orElseThrow();
+    data = games.strategy.triplea.delegate.air.BasedMap.load();
     russians = data.getPlayerList().getPlayerId("Russians");
     germans = data.getPlayerList().getPlayerId("Germans");
     diveBomber = data.getUnitTypeList().getUnitTypeOrThrow("diveBomber");

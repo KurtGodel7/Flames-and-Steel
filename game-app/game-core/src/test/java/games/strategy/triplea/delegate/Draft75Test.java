@@ -50,7 +50,7 @@ class Draft75Test {
   }
 
   private static GameData load() {
-    final GameData data = GameParser.parse(XML, false).orElseThrow();
+    final GameData data = games.strategy.triplea.delegate.air.BasedMap.load();
     final InitializationDelegate start = new InitializationDelegate();
     start.initialize("initDelegate", "Initializing Delegates");
     start.setDelegateBridgeAndPlayer(

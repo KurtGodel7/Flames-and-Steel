@@ -13,8 +13,7 @@ import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.gameparser.GameParser;
 import games.strategy.engine.delegate.IDelegateBridge;
 import games.strategy.triplea.Constants;
-import games.strategy.triplea.attachments.AirZoneAttachment;
-import games.strategy.triplea.delegate.air.AirAllocation.Stage;
+import games.strategy.triplea.delegate.air.AirStage.Stage;
 import games.strategy.triplea.delegate.air.AirCombat;
 import games.strategy.triplea.delegate.air.AirCombat.TargetKind;
 import games.strategy.triplea.delegate.air.AirStage;
@@ -41,7 +40,7 @@ class Draft40Test {
   @BeforeEach
   void setUp() {
     Assumptions.assumeTrue(Files.exists(XML), "Flames and Steel map not installed");
-    data = GameParser.parse(XML, false).orElseThrow();
+    data = games.strategy.triplea.delegate.air.BasedMap.load();
     Assumptions.assumeTrue(
         data.getProperties().get(Peacetime.INCOME + "Americans", -1) >= 0,
         "map has no US peacetime rule");
@@ -102,13 +101,27 @@ class Draft40Test {
   void theAirStagesNeverAskTheUsAtPeace() {
     // request 35: the bomber and fighter stages ask every nation at once, but not one at peace
     assertThat(Peacetime.isAtPeace(americans), is(true));
-    final boolean hasWork =
-        AirStage.hasWork(americans, Stage.BOMBERS, Map.of(), data.getMap())
-            || AirStage.hasWork(americans, Stage.FIGHTERS, Map.of(), data.getMap());
-    Assumptions.assumeTrue(hasWork, "no US aircraft in an air box: nothing to ask anyway");
+    final var medium = data.getUnitTypeList().getUnitTypeOrThrow("mediumBomber");
+    final Territory newYork = data.getMap().getTerritoryOrThrow("New York");
+    newYork.getUnitCollection().addAll(medium.create(1, americans));
+    // Japanese bombers next to Chinese land with an army: Japan has something to do
+    final var japaneseBase =
+        data.getMap().getTerritories().stream()
+            .filter(t -> !t.isWater() && t.isOwnedBy(japanese))
+            .filter(
+                t ->
+                    data.getMap().getNeighbors(t).stream()
+                        .anyMatch(
+                            n ->
+                                !n.isWater()
+                                    && !AirCombat.getLandTargetUnits(japanese, n).isEmpty()))
+            .findFirst()
+            .orElseThrow();
+    japaneseBase.getUnitCollection().addAll(medium.create(1, japanese));
+    assertThat(AirStage.hasWork(japanese, Stage.BOMBERS, Map.of(), data.getMap()), is(true));
     final AirStageRunner stages = new AirStageRunner(data).run();
     assertThat(stages.asked(), not(hasItem(americans)));
-    assertThat(stages.asked().isEmpty(), is(false));
+    assertThat(stages.asked(), hasItem(japanese));
   }
 
   @Test
@@ -127,8 +140,8 @@ class Draft40Test {
   @Test
   void neutralGarrisonsAreAirTargets() {
     int neutral = 0;
-    for (final Territory zone : AirZoneAttachment.getAirZones(data.getMap())) {
-      for (final var target : AirCombat.getTargets(japanese, zone)) {
+    for (final Territory t : data.getMap().getTerritories()) {
+      for (final var target : AirCombat.targetsIn(japanese, t)) {
         if (target.kind() == TargetKind.LAND && target.territory().getOwner().isNull()) {
           neutral++;
         }

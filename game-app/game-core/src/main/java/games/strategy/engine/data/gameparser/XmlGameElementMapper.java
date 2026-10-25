@@ -9,7 +9,6 @@ import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.IAttachment;
 import games.strategy.engine.delegate.IDelegate;
 import games.strategy.triplea.attachments.AirUnitAttachment;
-import games.strategy.triplea.attachments.AirZoneAttachment;
 import games.strategy.triplea.attachments.ApcAttachment;
 import games.strategy.triplea.attachments.CanalAttachment;
 import games.strategy.triplea.attachments.MunitionsAttachment;
@@ -25,8 +24,6 @@ import games.strategy.triplea.attachments.TriggerAttachment;
 import games.strategy.triplea.attachments.UnitAttachment;
 import games.strategy.triplea.attachments.UnitSupportAttachment;
 import games.strategy.triplea.attachments.UserActionAttachment;
-import games.strategy.triplea.delegate.AirAllocationDelegate;
-import games.strategy.triplea.delegate.AirCarrierCheckDelegate;
 import games.strategy.triplea.delegate.AirCombatDelegate;
 import games.strategy.triplea.delegate.AirStageDelegate;
 import games.strategy.triplea.delegate.ApcDelegate;
@@ -92,8 +89,6 @@ public final class XmlGameElementMapper {
   private static ImmutableMap<String, Supplier<IDelegate>> newDelegateFactories(
       final Map<String, Supplier<IDelegate>> auxiliaryDelegateFactoriesByTypeName) {
     return ImmutableMap.<String, Supplier<IDelegate>>builder()
-        .put("AirAllocationDelegate", AirAllocationDelegate::new)
-        .put("AirCarrierCheckDelegate", AirCarrierCheckDelegate::new)
         .put("AirCombatDelegate", AirCombatDelegate::new)
         .put("AirStageDelegate", AirStageDelegate::new)
         .put("ApcDelegate", ApcDelegate::new)
@@ -138,7 +133,6 @@ public final class XmlGameElementMapper {
     return ImmutableMap.<String, AttachmentFactory>builder()
         .put("AirUnitAttachment", AirUnitAttachment::new)
         .put("ApcAttachment", ApcAttachment::new)
-        .put("AirZoneAttachment", AirZoneAttachment::new)
         .put("CanalAttachment", CanalAttachment::new)
         .put("MunitionsAttachment", MunitionsAttachment::new)
         .put("PlayerAttachment", PlayerAttachment::new)

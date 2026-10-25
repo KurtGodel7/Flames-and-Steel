@@ -266,6 +266,83 @@ public class AirBases {
     return steps.keySet();
   }
 
+  /**
+   * How far every territory is from the nation's landing spots, worked out once (one search from
+   * all land bases, one per carrier from the zones it could reach), for listing targets quickly.
+   */
+  public static final class Reach {
+    private final GamePlayer player;
+    private final Map<Territory, Integer> land;
+    private final Map<Unit, Map<Territory, Integer>> carriers = new LinkedHashMap<>();
+
+    public Reach(final GamePlayer player) {
+      this.player = player;
+      final List<Territory> bases = new ArrayList<>();
+      for (final Territory t : player.getData().getMap().getTerritories()) {
+        if (isLandBase(player, t)) {
+          bases.add(t);
+        }
+      }
+      land = fromAll(player, bases, 40);
+      carrierReaches(player).forEach((c, zones) -> carriers.put(c, fromAll(player, zones, 40)));
+    }
+
+    /** Steps from the territory to the nearest land base, or -1 if none is near. */
+    public int landSteps(final Territory t) {
+      return land.getOrDefault(t, -1);
+    }
+
+    /** Whether an aircraft of this type over the territory with this range left could land. */
+    public boolean canLand(final UnitType type, final Territory t, final int left) {
+      if (left < 0) {
+        return false;
+      }
+      final int l = landSteps(t);
+      if (l >= 0 && l <= left) {
+        return true;
+      }
+      for (final Map.Entry<Unit, Map<Territory, Integer>> e : carriers.entrySet()) {
+        final Integer d = e.getValue().get(t);
+        if (d != null && d <= left && fits(type, e.getKey())) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    public GamePlayer player() {
+      return player;
+    }
+  }
+
+  /** Steps to every territory from the nearest of several starts, within {@code max}. */
+  static Map<Territory, Integer> fromAll(
+      final GamePlayer player, final Collection<Territory> starts, final int max) {
+    final GameMap map = player.getData().getMap();
+    final Predicate<Territory> over = flyOver(player);
+    final Map<Territory, Integer> result = new HashMap<>();
+    final Deque<Territory> queue = new ArrayDeque<>();
+    for (final Territory s : starts) {
+      result.put(s, 0);
+      queue.add(s);
+    }
+    final Set<Territory> start = new HashSet<>(starts);
+    while (!queue.isEmpty()) {
+      final Territory t = queue.poll();
+      final int d = result.get(t);
+      if (d >= max || (!start.contains(t) && !over.test(t))) {
+        continue;
+      }
+      for (final Territory n : map.getNeighbors(t)) {
+        if (!result.containsKey(n) && !isAirborneTerritory(n)) {
+          result.put(n, d + 1);
+          queue.add(n);
+        }
+      }
+    }
+    return result;
+  }
+
   // ---- flights
 
   /** An aircraft in the air (or about to be): over a territory, with range left to land. */
@@ -441,7 +518,7 @@ public class AirBases {
       final Landing landing = landingOptions(f, reaches);
       if (!landing.possible()) {
         return Optional.of(
-            AirAllocation.typeName(f.plane().getType())
+            AirStage.typeName(f.plane().getType())
                 + " over "
                 + f.over().getName()
                 + ": nowhere to land within "

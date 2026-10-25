@@ -36,7 +36,7 @@ class BattleshipSupportTest {
   @BeforeEach
   void setUp() {
     Assumptions.assumeTrue(Files.exists(XML), "Flames and Steel map not installed");
-    data = GameParser.parse(XML, false).orElseThrow();
+    data = games.strategy.triplea.delegate.air.BasedMap.load();
     americans = data.getPlayerList().getPlayerId("Americans");
     japanese = data.getPlayerList().getPlayerId("Japanese");
   }

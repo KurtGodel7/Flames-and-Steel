@@ -32,7 +32,7 @@ class Draft77Test {
   @BeforeEach
   void setUp() {
     Assumptions.assumeTrue(Files.exists(XML), "Flames and Steel map not installed");
-    data = GameParser.parse(XML, false).orElseThrow();
+    data = games.strategy.triplea.delegate.air.BasedMap.load();
   }
 
   private UnitType type(final String name) {
@@ -100,9 +100,9 @@ class Draft77Test {
   }
 
   @Test
-  void longRangeRaidPropertiesAreSet() {
-    assertThat(data.getProperties().get("FS Long Range Raid Units", ""), is("flyingWing"));
-    assertThat(data.getProperties().get("FS Long Range Raid To", ""), is("Air - Bomb America Atlantic"));
+  void theRaidPropertiesAreGone() {
+    // request 38: flying wings fly to targets in range like any bomber
+    assertThat(data.getProperties().get("FS Long Range Raid Units", ""), is(""));
   }
 
   @Test

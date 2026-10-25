@@ -37,7 +37,7 @@ class Draft76Test {
   @BeforeEach
   void setUp() {
     Assumptions.assumeTrue(Files.exists(XML), "Flames and Steel map not installed");
-    data = GameParser.parse(XML, false).orElseThrow();
+    data = games.strategy.triplea.delegate.air.BasedMap.load();
     Assumptions.assumeTrue(
         data.getTechnologyFrontier().getAdvanceByName("NightAction") != null, "no Night Action");
     japanese = data.getPlayerList().getPlayerId("Japanese");

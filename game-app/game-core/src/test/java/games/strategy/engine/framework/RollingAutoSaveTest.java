@@ -47,7 +47,7 @@ class RollingAutoSaveTest {
 
   private void loadMap() {
     Assumptions.assumeTrue(Files.exists(XML), "Flames and Steel map not installed");
-    data = GameParser.parse(XML, false).orElseThrow();
+    data = games.strategy.triplea.delegate.air.BasedMap.load();
     final InitializationDelegate start = new InitializationDelegate();
     start.initialize("initDelegate", "Initializing Delegates");
     start.setDelegateBridgeAndPlayer(

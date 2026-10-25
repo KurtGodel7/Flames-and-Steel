@@ -20,7 +20,6 @@ import games.strategy.triplea.attachments.FireTriggerParams;
 import games.strategy.triplea.attachments.ICondition;
 import games.strategy.triplea.attachments.TriggerAttachment;
 import games.strategy.triplea.attachments.UnitAttachment;
-import games.strategy.triplea.delegate.air.FleetAircraft;
 import games.strategy.triplea.delegate.data.MoveValidationResult;
 import games.strategy.triplea.delegate.move.validation.AirMovementValidator;
 import games.strategy.triplea.delegate.move.validation.MoveValidator;
@@ -678,25 +677,6 @@ public class MoveDelegate extends AbstractMoveDelegate {
       return Optional.empty();
     }
 
-    // Flames and Steel: aircraft sail with carriers that change air front; the player picks which
-    final Optional<FleetAircraft.Plan> fleet =
-        FleetAircraft.plan(player, move.getUnits(), move.getRoute(), data.getMap());
-    IntegerMap<UnitType> fleetChoice = new IntegerMap<>();
-    if (fleet.isPresent()) {
-      fleetChoice =
-          bridge
-              .getRemotePlayer()
-              .selectFleetAircraft(
-                  fleet.get().available(), fleet.get().suggested(), fleet.get().describe());
-      if (fleetChoice == null) {
-        return Optional.empty(); // the player cancelled the move
-      }
-      final Optional<String> fleetProblem = FleetAircraft.validate(fleet.get(), fleetChoice);
-      if (fleetProblem.isPresent()) {
-        return fleetProblem;
-      }
-    }
-
     // do the move
     final Route route = move.getRoute();
     final UndoableMove currentMove = new UndoableMove(move.getUnits(), move.getRoute());
@@ -717,16 +697,6 @@ public class MoveDelegate extends AbstractMoveDelegate {
     tempMovePerformer.initialize(this);
     tempMovePerformer.moveUnits(move, player, currentMove);
     tempMovePerformer = null;
-    if (fleet.isPresent() && fleetChoice.totalValues() > 0) {
-      final List<Unit> aircraft = FleetAircraft.aircraftFor(fleet.get(), fleetChoice, player);
-      final Change change = FleetAircraft.change(fleet.get(), aircraft);
-      // part of the same move, so undoing the carriers' move brings the aircraft back too
-      currentMove.addChange(change);
-      bridge.addChange(change);
-      bridge
-          .getHistoryWriter()
-          .addChildToEvent(FleetAircraft.historyText(fleet.get(), aircraft), aircraft);
-    }
     // Flames and Steel (request 32): munitions remember when they arrived, newest absorbed first
     final Change arrival = Munitions.stampArrival(data, move.getUnits());
     if (!arrival.isEmpty()) {

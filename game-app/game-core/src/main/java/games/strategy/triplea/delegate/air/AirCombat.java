@@ -9,8 +9,6 @@ import games.strategy.engine.data.changefactory.ChangeFactory;
 import games.strategy.engine.delegate.IDelegateBridge;
 import games.strategy.engine.random.IRandomStats.DiceType;
 import games.strategy.triplea.attachments.AirUnitAttachment;
-import games.strategy.triplea.attachments.AirZoneAttachment;
-import games.strategy.triplea.attachments.AirZoneAttachment.ZoneType;
 import games.strategy.triplea.attachments.ApcAttachment;
 import games.strategy.triplea.attachments.TechAbilityAttachment;
 import games.strategy.triplea.attachments.TerritoryAttachment;
@@ -25,7 +23,6 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
-import java.util.EnumMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -47,12 +44,10 @@ public class AirCombat {
     /** A factory territory of the bombed nation (strategic bombing). */
     STRATEGIC,
     /** Request 30: fighter-types placed over a territory, to escort or defend (see AirCover). */
-    COVER,
-    /** Request 35: aircraft that move to the named air box with no target (see AirStage). */
-    MOVE
+    COVER
   }
 
-  /** A target a nation's bombers in an air zone may attack. */
+  /** A target a nation's aircraft may attack (or, for fighters, a place they may cover). */
   public record Target(Territory territory, TargetKind kind) implements Serializable {
     @Serial private static final long serialVersionUID = -6260739381104472151L;
 
@@ -63,12 +58,14 @@ public class AirCombat {
         case SUBS -> territory.getName() + ": submarines";
         case STRATEGIC -> territory.getName() + ": strategic bombing";
         case COVER -> territory.getName() + ": fighter cover";
-        case MOVE -> "move to " + AirAllocation.zoneName(territory);
       };
     }
   }
 
-  /** Send {@code count} bombers of one type in an air zone against a target. */
+  /**
+   * Send {@code count} aircraft of one type against a target. In the air stages the zone is the
+   * base they fly from (request 38); once they are in the air, the airborne territory.
+   */
   public record TargetAssignment(Territory zone, UnitType unitType, int count, Target target)
       implements Serializable {
     @Serial private static final long serialVersionUID = 5017718430628117731L;
@@ -94,90 +91,39 @@ public class AirCombat {
     return Math.max(0, data.getProperties().get(DOGFIGHT_ROUNDS, 2));
   }
 
-  /** The player's bombers in a zone that may still strike (not in the reserve). */
-  public static List<Unit> getBombers(final GamePlayer player, final Territory zone) {
-    if (AirZoneAttachment.get(zone).orElseThrow().getZoneType() == ZoneType.RESERVE) {
-      return List.of();
-    }
-    return zone.getUnitCollection().getMatches(u -> u.isOwnedBy(player) && isBomber(u));
-  }
-
-  /** Targets the player's bombers in this zone may attack. */
-  public static List<Target> getTargets(final GamePlayer player, final Territory zone) {
-    final AirZoneAttachment attachment = AirZoneAttachment.get(zone).orElseThrow();
+  /**
+   * Request 38: what the nation's aircraft could attack in the territory, whatever their range:
+   * land units, surface ships, submarines, and (strategic bombing) an enemy factory or SPC.
+   */
+  public static List<Target> targetsIn(final GamePlayer player, final Territory t) {
     final List<Target> targets = new ArrayList<>();
-    switch (attachment.getZoneType()) {
-      case RESERVE -> {
-        // reserve aircraft do not fight
+    if (AirBases.isAirborneTerritory(t)) {
+      return targets;
+    }
+    if (t.isWater()) {
+      if (t.anyUnitsMatch(enemyShip(player).and(Matches.unitCanEvade().negate()))) {
+        targets.add(new Target(t, TargetKind.SURFACE));
       }
-      case BOMB -> {
-        // enemy factories and APCs in the zone's home region
-        for (final Territory t : attachment.getCoveredTerritories()) {
-          if (isStrategicTarget(player, t)) {
-            targets.add(new Target(t, TargetKind.STRATEGIC));
-          }
-        }
+      if (t.anyUnitsMatch(enemyShip(player).and(Matches.unitCanEvade()))) {
+        targets.add(new Target(t, TargetKind.SUBS));
       }
-      default -> {
-        for (final Territory t : attachment.getCoveredTerritories()) {
-          if (t.isWater()) {
-            if (t.anyUnitsMatch(enemyShip(player).and(Matches.unitCanEvade().negate()))) {
-              targets.add(new Target(t, TargetKind.SURFACE));
-            }
-            if (t.anyUnitsMatch(enemyShip(player).and(Matches.unitCanEvade()))) {
-              targets.add(new Target(t, TargetKind.SUBS));
-            }
-          } else {
-            if (!getLandTargetUnits(player, t).isEmpty()) {
-              targets.add(new Target(t, TargetKind.LAND));
-            }
-            // factories outside every home region are bombed from their front
-            if (isStrategicTarget(player, t)
-                && !AirZoneAttachment.isInBombingZone(player.getData().getMap(), t)) {
-              targets.add(new Target(t, TargetKind.STRATEGIC));
-            }
-          }
-        }
+    } else {
+      if (!getLandTargetUnits(player, t).isEmpty()) {
+        targets.add(new Target(t, TargetKind.LAND));
+      }
+      if (isStrategicTarget(player, t)) {
+        targets.add(new Target(t, TargetKind.STRATEGIC));
       }
     }
     return targets;
   }
 
   /** An enemy-owned land territory with a factory or APC. */
-  private static boolean isStrategicTarget(final GamePlayer player, final Territory t) {
+  public static boolean isStrategicTarget(final GamePlayer player, final Territory t) {
     return !t.isWater()
         && !t.getOwner().isNull()
         && atWar(player, t.getOwner())
         && t.anyUnitsMatch(Matches.unitCanProduceUnits().or(u -> ApcAttachment.isApc(u.getType())));
-  }
-
-  /**
-   * The targets this nation's aircraft of this type in the zone may legally attack. The allocation
-   * grid's counts, the target picker and the "still without a target" warning all use this.
-   */
-  public static List<Target> getTargets(
-      final GamePlayer player, final Territory zone, final UnitType type) {
-    return getTargets(player, zone).stream()
-        .filter(target -> mayAttack(player, zone, type, target))
-        .toList();
-  }
-
-  /** How many targets in the zone this nation's aircraft of this type could attack. */
-  public static int countTargets(
-      final GamePlayer player, final Territory zone, final UnitType type) {
-    return getTargets(player, zone, type).size();
-  }
-
-  /** {@link #countTargets} split by kind of target (kinds with none are left out). */
-  public static Map<TargetKind, Integer> countTargetsByKind(
-      final GamePlayer player, final Territory zone, final UnitType type) {
-    final Map<TargetKind, Integer> result = new EnumMap<>(TargetKind.class);
-    for (final Target target : getTargets(player, zone)) {
-      if (mayAttack(player, zone, type, target)) {
-        result.merge(target.kind(), 1, Integer::sum);
-      }
-    }
-    return result;
   }
 
   /** Game property listing aircraft types that attack only land targets, e.g. "a:b:c". */
@@ -196,7 +142,7 @@ public class AirCombat {
       case STRATEGIC -> air != null && air.getBombingDamage() > 0;
       case SUBS -> air != null && air.isCanAttackSubs();
       case COVER -> air != null && air.isFighter();
-      default -> true;
+      default -> air == null || !air.isFighter();
     };
   }
 
@@ -204,37 +150,6 @@ public class AirCombat {
   public static boolean isLandTargetsOnly(final UnitType type) {
     final String list = type.getData().getProperties().get(LAND_TARGETS_ONLY, "");
     return !list.isBlank() && List.of(list.split(":")).contains(type.getName());
-  }
-
-  /**
-   * How many of {@link #countTargets} are land targets in neutral territory (garrisons with no
-   * owner, which every nation is at war with).
-   */
-  public static int countNeutralTargets(
-      final GamePlayer player, final Territory zone, final UnitType type) {
-    return (int)
-        getTargets(player, zone).stream()
-            .filter(t -> t.kind() == TargetKind.LAND && t.territory().getOwner().isNull())
-            .filter(t -> mayAttack(player, zone, type, t))
-            .count();
-  }
-
-  /**
-   * Whether this nation's aircraft of this type in the zone may attack the target: the type must
-   * suit the target, and the target must be within half the aircraft's own range of a landing spot.
-   */
-  public static boolean mayAttack(
-      final GamePlayer player, final Territory zone, final UnitType type, final Target target) {
-    if (!mayAttack(type, target.kind())) {
-      return false;
-    }
-    // request 26: a long-range raid bombs only the listed factories, and range doesn't apply
-    if (LongRangeRaid.isRaidZone(player, type, zone)) {
-      return target.kind() == TargetKind.STRATEGIC
-          && LongRangeRaid.isTarget(player.getData(), target.territory());
-    }
-    final int range = AirRange.range(type, player);
-    return AirRange.canReach(player, zone, type, range, target.territory());
   }
 
   /** Enemy units an air attack on this land territory may hit. */
@@ -607,27 +522,18 @@ public class AirCombat {
   }
 
   /**
-   * Whether a battle window shows an air phase battle: some of its units are in an air zone box
-   * (the aircraft; in a strike the targets are on the map).
+   * Whether a battle window shows an air phase battle: some of its units are airborne (the
+   * aircraft; in a strike the targets are on the map).
    */
   public static boolean isAirZoneBattle(
       final Collection<Unit> side, final Collection<Unit> enemies) {
-    final List<Unit> all = new ArrayList<>(side);
-    all.addAll(enemies);
-    if (all.isEmpty()) {
-      return false;
-    }
-    final GameData data = all.get(0).getData();
-    return AirZoneAttachment.getAirZones(data.getMap()).stream()
-        .anyMatch(zone -> all.stream().anyMatch(u -> zone.getUnitCollection().contains(u)));
+    return side.stream().anyMatch(AirBases::isAirborne)
+        || enemies.stream().anyMatch(AirBases::isAirborne);
   }
 
-  /**
-   * Whether the air phase battle shown at this place is a dogfight. Dogfights are shown at their
-   * air front, strikes at their target territory or sea zone.
-   */
+  /** Whether the air phase battle shown at this place is a dogfight (shown at the airborne place). */
   public static boolean isDogfight(final Territory location) {
-    return location != null && AirZoneAttachment.isAirZone(location);
+    return location != null && AirBases.isAirborneTerritory(location);
   }
 
   /**

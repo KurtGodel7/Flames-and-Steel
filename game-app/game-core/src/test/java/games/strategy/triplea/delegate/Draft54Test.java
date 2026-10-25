@@ -33,7 +33,7 @@ class Draft54Test {
   @BeforeEach
   void setUp() {
     Assumptions.assumeTrue(Files.exists(XML), "Flames and Steel map not installed");
-    data = GameParser.parse(XML, false).orElseThrow();
+    data = games.strategy.triplea.delegate.air.BasedMap.load();
     Assumptions.assumeTrue(
         Properties.getUnplacedUnitsLive(data.getProperties()), "map lets unplaced units die");
     germans = data.getPlayerList().getPlayerId("Germans");
@@ -41,121 +41,6 @@ class Draft54Test {
 
   private UnitType type(final String name) {
     return data.getUnitTypeList().getUnitType(name).orElseThrow();
-  }
-
-  // --- request 9 item 3: aircraft sail with their carriers
-
-  /** Two empty sea zones next to each other in different fronts that Japan may enter. */
-  private games.strategy.engine.data.Territory[] seaZonesAcrossFronts(final GamePlayer japanese) {
-    for (final var a : data.getMap().getTerritories()) {
-      if (!a.isWater() || !a.getUnits().isEmpty()) {
-        continue;
-      }
-      final var frontA =
-          games.strategy.triplea.delegate.air.FleetAircraft.frontOf(a, data.getMap());
-      for (final var b : data.getMap().getNeighbors(a)) {
-        if (!b.isWater() || !b.getUnits().isEmpty()) {
-          continue;
-        }
-        final var frontB =
-            games.strategy.triplea.delegate.air.FleetAircraft.frontOf(b, data.getMap());
-        if (frontA.isPresent()
-            && frontB.isPresent()
-            && !frontA.equals(frontB)
-            && games.strategy.triplea.delegate.air.AirAllocation.mayEnter(japanese, frontA.get())
-            && games.strategy.triplea.delegate.air.AirAllocation.mayEnter(japanese, frontB.get())) {
-          return new games.strategy.engine.data.Territory[] {a, b};
-        }
-      }
-    }
-    throw new IllegalStateException("no sea zones across two fronts");
-  }
-
-  @Test
-  void aircraftSailWithCarriersIntoTheNewFrontAndUndoBringsThemBack() {
-    final GamePlayer japanese = data.getPlayerList().getPlayerId("Japanese");
-    final var zones = seaZonesAcrossFronts(japanese);
-    final var from =
-        games.strategy.triplea.delegate.air.FleetAircraft.frontOf(zones[0], data.getMap())
-            .orElseThrow();
-    final var to =
-        games.strategy.triplea.delegate.air.FleetAircraft.frontOf(zones[1], data.getMap())
-            .orElseThrow();
-    final var carrier = type("carrier").create(1, japanese); // room for 2
-    data.performChange(
-        games.strategy.engine.data.changefactory.ChangeFactory.addUnits(zones[0], carrier));
-    final var aircraft = new java.util.ArrayList<games.strategy.engine.data.Unit>();
-    aircraft.addAll(type("diveBomber").create(1, japanese));
-    aircraft.addAll(type("fighter").create(2, japanese));
-    data.performChange(
-        games.strategy.engine.data.changefactory.ChangeFactory.removeUnits(
-            from, from.getUnitCollection().getMatches(u -> u.isOwnedBy(japanese))));
-    data.performChange(
-        games.strategy.engine.data.changefactory.ChangeFactory.addUnits(from, aircraft));
-    data.performChange(
-        games.strategy.engine.data.changefactory.ChangeFactory.removeUnits(
-            to, to.getUnitCollection().getMatches(u -> u.isOwnedBy(japanese))));
-
-    final IDelegateBridge bridge = newDelegateBridge(japanese);
-    // the player accepts the suggestion
-    org.mockito.Mockito.when(
-            bridge
-                .getRemotePlayer()
-                .selectFleetAircraft(
-                    org.mockito.ArgumentMatchers.any(),
-                    org.mockito.ArgumentMatchers.any(),
-                    org.mockito.ArgumentMatchers.anyString()))
-        .thenAnswer(i -> i.getArgument(1));
-    final String hint =
-        games.strategy.triplea.delegate.air.FleetAircraft.hint(
-                japanese,
-                carrier,
-                new games.strategy.engine.data.Route(zones[0], zones[1]),
-                data.getMap())
-            .orElseThrow();
-    assertThat(hint, hint.contains("carrier spots next round"), is(true));
-    assertThat(hint, hint.contains("with the fleet: 2 fighters"), is(true));
-    advanceToStep(bridge, "japaneseNonCombatMove");
-    final MoveDelegate move = (MoveDelegate) data.getDelegate("move");
-    move.setDelegateBridgeAndPlayer(bridge);
-    move.start();
-    final var error =
-        move.performMove(
-            new games.strategy.engine.data.MoveDescription(
-                carrier, new games.strategy.engine.data.Route(zones[0], zones[1])));
-    assertThat(error.orElse(""), error.isEmpty(), is(true));
-
-    // fighters before bombers: the carrier's 2 spaces take both fighters
-    assertThat(
-        to.getUnitCollection()
-            .countMatches(u -> u.isOwnedBy(japanese) && u.getType().getName().equals("fighter")),
-        is(2));
-    assertThat(
-        from.getUnitCollection()
-            .countMatches(u -> u.isOwnedBy(japanese) && u.getType().getName().equals("diveBomber")),
-        is(1));
-
-    move.undoMove(0);
-    assertThat(from.getUnitCollection().countMatches(u -> u.isOwnedBy(japanese)), is(3));
-    assertThat(to.getUnitCollection().countMatches(u -> u.isOwnedBy(japanese)), is(0));
-    move.end();
-  }
-
-  @Test
-  void jetsGoOnlyWithFleetCarriers() {
-    final GamePlayer japanese = data.getPlayerList().getPlayerId("Japanese");
-    final var available = new org.triplea.java.collections.IntegerMap<UnitType>();
-    available.put(type("jet"), 3);
-    available.put(type("fighter"), 3);
-    // a carrier (2) and a fleet carrier (4): jets only on the fleet carrier
-    final var suggested =
-        games.strategy.triplea.delegate.air.FleetAircraftTestAccess.suggest(available, 6, 4);
-    assertThat(suggested.getInt(type("jet")), is(3));
-    assertThat(suggested.getInt(type("fighter")), is(3));
-    final var noFleet =
-        games.strategy.triplea.delegate.air.FleetAircraftTestAccess.suggest(available, 2, 0);
-    assertThat(noFleet.getInt(type("jet")), is(0));
-    assertThat(noFleet.getInt(type("fighter")), is(2));
   }
 
   // --- request 10: Chinese free conscripts

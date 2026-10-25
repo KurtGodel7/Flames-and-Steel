@@ -230,77 +230,58 @@ public interface Player extends IRemote {
   boolean confirmMoveKamikaze();
 
   /**
-   * Flames and Steel: the nation's carriers sail from one air front to another; which of its
-   * aircraft in the old front go with the fleet. Players that don't ask take the suggestion (as
-   * many as fit, fighters first).
+   * Flames and Steel (request 38 section 5): the nation's aircraft lost their base (carrier sunk,
+   * land captured) and get a free move of one space. For each aircraft, where it lands, from the
+   * spots offered; an aircraft left out lands at its first spot. Players that don't ask take the
+   * first spots.
    *
-   * @param available the nation's aircraft in the old front that could go, by type
-   * @param suggested the default choice
-   * @param description the fronts and the carriers' room, for the question
-   * @return how many of each type go
+   * @param options for each aircraft, its legal spots, nearest first
+   * @param why what happened, for the question ("Carrier sunk in Sea Zone 12")
    */
   @RemoteActionCode(30)
-  default IntegerMap<games.strategy.engine.data.UnitType> selectFleetAircraft(
-      final IntegerMap<games.strategy.engine.data.UnitType> available,
-      final IntegerMap<games.strategy.engine.data.UnitType> suggested,
-      final String description) {
-    return suggested;
+  default java.util.Map<games.strategy.engine.data.Unit, games.strategy.engine.data.Territory>
+      selectFreeLandings(
+          final java.util.Map<
+                  games.strategy.engine.data.Unit,
+                  java.util.List<games.strategy.engine.data.Territory>>
+              options,
+          final String why) {
+    return java.util.Map.of();
   }
 
   /**
-   * Flames and Steel (request 30), for game XML without "nationAirCover" steps: the nation places
-   * its fighter-types over territories, after every nation's bomber targets are revealed. Players
-   * that don't ask place none.
-   *
-   * @param start the placement so far (empty, or the last one refused)
-   * @param bombers every nation's bomber targets this round
-   * @param allied the nation's allies' fighter placements so far
-   * @param problem why the last placement was refused, or "" the first time
-   * @return the placements, as cover targets
+   * Flames and Steel (request 38 section 12): in an open air stage, the choices of the nation's
+   * allies so far (finished or still being made), for its screen. Never an enemy's.
    */
   @RemoteActionCode(31)
-  default java.util.List<games.strategy.triplea.delegate.air.AirCombat.TargetAssignment>
-      selectAirCover(
-          final java.util.List<games.strategy.triplea.delegate.air.AirCombat.TargetAssignment>
-              start,
-          final java.util.Map<
-                  GamePlayer,
-                  java.util.List<games.strategy.triplea.delegate.air.AirCombat.TargetAssignment>>
-              bombers,
-          final java.util.Map<
-                  GamePlayer,
-                  java.util.List<games.strategy.triplea.delegate.air.AirCombat.TargetAssignment>>
-              allied,
-          final String problem) {
-    return java.util.List.of();
-  }
+  default void airStageAllied(
+      final GamePlayer player,
+      final java.util.Map<
+              GamePlayer,
+              java.util.List<games.strategy.triplea.delegate.air.AirCombat.TargetAssignment>>
+          allied) {}
 
   /**
-   * Flames and Steel (request 35): the nation's choice in a simultaneous air stage (bombers: moves
-   * and targets; fighters: moves and placements). Every nation is asked at once; a computer playing
-   * several nations shows them one after another in the given order. Players that don't ask (AI)
-   * make no moves.
+   * Flames and Steel (requests 35 and 38): the nation's choice in a simultaneous air stage (bombers:
+   * targets; fighters: places to escort or defend; planes go home: landings). Every nation is asked
+   * at once; a computer playing several nations shows them one after another in the given order.
+   * Players that don't ask (AI) make no choices.
    *
    * @param stage the stage
    * @param order the nations being asked, in turn order
-   * @param start the choice so far (empty, or the last one refused)
-   * @param bombers every nation's bomber targets (fighter stage; empty in the bomber stage)
-   * @param bomberMoves every nation's bomber moves (fighter stage; empty in the bomber stage)
-   * @param problem why the last choice was refused, or ""
+   * @param start the choice so far (empty, or the last one refused or handed back)
+   * @param bombers every nation's bomber targets (fighter stage; empty otherwise)
+   * @param problem why the last choice was refused or handed back, or ""
    */
   @RemoteActionCode(32)
   default games.strategy.triplea.delegate.air.AirStage.Choice selectAirStage(
-      final games.strategy.triplea.delegate.air.AirAllocation.Stage stage,
+      final games.strategy.triplea.delegate.air.AirStage.Stage stage,
       final java.util.List<GamePlayer> order,
       final games.strategy.triplea.delegate.air.AirStage.Choice start,
       final java.util.Map<
               GamePlayer,
               java.util.List<games.strategy.triplea.delegate.air.AirCombat.TargetAssignment>>
           bombers,
-      final java.util.Map<
-              GamePlayer,
-              java.util.List<games.strategy.triplea.delegate.air.AirAllocation.AirMove>>
-          bomberMoves,
       final String problem) {
     return games.strategy.triplea.delegate.air.AirStage.Choice.none();
   }

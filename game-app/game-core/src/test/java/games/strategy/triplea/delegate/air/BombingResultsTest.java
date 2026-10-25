@@ -58,7 +58,7 @@ class BombingResultsTest {
   private GameData data;
   private GamePlayer british;
   private GamePlayer germans;
-  private Territory bombGermany;
+  private Territory london;
   private Territory hamburg;
   private AirCombatDelegate delegate;
   private final List<String> history = new ArrayList<>();
@@ -67,17 +67,16 @@ class BombingResultsTest {
   @BeforeEach
   void setUp() {
     Assumptions.assumeTrue(Files.exists(XML), "Flames and Steel map not installed");
-    data = GameParser.parse(XML, false).orElseThrow();
+    data = games.strategy.triplea.delegate.air.BasedMap.load();
     british = data.getPlayerList().getPlayerId("British");
     germans = data.getPlayerList().getPlayerId("Germans");
-    bombGermany = data.getMap().getTerritoryOrThrow("Air - Bomb Germany");
+    london = data.getMap().getTerritoryOrThrow("London");
     hamburg = data.getMap().getTerritoryOrThrow("Hamburg");
     final InitializationDelegate start = new InitializationDelegate();
     start.initialize("initDelegate", "Initializing Delegates");
     start.setDelegateBridgeAndPlayer(newDelegateBridge(germans));
     start.start();
     start.end();
-    removeFrom(bombGermany, bombGermany.getUnits());
     // no AA in the way: the raid itself is what is tested
     removeFrom(hamburg, hamburg.getUnitCollection().getMatches(Matches.unitIsAaForAnything()));
     delegate = (AirCombatDelegate) data.getDelegate("airCombat");
@@ -88,14 +87,14 @@ class BombingResultsTest {
   }
 
   private void raid(final String type, final int count) {
-    addTo(bombGermany, data.getUnitTypeList().getUnitTypeOrThrow(type).create(count, british));
+    addTo(london, data.getUnitTypeList().getUnitTypeOrThrow(type).create(count, british));
     // request 35: the target is chosen in the simultaneous bomber stage
     assertThat(
         new AirStageRunner(data)
             .bombers(
                 british,
                 new TargetAssignment(
-                    bombGermany,
+                    london,
                     data.getUnitTypeList().getUnitTypeOrThrow(type),
                     count,
                     new Target(hamburg, TargetKind.STRATEGIC)))

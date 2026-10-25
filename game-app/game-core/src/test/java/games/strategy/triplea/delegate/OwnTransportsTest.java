@@ -14,7 +14,6 @@ import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.UnitType;
 import games.strategy.engine.data.changefactory.ChangeFactory;
 import games.strategy.engine.data.gameparser.GameParser;
-import games.strategy.triplea.delegate.air.AirAllocation;
 import games.strategy.triplea.util.TransportUtils;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -36,7 +35,7 @@ class OwnTransportsTest {
   @BeforeEach
   void setUp() {
     Assumptions.assumeTrue(Files.exists(XML), "Flames and Steel map not installed");
-    data = GameParser.parse(XML, false).orElseThrow();
+    data = games.strategy.triplea.delegate.air.BasedMap.load();
     final InitializationDelegate start = new InitializationDelegate();
     start.initialize("initDelegate", "Initializing Delegates");
     start.setDelegateBridgeAndPlayer(newDelegateBridge(player("Germans")));
@@ -155,33 +154,19 @@ class OwnTransportsTest {
   }
 
   @Test
-  void anAlliedCarrierGivesNoRoomInAnAirFront() {
+  void anAlliedCarrierIsNoBase() {
     final var british = player("British");
     final var americans = player("Americans");
-    final Territory front =
-        games.strategy.triplea.attachments.AirZoneAttachment.getAirZones(data.getMap()).stream()
-            .filter(
-                z ->
-                    games.strategy.triplea.attachments.AirZoneAttachment.get(z)
-                        .orElseThrow()
-                        .getCoveredTerritories()
-                        .stream()
-                        .anyMatch(Territory::isWater))
-            .findFirst()
-            .orElseThrow();
     final Territory sea =
-        games.strategy.triplea.attachments.AirZoneAttachment.get(front)
-            .orElseThrow()
-            .getCoveredTerritories()
-            .stream()
+        data.getMap().getTerritories().stream()
             .filter(Territory::isWater)
             .findFirst()
             .orElseThrow();
     final int before =
-        AirAllocation.carrierLoad(british, front, List.of(type("fighter"))).capacity();
+        games.strategy.triplea.delegate.air.AirBases.carrierRoom(british, sea, type("fighter"));
     data.performChange(ChangeFactory.addUnits(sea, type("carrier").create(1, americans)));
     assertThat(
-        AirAllocation.carrierLoad(british, front, List.of(type("fighter"))).capacity(),
+        games.strategy.triplea.delegate.air.AirBases.carrierRoom(british, sea, type("fighter")),
         is(before));
   }
 }

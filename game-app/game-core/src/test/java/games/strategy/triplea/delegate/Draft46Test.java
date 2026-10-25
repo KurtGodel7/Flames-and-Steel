@@ -52,7 +52,7 @@ class Draft46Test {
   @BeforeEach
   void setUp() {
     Assumptions.assumeTrue(Files.exists(XML), "Flames and Steel map not installed");
-    data = GameParser.parse(XML, false).orElseThrow();
+    data = games.strategy.triplea.delegate.air.BasedMap.load();
     Assumptions.assumeTrue(
         data.getTechnologyFrontier().getAdvanceByName(UnderseaWar.TECH_NAME) != null,
         "map has no Undersea War");

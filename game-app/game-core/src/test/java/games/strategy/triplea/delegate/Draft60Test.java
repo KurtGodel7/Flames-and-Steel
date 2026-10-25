@@ -30,7 +30,7 @@ class Draft60Test {
   @BeforeEach
   void setUp() {
     Assumptions.assumeTrue(Files.exists(XML), "Flames and Steel map not installed");
-    data = GameParser.parse(XML, false).orElseThrow();
+    data = games.strategy.triplea.delegate.air.BasedMap.load();
     dutch = data.getPlayerList().getPlayerId("Dutch");
     Assumptions.assumeTrue(dutch != null, "map has no Dutch");
     final InitializationDelegate start = new InitializationDelegate();
@@ -152,14 +152,10 @@ class Draft60Test {
   void japanCanStrikeHawaiiInTheRoundThreeAirPhase() {
     usEndTurn(2); // the war starts at the very start of round 3
     final GamePlayer japan = player("Japanese");
-    final var hawaii = territory("Air - Hawaiian Waters");
-    // Japanese carriers in Hawaiian waters, dive bombers in the front
+    // request 38: Japanese carriers off Hawaii with dive bombers on them
     final var seaZone =
-        games.strategy.triplea.attachments.AirZoneAttachment.get(hawaii)
-            .orElseThrow()
-            .getCoveredTerritories()
-            .stream()
-            .filter(t -> t.getName().contains("Hawaiian Islands"))
+        data.getMap().getTerritories().stream()
+            .filter(t -> t.isWater() && t.getName().contains("Hawaiian Islands"))
             .findFirst()
             .orElseThrow();
     data.performChange(
@@ -167,20 +163,20 @@ class Draft60Test {
             seaZone, type("carrier").create(2, japan)));
     data.performChange(
         games.strategy.engine.data.changefactory.ChangeFactory.addUnits(
-            hawaii, type("diveBomber").create(2, japan)));
+            seaZone, type("diveBomber").create(2, japan)));
     // request 35: Japan chooses its targets in the round's bomber stage
     goTo("airBomberStage", 3);
     final var targets =
-        games.strategy.triplea.delegate.air.AirCombat.getTargets(japan, hawaii, type("diveBomber"));
+        games.strategy.triplea.delegate.air.AirStage.candidates(
+            japan,
+            seaZone,
+            type("diveBomber"),
+            games.strategy.triplea.delegate.air.AirStage.Stage.BOMBERS,
+            java.util.Map.of());
     assertThat("targets " + targets, targets.isEmpty(), is(false));
     assertThat(
         targets.stream()
             .anyMatch(t -> t.territory().getName().equals("Oahu") || t.territory().isWater()),
-        is(true));
-    assertThat(
-        games.strategy.triplea.delegate.air.AirAllocation.entryProblem(
-                japan, type("diveBomber"), hawaii)
-            .isEmpty(),
         is(true));
   }
 

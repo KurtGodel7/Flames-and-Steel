@@ -10,7 +10,7 @@ import java.util.List;
 import lombok.experimental.UtilityClass;
 
 /**
- * Request 28 part B: bombers are assigned one by one. A front's bombers of one type may be split
+ * Request 28 part B: bombers are assigned one by one. A base's bombers of one type may be split
  * over several targets and "no target" ("Lithuania: 1 dive bomber; Vitebsk: 3; no target: 1"). The
  * counts can never go above the bombers there.
  */
@@ -45,7 +45,9 @@ public class TargetSplit {
       final Territory zone,
       final UnitType type) {
     final long there =
-        AirCombat.getBombers(player, zone).stream().filter(u -> u.getType().equals(type)).count();
+        zone.getUnitCollection().stream()
+            .filter(u -> u.isOwnedBy(player) && u.getType().equals(type) && !AirBases.isAirborne(u))
+            .count();
     return (int) Math.max(0, there - assigned(staged, zone, type));
   }
 

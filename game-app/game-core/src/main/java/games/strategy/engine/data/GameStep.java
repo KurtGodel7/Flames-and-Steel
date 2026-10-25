@@ -170,22 +170,6 @@ public class GameStep extends GameDataComponent {
     return stepName != null && stepName.endsWith("Research");
   }
 
-  /** Flames and Steel air allocation step, e.g. "germanAirBombers" or "germanAirFighters". */
-  public static boolean isAirAllocationStepName(final @NonNls String stepName) {
-    return stepName != null
-        && (stepName.endsWith("AirBombers") || stepName.endsWith("AirFighters"));
-  }
-
-  /** Flames and Steel bomber target step, e.g. "germanAirTargets". */
-  public static boolean isAirTargetStepName(final @NonNls String stepName) {
-    return stepName != null && stepName.endsWith("AirTargets");
-  }
-
-  /** Flames and Steel (request 30) fighter cover step, e.g. "germanAirCover". */
-  public static boolean isAirCoverStepName(final @NonNls String stepName) {
-    return stepName != null && stepName.endsWith("AirCover");
-  }
-
   /** Flames and Steel APC production choice step, e.g. "germanApcProduction". */
   public static boolean isApcProductionStepName(final @NonNls String stepName) {
     return stepName != null && stepName.endsWith("ApcProduction");

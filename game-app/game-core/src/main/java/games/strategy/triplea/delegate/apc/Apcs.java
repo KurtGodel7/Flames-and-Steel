@@ -10,11 +10,9 @@ import games.strategy.engine.data.UnitType;
 import games.strategy.engine.data.changefactory.ChangeFactory;
 import games.strategy.engine.delegate.IDelegateBridge;
 import games.strategy.triplea.Constants;
-import games.strategy.triplea.attachments.AirZoneAttachment;
 import games.strategy.triplea.attachments.ApcAttachment;
 import games.strategy.triplea.attachments.PlayerAttachment;
 import games.strategy.triplea.attachments.TechAbilityAttachment;
-import games.strategy.triplea.delegate.AirFronts;
 import games.strategy.triplea.delegate.TechAdvance;
 import games.strategy.triplea.delegate.TechTracker;
 import games.strategy.triplea.formatter.MyFormatter;
@@ -322,8 +320,6 @@ public class Apcs {
     }
     bridge.addChange(change);
     produceBonuses(bridge, player);
-    // aircraft built by APCs go straight to the aircraft reserve
-    AirFronts.sendAircraftToFronts(bridge, player);
   }
 
   /**
@@ -408,7 +404,7 @@ public class Apcs {
     }
     return map.getNeighbors(apcTerritory).stream()
         .filter(Territory::isWater)
-        .filter(t -> !AirZoneAttachment.isAirZone(t))
+        .filter(t -> !games.strategy.triplea.delegate.air.AirBases.isAirborneTerritory(t))
         .sorted(Comparator.comparing(Territory::getName))
         .findFirst();
   }

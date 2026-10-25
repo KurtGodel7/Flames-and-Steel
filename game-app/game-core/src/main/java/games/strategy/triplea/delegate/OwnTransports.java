@@ -3,7 +3,6 @@ package games.strategy.triplea.delegate;
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.Unit;
-import games.strategy.triplea.attachments.AirZoneAttachment;
 import java.util.function.Predicate;
 import javax.annotation.Nullable;
 
@@ -29,7 +28,7 @@ public final class OwnTransports {
     if (value != null) {
       return Boolean.parseBoolean(value.toString());
     }
-    return data.getMap().getTerritories().stream().anyMatch(AirZoneAttachment::isAirZone);
+    return games.strategy.triplea.delegate.air.AirBases.usesBases(data);
   }
 
   /** Whether {@code unit} may ride on, or be unloaded from, {@code transport}. */

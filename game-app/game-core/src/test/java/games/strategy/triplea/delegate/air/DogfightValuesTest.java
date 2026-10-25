@@ -59,11 +59,11 @@ class DogfightValuesTest {
   @BeforeEach
   void setUp() {
     Assumptions.assumeTrue(Files.exists(XML), "Flames and Steel map not installed");
-    data = GameParser.parse(XML, false).orElseThrow();
+    data = games.strategy.triplea.delegate.air.BasedMap.load();
     japanese = data.getPlayerList().getPlayerId("Japanese");
     chinese = data.getPlayerList().getPlayerId("Chinese");
     russians = data.getPlayerList().getPlayerId("Russians");
-    airChina = data.getMap().getTerritoryOrThrow("Air - China");
+    airChina = AirBases.airborne(data).orElseThrow();
     final InitializationDelegate start = new InitializationDelegate();
     start.initialize("initDelegate", "Initializing Delegates");
     start.setDelegateBridgeAndPlayer(newDelegateBridge(japanese));
@@ -120,33 +120,25 @@ class DogfightValuesTest {
   @Test
   void aRealDogfightFiresWithTheSumOfDogfightValues() {
     japaneseAircraft();
-    addTo(airChina, data.getUnitTypeList().getUnitTypeOrThrow("fighter").create(1, chinese));
+    final List<Unit> chinese1 =
+        data.getUnitTypeList().getUnitTypeOrThrow("fighter").create(1, chinese);
+    addTo(airChina, chinese1);
     final AirCombatDelegate delegate = (AirCombatDelegate) data.getDelegate("airCombat");
-    // request 30: both nations put their fighters over one territory in reach of both
+    // request 38: both nations' fighters are in the air over one territory
     final games.strategy.engine.data.UnitType fighter =
         data.getUnitTypeList().getUnitTypeOrThrow("fighter");
-    final Territory over =
-        AirCover.places(japanese, airChina, fighter, java.util.Map.of()).stream()
-            .filter(t -> AirCover.places(chinese, airChina, fighter, java.util.Map.of()).contains(t))
-            .findFirst()
-            .orElseThrow();
-    for (final GamePlayer p : List.of(japanese, chinese)) {
-      final String step = p.getName() + "AirCover";
-      data.getSequence()
-          .addStep(
-              new games.strategy.engine.data.GameStep(
-                  step, step, p, delegate, data, new java.util.Properties()));
-      final IDelegateBridge coverBridge = bridge(p);
-      advanceToStep(coverBridge, step);
-      delegate.setDelegateBridgeAndPlayer(coverBridge);
-      delegate.start();
-      assertThat(
-          delegate.assignTargets(
-              List.of(
-                  new AirCombat.TargetAssignment(airChina, fighter, 1, AirCover.over(over)))),
-          is((String) null));
-      delegate.end();
-    }
+    final Territory over = data.getMap().getTerritoryOrThrow("Hunan");
+    final List<Unit> japaneseFighter =
+        airChina.getUnitCollection().getMatches(
+            u -> u.isOwnedBy(japanese) && u.getType().equals(fighter));
+    BasedMap.fly(data, over, japaneseFighter);
+    BasedMap.fly(data, over, chinese1);
+    delegate.setStageCover(
+        java.util.Map.of(
+            japanese,
+            List.of(new AirCombat.TargetAssignment(airChina, fighter, 1, AirCover.over(over))),
+            chinese,
+            List.of(new AirCombat.TargetAssignment(airChina, fighter, 1, AirCover.over(over)))));
     final IDelegateBridge bridge = bridge(japanese);
     final IDelegateHistoryWriter history = mock(IDelegateHistoryWriter.class);
     when(bridge.getHistoryWriter()).thenReturn(history);

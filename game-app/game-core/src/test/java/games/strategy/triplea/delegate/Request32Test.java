@@ -22,8 +22,6 @@ import games.strategy.engine.data.changefactory.ChangeFactory;
 import games.strategy.engine.data.gameparser.GameParser;
 import games.strategy.engine.delegate.IDelegateBridge;
 import games.strategy.engine.framework.GameDataManager;
-import games.strategy.triplea.attachments.AirZoneAttachment;
-import games.strategy.triplea.delegate.air.AirAllocation;
 import games.strategy.triplea.delegate.air.AirCombat.Target;
 import games.strategy.triplea.delegate.air.AirCombat.TargetAssignment;
 import games.strategy.triplea.delegate.air.AirCombat.TargetKind;
@@ -57,7 +55,7 @@ class Request32Test {
   }
 
   private static GameData load() {
-    final GameData data = GameParser.parse(XML, false).orElseThrow();
+    final GameData data = games.strategy.triplea.delegate.air.BasedMap.load();
     final InitializationDelegate start = new InitializationDelegate();
     start.initialize("initDelegate", "Initializing Delegates");
     start.setDelegateBridgeAndPlayer(newDelegateBridge(data.getPlayerList().getPlayerId("Germans")));
@@ -282,18 +280,9 @@ class Request32Test {
               data.getRelationshipTracker().getRelationshipType(germans, us),
               data.getRelationshipTypeList().getRelationshipType("War")));
     }
-    final Territory bombUsa = data.getMap().getTerritoryOrThrow("Air - Bomb America Atlantic");
-    AirZoneAttachment.get(bombUsa)
-        .orElseThrow()
-        .getPropertyOrThrow("bombedPlayer")
-        .setValue("AmericansPacific:Americans");
-    final AirZoneAttachment zone = AirZoneAttachment.get(bombUsa).orElseThrow();
-    assertThat(zone.getBombedPlayers(), is(List.of(pacific, atlantic)));
-    assertThat(zone.isAttacker(germans), is(true));
-    assertThat(zone.isAttacker(pacific) || zone.isAttacker(atlantic), is(false));
-    final var fighter = data.getUnitTypeList().getUnitTypeOrThrow("fighter");
-    assertThat(AirAllocation.entryProblem(pacific, fighter, bombUsa).isPresent(), is(false));
-    assertThat(AirAllocation.entryProblem(atlantic, fighter, bombUsa).isPresent(), is(false));
+    // request 38: a flying wing based in Brittany flies to Detroit like any bomber
+    final Territory brittany = data.getMap().getTerritoryOrThrow("Brittany");
+    data.performChange(ChangeFactory.changeOwner(brittany, germans));
 
     // a raid on a factory America Pacific owns takes America Pacific's PUs
     final Territory detroit = data.getMap().getTerritoryOrThrow("Detroit");
@@ -302,8 +291,7 @@ class Request32Test {
       data.performChange(ChangeFactory.changeOwner(List.of(u), pacific, detroit));
     }
     removeFrom(detroit, detroit.getUnitCollection().getMatches(Matches.unitIsAaForAnything()));
-    removeFrom(bombUsa, bombUsa.getUnits());
-    addTo(bombUsa, data.getUnitTypeList().getUnitTypeOrThrow("flyingWing").create(1, germans));
+    addTo(brittany, data.getUnitTypeList().getUnitTypeOrThrow("flyingWing").create(1, germans));
     final var delegate = (AirCombatDelegate) data.getDelegate("airCombat");
     // request 35: the target is chosen in the simultaneous bomber stage
     assertThat(
@@ -311,7 +299,7 @@ class Request32Test {
             .bombers(
                 germans,
                 new TargetAssignment(
-                    bombUsa,
+                    brittany,
                     data.getUnitTypeList().getUnitTypeOrThrow("flyingWing"),
                     1,
                     new Target(detroit, TargetKind.STRATEGIC)))

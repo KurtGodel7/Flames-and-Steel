@@ -46,7 +46,7 @@ class MultiHitPointBattleTest {
   @BeforeEach
   void setUp() {
     Assumptions.assumeTrue(Files.exists(XML), "Flames and Steel map not installed");
-    data = GameParser.parse(XML, false).orElseThrow();
+    data = games.strategy.triplea.delegate.air.BasedMap.load();
     british = data.getPlayerList().getPlayerId("British");
     for (final UnitType type : data.getUnitTypeList()) {
       xmlHitPoints.put(type.getName(), type.getUnitAttachment().getHitPoints());

@@ -60,9 +60,11 @@ public final class BasedMap {
     s = remove(s, "<territoryOwner territory=\"Air - [^\"]*\"[^>]*/>");
     s = remove(s, "<step name=\"airCarrier(Snapshot|Check)\"[^>]*/>");
     s = remove(s, "<delegate name=\"airCarrierCheck\"[^>]*/>");
+    s = remove(s, "<delegate name=\"airAllocation\"[^>]*/>");
+    s = remove(s, "<step name=\"[^\"]*\" delegate=\"airAllocation\"[^>]*/>");
     s = remove(s, "<property name=\"FS Long Range Raid[^\"]*\"[^>]*/>");
     s = remove(s, "<property name=\"FS Long Range Raid[^\"]*\"[^>]*[^/]>.*?</property>");
-    s = s.replaceFirst("<map>", "<map>\n    <territory name=\"Air - Airborne\"/>");
+    s = s.replaceFirst("<map>", "<map>\n    <territory name=\"Air - Airborne\" water=\"true\"/>");
     s =
         s.replaceFirst(
             "(\\s*)<step name=\"endRoundStep\"",
@@ -109,6 +111,26 @@ public final class BasedMap {
           t.getUnitCollection().getMatches(
               u -> u.isOwnedBy(owner) && (names.isEmpty() || names.contains(u.getType().getName())));
       t.getUnitCollection().removeAll(gone);
+    }
+  }
+
+  /** Puts the units in the air over the territory (as a stage reveal does), with range left. */
+  public static void fly(final GameData data, final Territory over, final List<Unit> units) {
+    final Territory airborne = AirBases.airborne(data).orElseThrow();
+    for (final Territory t : data.getMap().getTerritories()) {
+      final List<Unit> here = units.stream().filter(u -> t.getUnitCollection().contains(u)).toList();
+      if (!here.isEmpty() && !t.equals(airborne)) {
+        data.performChange(
+            games.strategy.engine.data.changefactory.ChangeFactory.moveUnits(t, airborne, here));
+      }
+    }
+    final List<Unit> fresh =
+        units.stream().filter(u -> !airborne.getUnitCollection().contains(u)).toList();
+    airborne.getUnitCollection().addAll(fresh);
+    for (final Unit u : units) {
+      data.performChange(
+          games.strategy.engine.data.changefactory.ChangeFactory.unitPropertyChange(
+              u, over, Unit.PropertyName.FLIGHT_OVER));
     }
   }
 

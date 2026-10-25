@@ -9,36 +9,20 @@ import games.strategy.triplea.delegate.air.AirCombat.TargetAssignment;
 import java.io.Serializable;
 import java.util.List;
 import java.util.Map;
-import javax.annotation.Nullable;
 
-/** Flames and Steel: a nation sends its surviving bombers against targets. */
-public interface IAirCombatDelegate extends IRemote, IDelegate {
-  /**
-   * Submits this nation's bomber targets for this round.
-   *
-   * @return why the targets are refused, or null if accepted
-   */
+/**
+ * Flames and Steel (request 38 section 12): while a nation's screen is open in a simultaneous air
+ * stage, it sends its choices as they change. The host passes them to that nation's allies only,
+ * who see them on the map; enemies see nothing until the reveal.
+ */
+public interface IAirStageDelegate extends IRemote, IDelegate {
+  /** The nation's choices so far in the open stage (not final: Done sends the final ones). */
   @RemoteActionCode(12)
-  @Nullable
-  String assignTargets(List<TargetAssignment> assignments);
+  void draft(GamePlayer player, List<TargetAssignment> targets);
 
-  /** This nation's targets stored so far this step (after a save and load, say). */
+  /** The choices (final or still being made) of the nation's allies in the open stage. */
   @RemoteActionCode(13)
-  List<TargetAssignment> getPendingAssignments();
-
-  /**
-   * Request 30: in a fighter cover step ("nationAirCover"), every nation's bomber targets for this
-   * round (revealed once all have chosen); empty in other steps.
-   */
-  @RemoteActionCode(14)
-  Map<GamePlayer, List<TargetAssignment>> getRevealedBombers();
-
-  /**
-   * Request 30: this nation's allies' choices so far this step (bomber targets, or fighter cover),
-   * which count against the same caps.
-   */
-  @RemoteActionCode(15)
-  Map<GamePlayer, List<TargetAssignment>> getAlliedAssignments();
+  Map<GamePlayer, List<TargetAssignment>> getAlliedChoices(GamePlayer player);
 
   @RemoteActionCode(6)
   @Override
