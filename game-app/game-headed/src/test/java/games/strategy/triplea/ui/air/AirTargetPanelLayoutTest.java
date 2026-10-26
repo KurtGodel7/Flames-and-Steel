@@ -281,7 +281,7 @@ class AirTargetPanelLayoutTest {
         });
     flush();
     final BufferedImage shot = render(panel, WIDTH, HEIGHT);
-    ImageIO.write(shot, "png", SHOTS.resolve("request38_bomber_panel.png").toFile());
+    ImageIO.write(shot, "png", SHOTS.resolve("request41_after_bomber_stage.png").toFile());
 
     assertThat(
         "targets in reach: " + panel.targetsInReach(germans, zone).size(),
@@ -356,7 +356,7 @@ class AirTargetPanelLayoutTest {
         });
     flush();
     final BufferedImage shot = render(panel, WIDTH, HEIGHT);
-    ImageIO.write(shot, "png", SHOTS.resolve("request38_bomber_panel_10_moves.png").toFile());
+    ImageIO.write(shot, "png", SHOTS.resolve("request41_bomber_stage_10_moves.png").toFile());
     assertThat(panel.staged().size(), is(10));
     for (final AbstractButton undo : buttons("Undo")) {
       assertThat("every Undo is in view", inView(undo), is(true));
@@ -407,7 +407,7 @@ class AirTargetPanelLayoutTest {
     flush();
     assertThat("selecting in the list selects on the map", panel.selectedTarget(), is(move.target()));
     final BufferedImage shot = render(dialog.getContentPane(), 820, 480);
-    ImageIO.write(shot, "png", SHOTS.resolve("request38_pick_window.png").toFile());
+    ImageIO.write(shot, "png", SHOTS.resolve("request41_pick_window.png").toFile());
     SwingUtilities.invokeAndWait(
         () ->
             all(dialog.getContentPane()).stream()
@@ -426,12 +426,12 @@ class AirTargetPanelLayoutTest {
     startPanel(true);
     flush();
     final BufferedImage shot = render(panel, WIDTH, HEIGHT);
-    ImageIO.write(shot, "png", SHOTS.resolve("request38_fighter_panel.png").toFile());
+    ImageIO.write(shot, "png", SHOTS.resolve("request41_fighter_stage.png").toFile());
     assertThat(
         all(panel).stream()
             .filter(c -> c instanceof JLabel l && l.getText() != null)
             .map(c -> ((JLabel) c).getText())
-            .anyMatch(t -> t.contains("Fighters: Escort and Defend")),
+            .anyMatch(t -> t.contains("Fighters — escort and defend")),
         is(true));
     assertThat(buttons("Pick from list…").size(), is(1));
   }
@@ -480,12 +480,156 @@ class AirTargetPanelLayoutTest {
     assertThat(panel.staged().stream().map(TargetAssignment::zone).toList(), is(order));
   }
 
+  // ---- request 41: the stock move controls
+
+  private static games.strategy.triplea.ui.MouseDetails mouse(final int modifiers, final int button) {
+    final java.awt.event.MouseEvent e =
+        new java.awt.event.MouseEvent(
+            new javax.swing.JPanel(),
+            java.awt.event.MouseEvent.MOUSE_RELEASED,
+            0,
+            modifiers,
+            0,
+            0,
+            1,
+            false,
+            button);
+    return new games.strategy.triplea.ui.MouseDetails(e, 0, 0);
+  }
+
+  private static games.strategy.triplea.ui.MouseDetails click() {
+    return mouse(0, java.awt.event.MouseEvent.BUTTON1);
+  }
+
+  private static games.strategy.triplea.ui.MouseDetails ctrlClick() {
+    return mouse(java.awt.event.InputEvent.CTRL_DOWN_MASK, java.awt.event.MouseEvent.BUTTON1);
+  }
+
+  private static games.strategy.triplea.ui.MouseDetails shiftClick() {
+    return mouse(java.awt.event.InputEvent.SHIFT_DOWN_MASK, java.awt.event.MouseEvent.BUTTON1);
+  }
+
+  /** Two German dive bombers in Cracow, a Soviet army in Bialystok next door. */
+  private Territory[] cracowAndBialystok() {
+    final Territory cracow = data.getMap().getTerritoryOrThrow("Cracow");
+    final Territory bialystok = data.getMap().getTerritoryOrThrow("Bialystok");
+    Assumptions.assumeTrue(cracow.isOwnedBy(germans), "Cracow is not German");
+    final var dive = data.getUnitTypeList().getUnitTypeOrThrow("diveBomber");
+    data.performChange(
+        games.strategy.engine.data.changefactory.ChangeFactory.removeUnits(
+            cracow, cracow.getUnitCollection().getMatches(u -> u.getType().equals(dive))));
+    data.performChange(
+        games.strategy.engine.data.changefactory.ChangeFactory.addUnits(
+            cracow, dive.create(2, germans)));
+    data.performChange(
+        games.strategy.engine.data.changefactory.ChangeFactory.addUnits(
+            bialystok,
+            data.getUnitTypeList()
+                .getUnitTypeOrThrow("infantry")
+                .create(2, data.getPlayerList().getPlayerId("Russians"))));
+    return new Territory[] {cracow, bialystok};
+  }
+
+  private List<games.strategy.engine.data.Unit> dives(final Territory t) {
+    return t.getUnitCollection()
+        .getMatches(u -> u.getType().getName().equals("diveBomber") && u.isOwnedBy(germans));
+  }
+
   @Test
-  void nextBaseSelectsOnlyWhenPressed() throws Exception {
+  void aPlainClickMovesOneDiveBomberAndCtrlClickTheWholeStack() throws Exception {
+    final Territory[] t = cracowAndBialystok();
     startPanel(false);
-    assertThat(panel.selectedZone() == null, is(true));
-    SwingUtilities.invokeAndWait(() -> panel.nextBase(germans));
+    SwingUtilities.invokeAndWait(
+        () -> {
+          panel.click(dives(t[0]), t[0], click());
+          panel.click(List.of(), t[1], click());
+        });
     flush();
-    assertThat(panel.selectedZone() != null, is(true));
+    assertThat(panel.staged().size(), is(1));
+    assertThat(panel.staged().get(0).count(), is(1));
+    assertThat(panel.staged().get(0).target().territory(), is(t[1]));
+    // the stock "all of the stack" click: the other one (the only one left) goes too
+    SwingUtilities.invokeAndWait(() -> panel.undoLast());
+    SwingUtilities.invokeAndWait(
+        () -> {
+          panel.click(dives(t[0]), t[0], ctrlClick());
+          panel.click(List.of(), t[1], click());
+        });
+    flush();
+    assertThat(panel.staged().size(), is(1));
+    assertThat(panel.staged().get(0).count(), is(2));
+  }
+
+  @Test
+  void rightClickTakesOneOffAndEscapeLikeCancelClearsAll() throws Exception {
+    final Territory[] t = cracowAndBialystok();
+    startPanel(false);
+    SwingUtilities.invokeAndWait(
+        () -> {
+          panel.click(dives(t[0]), t[0], ctrlClick());
+          panel.click(dives(t[0]), t[0], mouse(0, java.awt.event.MouseEvent.BUTTON3));
+        });
+    flush();
+    assertThat(panel.selectedCounts().totalValues(), is(1));
+    SwingUtilities.invokeAndWait(
+        () -> panel.click(List.of(), t[1], mouse(0, java.awt.event.MouseEvent.BUTTON3)));
+    flush();
+    assertThat(panel.selectedZone() == null, is(true));
+  }
+
+  @Test
+  void moreThanTheCapAllowsOpensTheStockUnitChooserLimitedToWhatFits() throws Exception {
+    final Territory[] t = cracowAndBialystok();
+    final var medium = data.getUnitTypeList().getUnitTypeOrThrow("mediumBomber");
+    data.performChange(
+        games.strategy.engine.data.changefactory.ChangeFactory.addUnits(
+            t[0], medium.create(6, germans)));
+    startPanel(false);
+    final java.util.concurrent.atomic.AtomicReference<String> asked =
+        new java.util.concurrent.atomic.AtomicReference<>();
+    panel.setChooserAnswer(
+        (chooser, title) -> {
+          asked.set(title);
+          return true;
+        });
+    SwingUtilities.invokeAndWait(
+        () -> {
+          panel.click(
+              t[0].getUnitCollection().getMatches(u -> u.getType().equals(medium)),
+              t[0],
+              ctrlClick());
+          panel.click(List.of(), t[1], click());
+        });
+    flush();
+    assertThat("the chooser was shown", asked.get() != null, is(true));
+    assertThat(asked.get(), org.hamcrest.Matchers.containsString("room for 4"));
+    assertThat(panel.staged().stream().mapToInt(TargetAssignment::count).sum(), is(4));
+  }
+
+  @Test
+  void noBaseListOrNextBaseRemainsAndUndoAllStillWorks() throws Exception {
+    final Territory[] t = cracowAndBialystok();
+    startPanel(false);
+    SwingUtilities.invokeAndWait(
+        () -> {
+          panel.click(dives(t[0]), t[0], shiftClick());
+          panel.click(List.of(), t[1], click());
+        });
+    flush();
+    final BufferedImage shot = render(panel, WIDTH, HEIGHT);
+    ImageIO.write(shot, "png", SHOTS.resolve("request41_after_cracow_move.png").toFile());
+    assertThat(
+        all(panel).stream().anyMatch(c -> c instanceof javax.swing.JComboBox), is(false));
+    assertThat(buttons("Next base").isEmpty(), is(true));
+    assertThat(
+        all(panel).stream()
+            .filter(c -> c instanceof JLabel l && l.getText() != null)
+            .map(c -> ((JLabel) c).getText())
+            .anyMatch(text -> text.startsWith("Aircraft without orders: ")),
+        is(true));
+    assertThat(panel.staged().isEmpty(), is(false));
+    SwingUtilities.invokeAndWait(() -> buttons("Undo all").get(0).doClick());
+    flush();
+    assertThat(panel.staged().isEmpty(), is(true));
   }
 }

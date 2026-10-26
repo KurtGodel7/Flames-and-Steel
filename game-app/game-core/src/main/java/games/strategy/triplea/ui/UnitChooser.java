@@ -164,7 +164,7 @@ public final class UnitChooser extends JPanel {
   }
 
   /** Set the maximum number of units that we can choose. */
-  void setMax(final int max) {
+  public void setMax(final int max) {
     total = max;
     textFieldListener.changedValue(null);
     autoSelectButton.setVisible(false);

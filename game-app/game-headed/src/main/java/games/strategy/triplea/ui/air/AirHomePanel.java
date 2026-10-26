@@ -4,6 +4,7 @@ import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
+import games.strategy.engine.data.UnitType;
 import games.strategy.triplea.delegate.air.AirHome;
 import games.strategy.triplea.delegate.air.AirHome.Group;
 import games.strategy.triplea.delegate.air.AirStage;
@@ -40,8 +41,6 @@ import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
-import javax.swing.JSpinner;
-import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingUtilities;
 
 /**
@@ -67,7 +66,7 @@ public final class AirHomePanel extends ActionPanel {
   private boolean finished;
   private final MapOverlay overlay = this::paintOverlay;
   private final UnitSelectionListener unitListener =
-      (units, territory, md) -> SwingUtilities.invokeLater(() -> clicked(territory, md));
+      (units, territory, md) -> SwingUtilities.invokeLater(() -> clicked(units, territory, md));
   private final MapSelectionListener hoverListener =
       new DefaultMapSelectionListener() {
         @Override
@@ -225,46 +224,79 @@ public final class AirHomePanel extends ActionPanel {
   }
 
   private void choose(final GamePlayer player, final Group g) {
+    select(player, g, left(g));
+  }
+
+  /**
+   * Request 41: clicks as in a stock move. On aircraft (on a base, or the territory aircraft in the
+   * air are over): a click adds one, Alt+click ten, Ctrl+ or Shift+click all of them; a click on a
+   * green spot lands the selection there. Right-click takes one off (Ctrl: all), Escape cancels.
+   */
+  private void clicked(
+      final List<Unit> units, final @Nullable Territory territory, final MouseDetails md) {
+    if (!isActive() || !listening || territory == null || finished) {
+      return;
+    }
+    final GamePlayer player = getCurrentPlayer();
+    if (md.isRightButton()) {
+      if (selected != null && selected.from().equals(territory) && count > 1 && !md.isControlDown()) {
+        count -= md.isAltDown() ? Math.min(count - 1, 10) : 1;
+      } else {
+        selected = null;
+        spots = Map.of();
+      }
+      rebuild(player);
+      getMap().repaint();
+      return;
+    }
+    if (selected != null && !selected.from().equals(territory) && spots.containsKey(territory)) {
+      land(player, territory);
+      return;
+    }
+    // the clicked stack's type on a base, else the aircraft in the air over the territory
+    final java.util.Optional<UnitType> clickedType =
+        units.stream()
+            .filter(u -> u.isOwnedBy(player) && games.strategy.triplea.delegate.air.AirBases.isAircraft(u))
+            .map(Unit::getType)
+            .findFirst();
+    Group pick = null;
+    for (final Group g : groups(player, false)) {
+      if (!g.from().equals(territory) || left(g) <= 0) {
+        continue;
+      }
+      if (clickedType.isPresent() ? !g.airborne() && g.type().equals(clickedType.get()) : g.airborne()) {
+        pick = g;
+        break;
+      }
+    }
+    if (pick == null) {
+      if (selected != null) {
+        frame.setStatusErrorMessage(
+            territory.getName() + " is no landing spot in reach for these aircraft.");
+      }
+      return;
+    }
+    final boolean same = pick.equals(selected);
+    final int add =
+        md.isControlDown() || md.isShiftDown() ? left(pick) : md.isAltDown() ? 10 : 1;
+    select(player, pick, Math.min(left(pick), (same ? count : 0) + add));
+  }
+
+  private void select(final GamePlayer player, final Group g, final int n) {
     selected = g;
-    count = left(g);
+    count = n;
     try (GameData.Unlocker ignored = getData().acquireReadLock()) {
       spots = AirHome.spots(player, g);
     }
     frame.setStatusMessage(
         spots.isEmpty()
             ? "Nowhere to land within " + g.range() + " of " + g.from().getName() + "."
-            : "Click a green spot to land them (" + spots.size() + " in reach).");
+            : n
+                + " selected: click a green spot to land them ("
+                + spots.size()
+                + " in reach). Escape cancels.");
     rebuild(player);
     getMap().repaint();
-  }
-
-  private void clicked(final @Nullable Territory territory, final MouseDetails md) {
-    if (!isActive() || !listening || territory == null || finished) {
-      return;
-    }
-    final GamePlayer player = getCurrentPlayer();
-    if (md.isRightButton()) {
-      selected = null;
-      spots = Map.of();
-      rebuild(player);
-      getMap().repaint();
-      return;
-    }
-    if (selected != null && spots.containsKey(territory) && count > 0) {
-      land(player, territory);
-      return;
-    }
-    // a click on a place with the nation's aircraft (in the air over it first) picks them
-    for (final Group g : groups(player, false)) {
-      if (g.from().equals(territory) && left(g) > 0) {
-        choose(player, g);
-        return;
-      }
-    }
-    if (selected != null) {
-      frame.setStatusErrorMessage(
-          territory.getName() + " is no landing spot in reach for these aircraft.");
-    }
   }
 
   private void land(final GamePlayer player, final Territory to) {
@@ -415,14 +447,13 @@ public final class AirHomePanel extends ActionPanel {
       }
       row.add(label);
       if (left > 0 && !reach.isEmpty()) {
-        final JButton pick = smallButton(g.equals(selected) ? "Chosen" : "Choose");
-        pick.addActionListener(e -> choose(player, g));
-        row.add(pick);
         if (g.equals(selected)) {
-          final JSpinner spinner = new JSpinner(new SpinnerNumberModel(Math.min(count, left), 1, left, 1));
-          spinner.addChangeListener(e -> count = (Integer) spinner.getValue());
-          row.add(new JLabel("land:"));
-          row.add(spinner);
+          row.add(new JLabel("selected: " + count));
+        } else {
+          final JButton pick = smallButton("Select all");
+          pick.setToolTipText("Selects all of them, as Shift+click on the map does.");
+          pick.addActionListener(e -> choose(player, g));
+          row.add(pick);
         }
       }
       box.add(leftAligned(row));
