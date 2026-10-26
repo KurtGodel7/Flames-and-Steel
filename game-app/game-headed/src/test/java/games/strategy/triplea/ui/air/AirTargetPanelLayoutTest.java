@@ -281,7 +281,7 @@ class AirTargetPanelLayoutTest {
         });
     flush();
     final BufferedImage shot = render(panel, WIDTH, HEIGHT);
-    ImageIO.write(shot, "png", SHOTS.resolve("request41_after_bomber_stage.png").toFile());
+    ImageIO.write(shot, "png", SHOTS.resolve("request42_bomber_stage.png").toFile());
 
     assertThat(
         "targets in reach: " + panel.targetsInReach(germans, zone).size(),
@@ -298,7 +298,7 @@ class AirTargetPanelLayoutTest {
         all(panel).stream()
             .filter(c -> c instanceof JLabel l && l.getText() != null)
             .map(c -> ((JLabel) c).getText())
-            .anyMatch(t -> t.contains(" ← 1 ")),
+            .anyMatch(t -> t.contains(" -> ")),
         is(true));
   }
 
@@ -365,7 +365,7 @@ class AirTargetPanelLayoutTest {
   }
 
   @Test
-  void aMovesLineSelectsItsTarget() throws Exception {
+  void showBringsTheMoveIntoViewAndSelectsNothing() throws Exception {
     startPanel(false);
     final Territory zone = busiestFront();
     final TargetAssignment move = firstMove(zone);
@@ -375,11 +375,13 @@ class AirTargetPanelLayoutTest {
         () -> {
           panel.chooseFront(germans, zone, false);
           panel.assign(move.target(), one);
-          panel.selectTarget(null);
-          panel.selectMove(germans, panel.staged().get(0));
+          panel.showMove(panel.staged().get(0));
         });
     flush();
-    assertThat(panel.selectedTarget(), is(move.target()));
+    assertThat(panel.selectedZone() == null, is(true));
+    assertThat(buttons("Show").size(), is(1));
+    assertThat(buttons("Undo").size(), is(1));
+    assertThat(buttons("Undo All").size(), is(1));
   }
 
   @Test
@@ -612,12 +614,15 @@ class AirTargetPanelLayoutTest {
     startPanel(false);
     SwingUtilities.invokeAndWait(
         () -> {
-          panel.click(dives(t[0]), t[0], shiftClick());
+          panel.click(dives(t[0]), t[0], click());
+          panel.click(List.of(), t[1], click());
+          panel.click(dives(t[0]), t[0], click());
           panel.click(List.of(), t[1], click());
         });
     flush();
+    assertThat("two moves, one dive bomber each", panel.staged().size(), is(2));
     final BufferedImage shot = render(panel, WIDTH, HEIGHT);
-    ImageIO.write(shot, "png", SHOTS.resolve("request41_after_cracow_move.png").toFile());
+    ImageIO.write(shot, "png", SHOTS.resolve("request42_bomber_stage_two_moves.png").toFile());
     assertThat(
         all(panel).stream().anyMatch(c -> c instanceof javax.swing.JComboBox), is(false));
     assertThat(buttons("Next base").isEmpty(), is(true));
@@ -628,8 +633,53 @@ class AirTargetPanelLayoutTest {
             .anyMatch(text -> text.startsWith("Aircraft without orders: ")),
         is(true));
     assertThat(panel.staged().isEmpty(), is(false));
-    SwingUtilities.invokeAndWait(() -> buttons("Undo all").get(0).doClick());
+    SwingUtilities.invokeAndWait(() -> buttons("Undo All").get(0).doClick());
     flush();
     assertThat(panel.staged().isEmpty(), is(true));
+  }
+  // ---- request 42: the stock route arrow; undo selects nothing
+
+  @Test
+  void pointingAtATargetDrawsTheStockRouteWithTheOneSelectedBomber() throws Exception {
+    final Territory[] t = cracowAndBialystok();
+    startPanel(false);
+    SwingUtilities.invokeAndWait(
+        () -> {
+          panel.click(dives(t[0]), t[0], click());
+          panel.pointAt(t[1], new java.awt.Point(10, 10));
+        });
+    flush();
+    final org.mockito.ArgumentCaptor<games.strategy.engine.data.Route> route =
+        org.mockito.ArgumentCaptor.forClass(games.strategy.engine.data.Route.class);
+    verify(map, org.mockito.Mockito.atLeastOnce()).setRoute(route.capture(), any(), any(), any());
+    final games.strategy.engine.data.Route last = route.getAllValues().get(route.getAllValues().size() - 1);
+    assertThat(last.getStart(), is(t[0]));
+    assertThat(last.getEnd(), is(t[1]));
+    final org.mockito.ArgumentCaptor<java.util.Collection<games.strategy.engine.data.Unit>> shadow =
+        org.mockito.ArgumentCaptor.forClass(java.util.Collection.class);
+    verify(map, org.mockito.Mockito.atLeastOnce()).setMouseShadowUnits(shadow.capture());
+    final java.util.Collection<games.strategy.engine.data.Unit> shown =
+        shadow.getAllValues().get(shadow.getAllValues().size() - 1);
+    assertThat("one of the two dive bombers at the mouse", shown.size(), is(1));
+  }
+
+  @Test
+  void undoRestoresTheAircraftAndSelectsNothing() throws Exception {
+    final Territory[] t = cracowAndBialystok();
+    startPanel(false);
+    SwingUtilities.invokeAndWait(
+        () -> {
+          panel.click(dives(t[0]), t[0], click());
+          panel.click(List.of(), t[1], click());
+          panel.click(dives(t[0]), t[0], click());
+        });
+    flush();
+    assertThat(panel.selectedCounts().totalValues(), is(1));
+    SwingUtilities.invokeAndWait(() -> buttons("Undo").get(0).doClick());
+    flush();
+    assertThat(panel.staged().isEmpty(), is(true));
+    // the undo didn't add the other bomber to the selection
+    assertThat(panel.selectedCounts().totalValues(), is(1));
+    assertThat(panel.unassigned(germans, t[0]).totalValues() >= 2, is(true));
   }
 }

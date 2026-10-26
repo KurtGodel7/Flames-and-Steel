@@ -73,7 +73,30 @@ public final class AirHomePanel extends ActionPanel {
         public void mouseEntered(final @Nullable Territory territory) {
           hovered(territory);
         }
+
+        @Override
+        public void mouseMoved(final @Nullable Territory territory, final MouseDetails md) {
+          route(territory, md.getMapPoint());
+        }
       };
+
+  /** Request 42: the stock route arrow and the selected aircraft at the mouse. */
+  private void route(final @Nullable Territory territory, final java.awt.Point mouse) {
+    final Group g = selected;
+    if (!listening || g == null || territory == null) {
+      getMap().setRoute(null);
+      getMap().setMouseShadowUnits(null);
+      return;
+    }
+    final List<Territory> path;
+    try (GameData.Unlocker ignored = getData().acquireReadLock()) {
+      path =
+          games.strategy.triplea.delegate.air.AirBases.path(getCurrentPlayer(), g.from(), territory, 60)
+              .orElse(List.of(g.from(), territory));
+    }
+    getMap().setMouseShadowUnits(g.units().subList(0, Math.min(count, g.units().size())));
+    getMap().setRoute(new games.strategy.engine.data.Route(path), draw.middle(g.from()), mouse, null);
+  }
 
   public AirHomePanel(final TripleAFrame frame) {
     super(frame);
@@ -140,6 +163,8 @@ public final class AirHomePanel extends ActionPanel {
             getMap().removeUnitSelectionListener(unitListener);
             getMap().removeMapSelectionListener(hoverListener);
             getMap().removeOverlay(overlay);
+            getMap().setRoute(null);
+            getMap().setMouseShadowUnits(null);
           }
           frame.clearStatusMessage();
           rebuild(getCurrentPlayer());
@@ -363,7 +388,7 @@ public final class AirHomePanel extends ActionPanel {
       refresh.run();
       return;
     }
-    final JButton undoAll = new JButton("Undo all");
+    final JButton undoAll = new JButton("Undo All");
     undoAll.setEnabled(!staged.isEmpty());
     undoAll.addActionListener(
         e -> {
@@ -375,32 +400,39 @@ public final class AirHomePanel extends ActionPanel {
     buttons.add(undoAll);
     buttons.add(createDoneButton());
     layout.top().add(leftAligned(buttons));
-    // landings made, newest first
-    final JPanel made = new JPanel();
-    made.setLayout(new BoxLayout(made, BoxLayout.Y_AXIS));
-    made.setBorder(BorderFactory.createTitledBorder("Landings made (" + staged.size() + ")"));
+    // landings made, newest first, laid out as stock's moves list (request 42)
+    final List<AirMovesList.Entry> entries = new ArrayList<>();
     for (int i = staged.size() - 1; i >= 0; i--) {
       final Landing l = staged.get(i);
-      final JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-      row.add(
-          new JLabel(
-              l.to().getName()
-                  + " ← "
-                  + l.count()
-                  + " "
-                  + AirStage.typeName(l.unitType()).toLowerCase(java.util.Locale.ROOT)
-                  + (l.airborne() ? " from over " : " rebase from ")
-                  + l.from().getName()));
-      final JButton undo = smallButton("Undo");
-      undo.addActionListener(
-          e -> {
-            staged.remove(l);
-            rebuild(player);
-            getMap().repaint();
-          });
-      row.add(undo);
-      made.add(leftAligned(row));
+      entries.add(
+          new AirMovesList.Entry(
+              i + 1,
+              player,
+              l.unitType(),
+              l.count(),
+              l.from().getName() + " -> " + l.to().getName() + (l.airborne() ? "" : " (rebase)"),
+              () -> {
+                selected = null;
+                spots = Map.of();
+                if (!getMap().isShowing(l.to())) {
+                  getMap().centerOn(l.to());
+                }
+                rebuild(player);
+                getMap().repaint();
+              },
+              () -> {
+                staged.remove(l);
+                rebuild(player);
+                getMap().repaint();
+              }));
     }
+    final JPanel made = new JPanel(new BorderLayout());
+    made.setBorder(BorderFactory.createTitledBorder("Landings made (" + staged.size() + ")"));
+    made.add(
+        entries.isEmpty()
+            ? new JLabel("No landings yet.")
+            : AirMovesList.build(frame.getUiContext(), entries),
+        BorderLayout.CENTER);
     made.setAlignmentX(LEFT_ALIGNMENT);
     layout.top().add(made);
     // the groups

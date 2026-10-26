@@ -361,6 +361,44 @@ public class AirBases {
     return result;
   }
 
+  /**
+   * Request 42: the shortest way the nation's aircraft fly from one territory to another (both
+   * included), by the rules of {@link #distances}, if within {@code max} steps; for drawing the stock
+   * route arrow.
+   */
+  public static Optional<List<Territory>> path(
+      final GamePlayer player, final Territory from, final Territory to, final int max) {
+    final GameMap map = from.getData().getMap();
+    final Predicate<Territory> over = flyOver(player);
+    final Map<Territory, Territory> parent = new HashMap<>();
+    final Map<Territory, Integer> steps = new HashMap<>();
+    steps.put(from, 0);
+    final Deque<Territory> queue = new ArrayDeque<>();
+    queue.add(from);
+    while (!queue.isEmpty() && !steps.containsKey(to)) {
+      final Territory t = queue.poll();
+      final int d = steps.get(t);
+      if (d >= max || (!t.equals(from) && !over.test(t))) {
+        continue;
+      }
+      for (final Territory n : map.getNeighbors(t)) {
+        if (!steps.containsKey(n) && !isAirborneTerritory(n)) {
+          steps.put(n, d + 1);
+          parent.put(n, t);
+          queue.add(n);
+        }
+      }
+    }
+    if (!steps.containsKey(to)) {
+      return Optional.empty();
+    }
+    final List<Territory> result = new ArrayList<>();
+    for (Territory t = to; t != null; t = parent.get(t)) {
+      result.add(0, t);
+    }
+    return Optional.of(result);
+  }
+
   /** Steps between two territories for the nation's aircraft, if within {@code max}. */
   public static OptionalInt distance(
       final GamePlayer player, final Territory from, final Territory to, final int max) {
