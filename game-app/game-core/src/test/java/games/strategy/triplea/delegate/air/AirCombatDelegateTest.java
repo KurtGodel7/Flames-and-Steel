@@ -24,7 +24,11 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import games.strategy.engine.data.DefaultAttachment;
@@ -415,6 +419,72 @@ class AirCombatDelegateTest {
                 Map.of())
             .isPresent(),
         is(false));
+  }
+
+  // ---- request 39: two rounds at sea
+
+  @Test
+  void aSubmarineStrikeHasTwoRounds() {
+    air(bomber, "canAttackSubs", "true");
+    addTo(naval, bomber.create(1, germans)); // 4: the remainder die hits once a round
+    addTo(seaZone, submarine(gameData).create(2, british));
+
+    strike(germans, new TargetAssignment(naval, bomber, 1, new Target(seaZone, TargetKind.SUBS)));
+
+    assertThat(count(seaZone, british), is(0));
+  }
+
+  @Test
+  void aShipNeverHitNeverFiresBack() {
+    die = 5; // every remainder die misses: 4 makes no hit
+    addTo(naval, bomber.create(1, germans));
+    addTo(seaZone, destroyer().create(1, british));
+    final IDelegateBridge bridge = bridge(germans);
+
+    targets(germans, new TargetAssignment(naval, bomber, 1, new Target(seaZone, TargetKind.SURFACE)));
+    runStep("airStrikes", bridge);
+
+    assertThat(count(seaZone, british), is(1));
+    assertThat(count(naval, germans), is(1));
+    verify(bridge, never()).getRandom(anyInt(), any(), any(), contains("fire back"));
+  }
+
+  @Test
+  void aBomberDamagedByReturnFireMakesNoSecondRoundAttack() {
+    hitPoints(bomber, 2);
+    addTo(naval, bomber.create(1, germans)); // 4: one hit a round
+    addTo(seaZone, destroyer().create(2, british));
+
+    strike(
+        germans, new TargetAssignment(naval, bomber, 1, new Target(seaZone, TargetKind.SURFACE)));
+
+    // round 1 sinks a destroyer, which fires back (3: one hit) and damages the bomber: it aborts,
+    // so round 2 never comes and the other destroyer is left
+    assertThat(count(seaZone, british), is(1));
+    assertThat(count(naval, germans), is(1));
+  }
+
+  @Test
+  void aShipHitInBothRoundsFiresTwiceAndTheAbortedBomberTakesTheFirstHit() {
+    hitPoints(bomber, 2);
+    hitPoints(battleship(gameData), 3);
+    addTo(naval, bomber.create(2, germans)); // 8: two hits in round 1
+    addTo(seaZone, battleship(gameData).create(1, british));
+    final IDelegateBridge bridge = bridge(germans);
+
+    targets(germans, new TargetAssignment(naval, bomber, 2, new Target(seaZone, TargetKind.SURFACE)));
+    runStep("airStrikes", bridge);
+
+    // round 1: the battleship takes 2 of 3 and fires back (4: one hit), one bomber damaged and
+    // aborted; round 2: the other sinks it, it fires back again and the damaged bomber is hit first
+    assertThat(count(seaZone, british), is(0));
+    assertThat(count(naval, germans), is(1));
+    verify(bridge, atLeastOnce()).getRandom(anyInt(), any(), any(), contains("fire back, round 1"));
+    verify(bridge, atLeastOnce()).getRandom(anyInt(), any(), any(), contains("fire back, round 2"));
+  }
+
+  private UnitType destroyer() {
+    return gameData.getUnitTypeList().getUnitTypeOrThrow("destroyer");
   }
 
   private void noInterception() {

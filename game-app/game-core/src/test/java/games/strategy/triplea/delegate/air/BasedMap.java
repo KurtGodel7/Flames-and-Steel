@@ -33,7 +33,7 @@ public final class BasedMap {
     try {
       final String xml = Files.readString(XML, StandardCharsets.UTF_8);
       if (!xml.contains("airZoneAttachment")) {
-        return GameParser.parse(XML, false).orElseThrow();
+        return withBonusDice(GameParser.parse(XML, false).orElseThrow());
       }
       final Path copy = Files.createTempFile("fs-based-", ".xml");
       copy.toFile().deleteOnExit();
@@ -48,10 +48,38 @@ public final class BasedMap {
       // the copy is outside the map folder: name the map as its map.yml does
       data.setMapName("flames_and_steel");
       data.setGameName("Flames and Steel");
-      return data;
+      return withBonusDice(data);
     } catch (final IOException e) {
       throw new IllegalStateException(e);
     }
+  }
+
+  /**
+   * Request 39, until the cloud session writes it: dive bombers have land bonus 1 and torpedo
+   * bombers naval bonus 1 (a draft that sets any bonus is used as it is).
+   */
+  static GameData withBonusDice(final GameData data) {
+    final var dive = data.getUnitTypeList().getUnitType("diveBomber");
+    final var torpedo = data.getUnitTypeList().getUnitType("torpedoBomber");
+    if (dive.isEmpty() || torpedo.isEmpty()) {
+      return data;
+    }
+    final var diveAir = games.strategy.triplea.attachments.AirUnitAttachment.get(dive.get());
+    final var torpedoAir = games.strategy.triplea.attachments.AirUnitAttachment.get(torpedo.get());
+    if (diveAir.isEmpty()
+        || torpedoAir.isEmpty()
+        || diveAir.get().getLandBonus() > 0
+        || torpedoAir.get().getNavalBonus() > 0) {
+      return data;
+    }
+    try {
+      diveAir.get().getPropertyOrThrow("landBonus").setValue("1");
+      torpedoAir.get().getPropertyOrThrow("navalBonus").setValue("1");
+    } catch (final Exception e) {
+      throw new IllegalStateException(e);
+    }
+    data.getTechTracker().clearCache();
+    return data;
   }
 
   static String withoutBoxes(final String xml) {

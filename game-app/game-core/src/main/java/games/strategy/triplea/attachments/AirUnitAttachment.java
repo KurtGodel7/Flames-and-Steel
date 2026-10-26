@@ -44,10 +44,13 @@ public class AirUnitAttachment extends DefaultAttachment {
   private @Nullable Integer airDefenseRolls = null;
   // aircraft: PUs of damage per strategic bombing run (0 = cannot bomb strategically)
   @Getter private int bombingDamage = 0;
-  // aircraft: double attack against land targets (dive bombers)
+  // request 39: no longer used (strikes are never doubled); still read so older XML loads
   @Getter private boolean doubleVsLand = false;
-  // aircraft: double attack against surface ships (torpedo bombers)
   @Getter private boolean doubleVsSurface = false;
+  // request 39: the value of the extra die the bomber rolls when striking land units, or surface
+  // ships (0 = none); techs may add to it or set it (TechAbilityAttachment landBonus...)
+  @Getter private int landBonus = 0;
+  @Getter private int navalBonus = 0;
   // aircraft: may attack submarines (torpedo and medium bombers)
   @Getter private boolean canAttackSubs = false;
 
@@ -194,6 +197,22 @@ public class AirUnitAttachment extends DefaultAttachment {
     bombingDamage = value;
   }
 
+  private void setLandBonus(final String value) {
+    landBonus = getInt(value);
+  }
+
+  private void setLandBonus(final Integer value) {
+    landBonus = value;
+  }
+
+  private void setNavalBonus(final String value) {
+    navalBonus = getInt(value);
+  }
+
+  private void setNavalBonus(final Integer value) {
+    navalBonus = value;
+  }
+
   private void setDoubleVsLand(final String value) {
     doubleVsLand = getBool(value);
   }
@@ -306,6 +325,20 @@ public class AirUnitAttachment extends DefaultAttachment {
                   this::setDoubleVsSurface,
                   this::isDoubleVsSurface,
                   () -> doubleVsSurface = false));
+      case "landBonus" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setLandBonus,
+                  this::setLandBonus,
+                  this::getLandBonus,
+                  () -> landBonus = 0));
+      case "navalBonus" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setNavalBonus,
+                  this::setNavalBonus,
+                  this::getNavalBonus,
+                  () -> navalBonus = 0));
       case "canAttackSubs" ->
           Optional.of(
               MutableProperty.of(

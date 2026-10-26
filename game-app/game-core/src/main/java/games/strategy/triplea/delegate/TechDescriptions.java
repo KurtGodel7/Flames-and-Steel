@@ -68,6 +68,12 @@ public class TechDescriptions {
     final IntegerMap<UnitType> airDefense = ability.getBomberAirDefenseBonus();
     final IntegerMap<UnitType> airDefenseRolls = ability.getBomberAirDefenseRollsBonus();
     final IntegerMap<UnitType> windowPenalty = ability.getInterceptionPenaltyAgainst();
+    // request 39: bomber bonus dice, and extra hit points (Fw-190G, P-47)
+    final IntegerMap<UnitType> landBonus = ability.getLandBonus();
+    final IntegerMap<UnitType> navalBonus = ability.getNavalBonus();
+    final IntegerMap<UnitType> landBonusSet = ability.getLandBonusSet();
+    final IntegerMap<UnitType> navalBonusSet = ability.getNavalBonusSet();
+    final IntegerMap<UnitType> hitPoints = ability.getHitPointBonus();
     final Set<UnitType> types = new LinkedHashSet<>();
     for (final IntegerMap<UnitType> map :
         List.of(
@@ -82,7 +88,12 @@ public class TechDescriptions {
             interceptionRolls,
             airDefense,
             airDefenseRolls,
-            windowPenalty)) {
+            windowPenalty,
+            landBonus,
+            navalBonus,
+            landBonusSet,
+            navalBonusSet,
+            hitPoints)) {
       types.addAll(map.keySet());
     }
     final List<String> clauses = new ArrayList<>();
@@ -112,11 +123,37 @@ public class TechDescriptions {
                 + " extra dogfight "
                 + dice(dogfightRolls.getInt(type)));
       }
+      strikeBonus(clauses, landBonus.getInt(type), landBonusSet.getInt(type), "land units", plural);
+      strikeBonus(clauses, navalBonus.getInt(type), navalBonusSet.getInt(type), "ships", plural);
+      if (hitPoints.getInt(type) != 0) {
+        clauses.add(signed(hitPoints.getInt(type)) + " hit point for " + plural);
+      }
       // request 27: interception (fighters) and air defense (bombers) are separate values
       airValue(clauses, interception.getInt(type), interceptionRolls.getInt(type), "interception", plural);
       airValue(clauses, airDefense.getInt(type), airDefenseRolls.getInt(type), "air defense", plural);
     }
     return clauses.isEmpty() ? "" : capitalize(String.join("; ", clauses)) + ".";
+  }
+
+  /** Request 39: "dive bombers' bonus die against land units is now 3", "+1 to ...". */
+  private static void strikeBonus(
+      final List<String> clauses,
+      final int added,
+      final int set,
+      final String what,
+      final String plural) {
+    if (set > 0) {
+      clauses.add(
+          plural
+              + "' bonus die against "
+              + what
+              + " is now "
+              + set
+              + " (if not higher already)");
+    }
+    if (added != 0) {
+      clauses.add(signed(added) + " to " + plural + "' bonus die against " + what);
+    }
   }
 
   private static void airValue(

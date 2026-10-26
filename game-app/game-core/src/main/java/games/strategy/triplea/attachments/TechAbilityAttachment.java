@@ -81,6 +81,12 @@ public class TechAbilityAttachment extends DefaultAttachment {
   private @Nullable IntegerMap<UnitType> dogfightBonus = null;
   // Flames and Steel (request 27): added to the unit type's interception value, e.g. "1:fighter"
   private @Nullable IntegerMap<UnitType> interceptionBonus = null;
+  // Flames and Steel (request 39): added to the bomber type's bonus die against land units or
+  // surface ships, e.g. "1:diveBomber"; the "Set" forms raise it to the value (never lower it)
+  private @Nullable IntegerMap<UnitType> landBonus = null;
+  private @Nullable IntegerMap<UnitType> navalBonus = null;
+  private @Nullable IntegerMap<UnitType> landBonusSet = null;
+  private @Nullable IntegerMap<UnitType> navalBonusSet = null;
   // Flames and Steel (request 27): extra interception dice, e.g. "1:fighter"
   private @Nullable IntegerMap<UnitType> interceptionRollsBonus = null;
   // Flames and Steel (request 31, Window): taken off the interception value of enemy fighters
@@ -236,6 +242,70 @@ public class TechAbilityAttachment extends DefaultAttachment {
   /** Multiplier for ships firing back at aircraft (Naval Wasserfall: 2); 0 if not set. */
   public int getAirFireBackMultiplier() {
     return airFireBackMultiplier;
+  }
+
+  private void setLandBonus(final String value) throws GameParseException {
+    if (landBonus == null) {
+      landBonus = new IntegerMap<>();
+    }
+    applyCheckedValue("landBonus", value, landBonus::add);
+  }
+
+  private void setLandBonus(final IntegerMap<UnitType> value) {
+    landBonus = value;
+  }
+
+  /** Flames and Steel (request 39): added to the bomber bonus die, by unit type. */
+  public IntegerMap<UnitType> getLandBonus() {
+    return getIntegerMapProperty(landBonus);
+  }
+
+  private void setNavalBonus(final String value) throws GameParseException {
+    if (navalBonus == null) {
+      navalBonus = new IntegerMap<>();
+    }
+    applyCheckedValue("navalBonus", value, navalBonus::add);
+  }
+
+  private void setNavalBonus(final IntegerMap<UnitType> value) {
+    navalBonus = value;
+  }
+
+  /** Flames and Steel (request 39): added to the bomber bonus die, by unit type. */
+  public IntegerMap<UnitType> getNavalBonus() {
+    return getIntegerMapProperty(navalBonus);
+  }
+
+  private void setLandBonusSet(final String value) throws GameParseException {
+    if (landBonusSet == null) {
+      landBonusSet = new IntegerMap<>();
+    }
+    applyCheckedValue("landBonusSet", value, landBonusSet::add);
+  }
+
+  private void setLandBonusSet(final IntegerMap<UnitType> value) {
+    landBonusSet = value;
+  }
+
+  /** Flames and Steel (request 39): set to (at least) the bomber bonus die, by unit type. */
+  public IntegerMap<UnitType> getLandBonusSet() {
+    return getIntegerMapProperty(landBonusSet);
+  }
+
+  private void setNavalBonusSet(final String value) throws GameParseException {
+    if (navalBonusSet == null) {
+      navalBonusSet = new IntegerMap<>();
+    }
+    applyCheckedValue("navalBonusSet", value, navalBonusSet::add);
+  }
+
+  private void setNavalBonusSet(final IntegerMap<UnitType> value) {
+    navalBonusSet = value;
+  }
+
+  /** Flames and Steel (request 39): set to (at least) the bomber bonus die, by unit type. */
+  public IntegerMap<UnitType> getNavalBonusSet() {
+    return getIntegerMapProperty(navalBonusSet);
   }
 
   private void setInterceptionBonus(final String value) throws GameParseException {
@@ -1100,6 +1170,34 @@ public class TechAbilityAttachment extends DefaultAttachment {
                   this::setAirFireBackMultiplier,
                   this::getAirFireBackMultiplier,
                   () -> airFireBackMultiplier = 0));
+      case "landBonus" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setLandBonus,
+                  this::setLandBonus,
+                  this::getLandBonus,
+                  () -> landBonus = null));
+      case "navalBonus" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setNavalBonus,
+                  this::setNavalBonus,
+                  this::getNavalBonus,
+                  () -> navalBonus = null));
+      case "landBonusSet" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setLandBonusSet,
+                  this::setLandBonusSet,
+                  this::getLandBonusSet,
+                  () -> landBonusSet = null));
+      case "navalBonusSet" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setNavalBonusSet,
+                  this::setNavalBonusSet,
+                  this::getNavalBonusSet,
+                  () -> navalBonusSet = null));
       case "interceptionBonus" ->
           Optional.of(
               MutableProperty.of(

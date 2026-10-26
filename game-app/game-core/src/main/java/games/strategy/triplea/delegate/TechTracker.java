@@ -82,6 +82,36 @@ public class TechTracker {
   }
 
   /**
+   * Flames and Steel (request 39): the value of the bomber type's extra die against land units
+   * ({@code naval} false) or surface ships, for this nation: the type's own bonus, raised to the
+   * highest "set" of the nation's techs (a set never lowers it), plus every tech's addition.
+   */
+  public int getStrikeBonus(GamePlayer player, UnitType type, boolean naval) {
+    final Supplier<Integer> getter =
+        () -> {
+          final int own =
+              games.strategy.triplea.attachments.AirUnitAttachment.get(type)
+                  .map(a -> naval ? a.getNavalBonus() : a.getLandBonus())
+                  .orElse(0);
+          final int set =
+              getCurrentTechAdvances(player).stream()
+                  .map(TechAbilityAttachment::get)
+                  .filter(Objects::nonNull)
+                  .mapToInt(
+                      a -> (naval ? a.getNavalBonusSet() : a.getLandBonusSet()).getInt(type))
+                  .max()
+                  .orElse(0);
+          final int added =
+              getSumOfBonuses(
+                  naval ? TechAbilityAttachment::getNavalBonus : TechAbilityAttachment::getLandBonus,
+                  type,
+                  player);
+          return Math.max(0, Math.max(own, set) + added);
+        };
+    return getCached(player, type, naval ? "getNavalStrikeBonus" : "getLandStrikeBonus", getter);
+  }
+
+  /**
    * Flames and Steel (request 27): added interception value from the nation's techs for this type.
    */
   public int getInterceptionBonus(GamePlayer player, UnitType type) {

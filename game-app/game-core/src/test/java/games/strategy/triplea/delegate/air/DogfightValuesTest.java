@@ -179,7 +179,7 @@ class DogfightValuesTest {
   }
 
   @Test
-  void tacticalStrikesStillDouble() {
+  void tacticalStrikesRollABonusDieNeverDouble() {
     final List<Unit> aircraft = japaneseAircraft();
     final Unit dive = aircraft.get(1);
     final Unit torpedo = aircraft.get(2);
@@ -188,8 +188,9 @@ class DogfightValuesTest {
     final int torpedoAttack = torpedo.getUnitAttachment().getAttack(japanese);
     final int mediumAttack = medium.getUnitAttachment().getAttack(japanese);
 
-    assertThat(AirCombat.strikePower(dive, AirCombat.TargetKind.LAND), is(2 * diveAttack));
-    assertThat(AirCombat.strikePower(torpedo, AirCombat.TargetKind.SURFACE), is(2 * torpedoAttack));
+    // request 39: a bonus die (1) instead of doubling
+    assertThat(AirCombat.strikePower(dive, AirCombat.TargetKind.LAND), is(diveAttack + 1));
+    assertThat(AirCombat.strikePower(torpedo, AirCombat.TargetKind.SURFACE), is(torpedoAttack + 1));
     assertThat(AirCombat.strikePower(torpedo, AirCombat.TargetKind.SUBS), is(torpedoAttack));
     assertThat(AirCombat.strikePower(medium, AirCombat.TargetKind.SUBS), is(mediumAttack));
   }

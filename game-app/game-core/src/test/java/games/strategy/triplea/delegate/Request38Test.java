@@ -208,7 +208,8 @@ class Request38Test {
     assertThat(over(front, russians, "fighter"), is(3));
     assertThat(over(front, germans, "fighter"), is(4));
     assertThat(over(front, germans, "diveBomber"), is(4));
-    assertThat(count(front, russians, "infantry"), is(10 - 3));
+    // request 39: three dive bombers at 3 + 1 = 12: two hits
+    assertThat(count(front, russians, "infantry"), is(10 - 2));
   }
 
   @Test
@@ -217,7 +218,8 @@ class Request38Test {
     assertThat(over(front, russians, "fighter"), is(3));
     assertThat(over(front, germans, "fighter"), is(3));
     assertThat(over(front, germans, "diveBomber"), is(3));
-    assertThat(count(front, russians, "infantry"), is(10 - 3));
+    // request 39: three dive bombers at 3 + 1 = 12: two hits
+    assertThat(count(front, russians, "infantry"), is(10 - 2));
   }
 
   @Test

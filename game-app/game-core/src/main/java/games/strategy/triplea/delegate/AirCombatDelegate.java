@@ -735,50 +735,102 @@ public class AirCombatDelegate extends BaseTripleADelegate {
       lines.add(title + ": " + result + lossAndAborts(strike, abortedNow));
       return;
     }
-    // 3. the strike
-    final String text = "Air strike on " + strike.target().describe();
-    final Roll roll = fire(attackers, u -> AirCombat.strikePower(u, kind), text);
-    final DiceRoll dice = view.showDice(roll, AirCombat.chooser(attackers), strikeStep);
-    final Hit hit =
-        AirCombat.takeHits(
-            bridge, view, strikeCasualties, t, targets, attackers, roll, dice, text);
-    if (kind == TargetKind.SURFACE) {
-      // transports are never casualties, but are lost once nothing protects them
-      final List<Unit> transports = AirCombat.getUndefendedTransports(attacker, t);
-      if (!transports.isEmpty()) {
-        bridge
-            .getHistoryWriter()
-            .addChildToEvent(
-                MyFormatter.unitsToText(transports) + " undefended in " + t.getName() + ", lost",
-                transports);
-        bridge.addChange(ChangeFactory.removeUnits(t, transports));
+    // 3. the strike: one round against land units, two at sea (request 39). After each round at
+    // sea the ships hit (damaged or destroyed) fire back; bombers damaged by it abort, make no
+    // attack in the next round and take the first hits of its return fire
+    final int rounds = AirCombat.strikeRounds(kind);
+    final List<Unit> killed = new ArrayList<>();
+    final List<Unit> damaged = new ArrayList<>();
+    final List<Unit> abortedByShips = new ArrayList<>();
+    final List<String> roundText = new ArrayList<>();
+    for (int round = 1; round <= rounds; round++) {
+      final List<Unit> firing = attackers(strike);
+      final List<Unit> left =
+          kind == TargetKind.LAND
+              ? targets
+              : AirCombat.getShipTargetUnits(attacker, t, kind == TargetKind.SUBS);
+      if (firing.isEmpty() || left.isEmpty()) {
+        break;
       }
-      // 4. ships destroyed or damaged by the strike fire back at the bombers that attacked
-      // (aborted bombers made no attack, so no ship fires at them)
-      final List<Unit> exposed = alive(strike.zone(), attackers);
-      if (!hit.all().isEmpty() && !exposed.isEmpty()) {
-        final String backText = "Ships in " + t.getName() + " fire back";
-        final Roll back = fire(hit.all(), AirCombat::shipFireBackPower, backText);
-        final DiceRoll backDice =
-            view.showDice(back, AirCombat.chooser(hit.all()), fireBack, "Ships");
-        AirCombat.takeHits(
-            bridge,
-            view,
-            fireBackCasualties,
-            strike.zone(),
-            exposed,
-            hit.all(),
-            back,
-            backDice,
-            backText);
+      final String text =
+          "Air strike on " + strike.target().describe() + (rounds > 1 ? ", round " + round : "");
+      final Roll roll = fire(firing, u -> AirCombat.strikePower(u, kind), text);
+      final DiceRoll dice = view.showDice(roll, AirCombat.chooser(firing), strikeStep);
+      final Hit hit =
+          AirCombat.takeHits(bridge, view, strikeCasualties, t, left, firing, roll, dice, text);
+      killed.addAll(hit.killed());
+      damaged.removeAll(hit.killed());
+      hit.damaged().stream().filter(u -> !damaged.contains(u)).forEach(damaged::add);
+      if (rounds > 1) {
+        roundText.add(
+            "round "
+                + round
+                + ": "
+                + (hit.all().isEmpty() ? "no hits" : hitText(hit)));
+      }
+      if (kind == TargetKind.SURFACE) {
+        // transports are never casualties, but are lost once nothing protects them
+        final List<Unit> transports = AirCombat.getUndefendedTransports(attacker, t);
+        if (!transports.isEmpty()) {
+          bridge
+              .getHistoryWriter()
+              .addChildToEvent(
+                  MyFormatter.unitsToText(transports)
+                      + " undefended in "
+                      + t.getName()
+                      + ", lost",
+                  transports);
+          bridge.addChange(ChangeFactory.removeUnits(t, transports));
+        }
+        // 4. ships destroyed or damaged this round fire back at the bombers that attacked, and at
+        // those that aborted after earlier return fire (aborted before the strike: never)
+        final List<Unit> fired = new ArrayList<>(firing);
+        abortedByShips.stream().filter(u -> !fired.contains(u)).forEach(fired::add);
+        final List<Unit> exposed = alive(strike.zone(), fired);
+        if (!hit.all().isEmpty() && !exposed.isEmpty()) {
+          final String backText =
+              "Ships in " + t.getName() + " fire back" + (rounds > 1 ? ", round " + round : "");
+          final Roll back = fire(hit.all(), AirCombat::shipFireBackPower, backText);
+          final DiceRoll backDice =
+              view.showDice(back, AirCombat.chooser(hit.all()), fireBack, "Ships");
+          AirCombat.takeHits(
+              bridge,
+              view,
+              fireBackCasualties,
+              strike.zone(),
+              exposed,
+              hit.all(),
+              back,
+              backDice,
+              backText);
+          final List<Unit> nowAborted = new ArrayList<>();
+          for (final Unit bomber : alive(strike.zone(), exposed)) {
+            if (bomber.getHits() > 0 && aborted.add(bomber)) {
+              nowAborted.add(bomber);
+              abortedByShips.add(bomber);
+            }
+          }
+          if (!nowAborted.isEmpty() && round < rounds) {
+            bridge
+                .getHistoryWriter()
+                .addChildToEvent(
+                    "Aborted after the ships' fire (damaged, no attack in round "
+                        + (round + 1)
+                        + "): "
+                        + AirCombat.sideText(nowAborted),
+                    nowAborted);
+          }
+        }
       }
     }
+    final Hit hit = new Hit(killed, damaged);
     final int lost = strike.aircraft().size() - strike.survivors().size();
     final String result =
         hit.killed().size()
             + " destroyed, "
             + hit.damaged().size()
             + " damaged"
+            + (roundText.isEmpty() ? "" : " (" + String.join("; ", roundText) + ")")
             + (lost > 0 ? "; " + lost + " aircraft lost" : "")
             + (abortedNow.isEmpty() ? "" : "; " + abortedNow.size() + " aborted");
     strikeResult(title, strike, result);
@@ -786,6 +838,7 @@ public class AirCombatDelegate extends BaseTripleADelegate {
         title
             + ": "
             + (hit.all().isEmpty() ? "no hits" : hitText(hit))
+            + (roundText.isEmpty() ? "" : " (" + String.join("; ", roundText) + ")")
             + lossAndAborts(strike, abortedNow));
   }
 

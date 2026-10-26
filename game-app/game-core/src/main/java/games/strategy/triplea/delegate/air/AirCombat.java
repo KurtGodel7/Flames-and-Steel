@@ -333,26 +333,50 @@ public class AirCombat {
                 0,
                 air.getBombingDamage()
                     + type.getData().getTechTracker().getBombingBonus(owner, type));
+    final int land = strikeBonus(type, owner, TargetKind.LAND);
+    final int naval = strikeBonus(type, owner, TargetKind.SURFACE);
     return "Bomber-type: air defense "
         + airDefenseValue(type, owner)
         + ", attack "
         + ua.getAttack(owner)
-        + (air.isDoubleVsLand() ? " (doubled against land units)" : "")
-        + (air.isDoubleVsSurface() ? " (doubled against surface ships)" : "")
+        + (land > 0 ? ", against land " + ua.getAttack(owner) + " + " + land : "")
+        + (naval > 0 ? ", against ships " + ua.getAttack(owner) + " + " + naval : "")
         + (bombing > 0 ? ", strategic bombing " + bombing : "");
   }
 
-  /** Firing power of an aircraft attacking this kind of target. */
+  /**
+   * Request 39: the value of the bomber's extra die against this kind of target, for this nation:
+   * land units (land bonus) or surface ships (naval bonus); none against submarines or in
+   * strategic bombing.
+   */
+  public static int strikeBonus(final UnitType type, final GamePlayer owner, final TargetKind kind) {
+    if (kind != TargetKind.LAND && kind != TargetKind.SURFACE) {
+      return 0;
+    }
+    return type.getData().getTechTracker().getStrikeBonus(owner, type, kind == TargetKind.SURFACE);
+  }
+
+  /** Request 39: the strike as dice, "3 + 1" (base attack and bonus die), or "3". */
+  public static String strikeText(final Unit unit, final TargetKind kind) {
+    final var ua = unit.getUnitAttachment();
+    final int base = ua.getAttack(unit.getOwner());
+    final int rolls = ua.getAttackRolls(unit.getOwner());
+    final int bonus = strikeBonus(unit.getType(), unit.getOwner(), kind);
+    final String dice = rolls == 1 ? String.valueOf(base) : rolls + " × " + base;
+    return bonus > 0 ? dice + " + " + bonus : dice;
+  }
+
+  /** Request 39: how many strike rounds a strike on this kind of target has: two at sea. */
+  public static int strikeRounds(final TargetKind kind) {
+    return kind == TargetKind.SURFACE || kind == TargetKind.SUBS ? 2 : 1;
+  }
+
+  /** Firing power of an aircraft attacking this kind of target, in one strike round. */
   public static int strikePower(final Unit unit, final TargetKind kind) {
     final var ua = unit.getUnitAttachment();
     final int base = ua.getAttack(unit.getOwner()) * ua.getAttackRolls(unit.getOwner());
-    final AirUnitAttachment air = AirUnitAttachment.get(unit.getType()).orElse(null);
-    if (air != null
-        && ((kind == TargetKind.LAND && air.isDoubleVsLand())
-            || (kind == TargetKind.SURFACE && air.isDoubleVsSurface()))) {
-      return 2 * base;
-    }
-    return base;
+    // request 39: no doubling; a bomber with a bonus for the target rolls an extra die at it
+    return base + strikeBonus(unit.getType(), unit.getOwner(), kind);
   }
 
   /** Firing power of a ship firing back at aircraft (its defense). */

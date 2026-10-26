@@ -467,7 +467,8 @@ class Draft60Test {
     final var subs = games.strategy.triplea.delegate.air.AirCombat.TargetKind.SUBS;
     assertThat(
         games.strategy.triplea.delegate.air.AirCombat.strikePower(torpedo, surface),
-        is(2 * games.strategy.triplea.delegate.air.AirCombat.strikePower(torpedo, subs)));
+        // request 39: the naval bonus die (1) against surface ships, none against submarines
+        is(games.strategy.triplea.delegate.air.AirCombat.strikePower(torpedo, subs) + 1));
     assertThat(
         games.strategy.triplea.delegate.air.AirCombat.strikePower(medium, surface),
         is(games.strategy.triplea.delegate.air.AirCombat.strikePower(medium, subs)));

@@ -55,13 +55,14 @@ class Request37Test {
   }
 
   @Test
-  void sovietDiveBombersAttackAtTwoAndFourAgainstLand() throws Exception {
+  void sovietDiveBombersAttackAtTwoAndThreeAgainstLand() throws Exception {
     sovietDiveBomberPenalty();
     assertThat(diveBomber.getUnitAttachment().getAttack(russians), is(2));
-    assertThat(AirCombat.strikePower(unit(russians), TargetKind.LAND), is(4));
-    // other nations keep 3 (6 against land)
+    // request 39: 2 + the land bonus die 1
+    assertThat(AirCombat.strikePower(unit(russians), TargetKind.LAND), is(3));
+    // other nations keep 3 (3 + 1 against land)
     assertThat(diveBomber.getUnitAttachment().getAttack(germans), is(3));
-    assertThat(AirCombat.strikePower(unit(germans), TargetKind.LAND), is(6));
+    assertThat(AirCombat.strikePower(unit(germans), TargetKind.LAND), is(4));
     // the unit tooltip and the air values line show it
     assertThat(
         diveBomber.getUnitAttachment().toStringShortAndOnlyImportantDifferences(russians),
@@ -78,7 +79,8 @@ class Request37Test {
     data.getTechTracker().clearCache();
     assertThat(diveBomber.getUnitAttachment().getAttack(russians), is(0));
     assertThat(diveBomber.getUnitAttachment().getDefense(russians), is(0));
-    assertThat(AirCombat.strikePower(unit(russians), TargetKind.LAND), is(0));
+    // request 39: the bonus die stays
+    assertThat(AirCombat.strikePower(unit(russians), TargetKind.LAND), is(1));
   }
 
   @Test
