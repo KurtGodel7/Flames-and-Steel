@@ -80,6 +80,25 @@ public final class AirHomePanel extends ActionPanel {
     super(frame);
     this.frame = frame;
     this.draw = new AirDraw(frame.getUiContext());
+    // request 40: Escape clears the selection
+    getInputMap(WHEN_IN_FOCUSED_WINDOW)
+        .put(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_ESCAPE, 0), "fsHomeClear");
+    getActionMap()
+        .put(
+            "fsHomeClear",
+            new javax.swing.AbstractAction() {
+              private static final long serialVersionUID = 1L;
+
+              @Override
+              public void actionPerformed(final java.awt.event.ActionEvent e) {
+                if (listening && isActive()) {
+                  selected = null;
+                  spots = Map.of();
+                  rebuild(getCurrentPlayer());
+                  getMap().repaint();
+                }
+              }
+            });
   }
 
   @Override
@@ -103,8 +122,10 @@ public final class AirHomePanel extends ActionPanel {
             getMap().addOverlay(overlay);
           }
           rebuild(player);
-          // begin with the first group in the air
-          groups(player, true).stream().findFirst().ifPresent(g -> choose(player, g));
+          // request 40: nothing is selected for the player
+          frame.setStatusMessage(
+              "Click aircraft in the air (or a group on the right), then a green spot. Done lands"
+                  + " the rest at the nearest spot.");
         });
   }
 
@@ -209,7 +230,6 @@ public final class AirHomePanel extends ActionPanel {
     try (GameData.Unlocker ignored = getData().acquireReadLock()) {
       spots = AirHome.spots(player, g);
     }
-    getMap().centerOn(g.from());
     frame.setStatusMessage(
         spots.isEmpty()
             ? "Nowhere to land within " + g.range() + " of " + g.from().getName() + "."
@@ -223,6 +243,13 @@ public final class AirHomePanel extends ActionPanel {
       return;
     }
     final GamePlayer player = getCurrentPlayer();
+    if (md.isRightButton()) {
+      selected = null;
+      spots = Map.of();
+      rebuild(player);
+      getMap().repaint();
+      return;
+    }
     if (selected != null && spots.containsKey(territory) && count > 0) {
       land(player, territory);
       return;
@@ -258,12 +285,9 @@ public final class AirHomePanel extends ActionPanel {
     }
     staged.clear();
     staged.addAll(AirHome.merge(trial));
-    count = left(g);
-    if (count == 0) {
-      selected = null;
-      spots = Map.of();
-      groups(player, true).stream().filter(x -> left(x) > 0).findFirst().ifPresent(x -> choose(player, x));
-    }
+    // request 40: after a landing nothing is selected and the map stays where it is
+    selected = null;
+    spots = Map.of();
     rebuild(player);
     getMap().repaint();
   }

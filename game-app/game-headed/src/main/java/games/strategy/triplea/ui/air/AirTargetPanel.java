@@ -219,6 +219,38 @@ public final class AirTargetPanel extends ActionPanel {
             javax.swing.KeyStroke.getKeyStroke(
                 java.awt.event.KeyEvent.VK_Z, java.awt.event.InputEvent.CTRL_DOWN_MASK),
             "fsUndoLastAirMove");
+    // request 40: Escape clears the selection; N picks the next base still waiting (only when pressed)
+    getInputMap(WHEN_IN_FOCUSED_WINDOW)
+        .put(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_ESCAPE, 0), "fsAirClear");
+    getActionMap()
+        .put(
+            "fsAirClear",
+            new javax.swing.AbstractAction() {
+              private static final long serialVersionUID = 1L;
+
+              @Override
+              public void actionPerformed(final java.awt.event.ActionEvent e) {
+                if (listening && isActive()) {
+                  clearSelection();
+                  selectionChanged();
+                }
+              }
+            });
+    getInputMap(WHEN_IN_FOCUSED_WINDOW)
+        .put(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_N, 0), "fsAirNextBase");
+    getActionMap()
+        .put(
+            "fsAirNextBase",
+            new javax.swing.AbstractAction() {
+              private static final long serialVersionUID = 1L;
+
+              @Override
+              public void actionPerformed(final java.awt.event.ActionEvent e) {
+                if (listening && isActive()) {
+                  nextBase(getCurrentPlayer());
+                }
+              }
+            });
     getActionMap()
         .put(
             "fsUndoLastAirMove",
@@ -276,8 +308,8 @@ public final class AirTargetPanel extends ActionPanel {
           }
           rebuild(player);
           strikesChanged();
-          // request 22: begin with the first group waiting
-          SwingUtilities.invokeLater(() -> selectNextWaiting(player));
+          // request 40: nothing is selected for the player; the banner says what is waiting
+          updateBanner(player, waitingGroups(player).size());
         });
   }
 
@@ -473,52 +505,8 @@ public final class AirTargetPanel extends ActionPanel {
           JOptionPane.WARNING_MESSAGE);
       return;
     }
-    final List<String> left = bombersLeft();
-    if (!left.isEmpty()) {
-      final int answer =
-          JOptionPane.showConfirmDialog(
-              JOptionPane.getFrameForComponent(this),
-              String.join("\n", left)
-                  + (coverMode
-                      ? "\nThey stay on their bases this round. End anyway?"
-                      : "\nThey stay on their bases this round. End anyway?"),
-              coverMode ? "Fighter cover" : "Bomber targets",
-              JOptionPane.YES_NO_OPTION);
-      if (answer != JOptionPane.YES_OPTION) {
-        return;
-      }
-    }
     clearSelection();
     release();
-  }
-
-  /**
-   * One line per aircraft type and zone whose unassigned aircraft still have at least one legal
-   * target (the same targets the grid counts and the picker offers), e.g. "2 Torpedo Bomber in
-   * Mediterranean could still strike Sea Zone 97". Aircraft with nothing they may hit are left out.
-   */
-  private List<String> bombersLeft() {
-    final GamePlayer player = getCurrentPlayer();
-    final List<String> result = new ArrayList<>();
-    try (GameData.Unlocker ignored = getData().acquireReadLock()) {
-      for (final Territory zone : AirStage.bases(player, stage)) {
-        final IntegerMap<UnitType> left = available(player, zone);
-        for (final UnitType type : left.keySet()) {
-          final List<Target> targets = targetsFor(player, zone, type);
-          if (left.getInt(type) > 0 && !targets.isEmpty()) {
-            result.add(
-                left.getInt(type)
-                    + " "
-                    + ResearchView.displayName(type.getName())
-                    + " at "
-                    + zone.getName()
-                    + (coverMode ? " could still escort or defend " : " could still strike ")
-                    + describeTargets(targets));
-          }
-        }
-      }
-    }
-    return result;
   }
 
   /** "Sea Zone 97", or "3 targets (Malta, Sicily, Sea Zone 97)", at most 3 named. */
@@ -713,14 +701,10 @@ public final class AirTargetPanel extends ActionPanel {
       selectionChanged();
       return;
     }
-    selectedTarget = target;
-    resetSend(zone);
+    // request 40: after a move nothing is selected and the map stays where it is
+    clearSelection();
     selectionChanged();
     strikesChanged();
-    // request 22: when this front is done, straight on to the next group still waiting
-    if (selected.keySet().stream().noneMatch(t -> selected.getInt(t) > 0)) {
-      selectNextWaiting(player);
-    }
     if (pickDialog != null && pickDialog.isDisplayable()) {
       pickDialog.refreshList();
     }
@@ -752,19 +736,26 @@ public final class AirTargetPanel extends ActionPanel {
     return result;
   }
 
-  /** Picks the first group still waiting, scrolls to it and lights up its targets. */
-  private void selectNextWaiting(final GamePlayer player) {
+  /**
+   * Request 40, only when the player asks (Next base, or N): selects the next base after the one
+   * shown that still has aircraft without an order, and brings it into view.
+   */
+  void nextBase(final GamePlayer player) {
     if (finished || player == null) {
       return;
     }
-    final List<Group> waiting = waitingGroups(player);
-    if (!waiting.isEmpty() && !waiting.get(0).zone().equals(selectedZone)) {
-      chooseFront(player, waiting.get(0).zone(), true);
-    } else if (!waiting.isEmpty() && selected.isEmpty()) {
-      resetSend(selectedZone);
-      selectionChanged();
+    final List<Territory> bases = new ArrayList<>();
+    for (final Group g : waitingGroups(player)) {
+      if (!bases.contains(g.zone())) {
+        bases.add(g.zone());
+      }
     }
-    updateBanner(player, waiting.size());
+    if (bases.isEmpty()) {
+      frame.setStatusMessage("Every aircraft that can fly has an order. Press Done when ready.");
+      return;
+    }
+    final int now = selectedZone == null ? -1 : bases.indexOf(selectedZone);
+    chooseFront(player, bases.get((now + 1) % bases.size()), true);
   }
 
   /**
@@ -784,9 +775,10 @@ public final class AirTargetPanel extends ActionPanel {
                 + waiting
                 + (waiting == 1 ? " aircraft group" : " aircraft groups")
                 + (coverMode
-                    ? ". Bombers are shown on their targets. Click your fighters on the map, or"
-                        + " choose a base on the right."
-                    : ". Click your bombers on the map, or choose a base on the right."));
+                    ? ". Bombers are shown on their targets. Click your fighters on the map,"
+                        + " choose a base on the right, or press N for the next base."
+                    : ". Click your bombers on the map, choose a base on the right, or press N"
+                        + " for the next base."));
   }
 
   /** The player's bombers in the zone that do not have a target yet. */
@@ -1303,6 +1295,9 @@ public final class AirTargetPanel extends ActionPanel {
           }
         });
     chooser.setSelectedItem(selectedZone);
+    if (selectedZone == null) {
+      chooser.setSelectedIndex(-1);
+    }
     chooser.addActionListener(
         e -> {
           if (chooser.getSelectedItem() instanceof Territory zone && !zone.equals(selectedZone)) {
@@ -1310,6 +1305,13 @@ public final class AirTargetPanel extends ActionPanel {
           }
         });
     frontRow.add(chooser);
+    // request 40: the next base only when asked
+    final JButton next = smallButton("Next base");
+    next.setToolTipText(
+        "Selects the next base with aircraft that have no order yet (or press N). Nothing is ever"
+            + " selected for you.");
+    next.addActionListener(e -> nextBase(player));
+    frontRow.add(next);
     layout.body().add(leftAligned(frontRow));
     if (selectedZone == null) {
       layout.body().add(leftAligned(new JLabel("Choose a base, or click your aircraft on the map.")));
@@ -1505,6 +1507,7 @@ public final class AirTargetPanel extends ActionPanel {
     if (pickDialog == null || !pickDialog.isDisplayable()) {
       pickDialog = new PickTargetDialog(player);
     }
+    pickDialog.zone = selectedZone;
     pickDialog.refreshList();
     pickDialog.setVisible(true);
     pickDialog.toFront();
@@ -1593,6 +1596,8 @@ public final class AirTargetPanel extends ActionPanel {
     private final JPanel right = new JPanel();
     private final IntegerMap<UnitType> counts = new IntegerMap<>();
     private boolean updating;
+    // request 40: the base the window was opened for (the panel's selection clears after a move)
+    private @Nullable Territory zone;
 
     PickTargetDialog(final GamePlayer player) {
       super(
@@ -1612,8 +1617,8 @@ public final class AirTargetPanel extends ActionPanel {
                 final boolean isSelected,
                 final boolean cellHasFocus) {
               final String text =
-                  value instanceof Target t && selectedZone != null
-                      ? pickLabel(player, selectedZone, t)
+                  value instanceof Target t && zone != null
+                      ? pickLabel(player, zone, t)
                       : String.valueOf(value);
               return super.getListCellRendererComponent(l, text, index, isSelected, cellHasFocus);
             }
@@ -1624,6 +1629,10 @@ public final class AirTargetPanel extends ActionPanel {
               counts.clear();
               final Target t = list.getSelectedValue();
               if (t != null) {
+                if (!zone.equals(selectedZone)) {
+                  selectedZone = zone;
+                  resetSend(zone);
+                }
                 selectTarget(t);
                 getMap().centerOn(t.territory());
               }
@@ -1694,10 +1703,10 @@ public final class AirTargetPanel extends ActionPanel {
       final Target keep = list.getSelectedValue();
       updating = true;
       model.clear();
-      if (selectedZone != null) {
+      if (zone != null) {
         final String text = filter.getText().trim().toLowerCase(java.util.Locale.ROOT);
         try (GameData.Unlocker ignored = getData().acquireReadLock()) {
-          for (final Target t : targetsInReach(player, selectedZone)) {
+          for (final Target t : targetsInReach(player, zone)) {
             if (text.isEmpty()
                 || t.territory().getName().toLowerCase(java.util.Locale.ROOT).contains(text)) {
               model.addElement(t);
@@ -1732,7 +1741,6 @@ public final class AirTargetPanel extends ActionPanel {
     void fillRight() {
       right.removeAll();
       final Target target = list.getSelectedValue();
-      final Territory zone = selectedZone;
       if (target == null || zone == null) {
         right.add(leftAligned(new JLabel("Pick a target on the left.")));
       } else {
@@ -1763,6 +1771,8 @@ public final class AirTargetPanel extends ActionPanel {
         assign.setToolTipText("Makes the move as a click on the map would. Undo it in the side panel.");
         assign.addActionListener(
             e -> {
+              // the window's own base, whatever the panel shows
+              selectedZone = zone;
               assign(target, counts);
               counts.clear();
               refreshList();
@@ -1951,11 +1961,13 @@ public final class AirTargetPanel extends ActionPanel {
           .findFirst()
           .ifPresent(
               u -> {
-                final int value =
-                    Math.min(getData().getDiceSides(), AirCombat.strikePower(u, target.kind()));
+                // request 39: as dice, "3 + 1", per round (two rounds at sea)
+                final String value =
+                    AirCombat.strikeText(u, target.kind())
+                        + (AirCombat.strikeRounds(target.kind()) > 1 ? " ×2 rounds" : "");
                 values.add(
                     selected.size() == 1
-                        ? String.valueOf(value)
+                        ? value
                         : ResearchView.displayName(type.getName()) + " " + value);
               });
     }

@@ -23,6 +23,8 @@ import javax.swing.JPanel;
  * first; one with none is lost.
  */
 public final class FreeLandingDialog {
+  private static final String NEAREST = "(nearest spot)";
+
   private FreeLandingDialog() {}
 
   /** Asks where each aircraft lands; an aircraft left out lands at its first spot. */
@@ -43,7 +45,7 @@ public final class FreeLandingDialog {
                 + " one of your carriers with room. Any with nowhere to land are lost.</html>"),
         c);
     c.gridwidth = 1;
-    final Map<Unit, JComboBox<Territory>> boxes = new LinkedHashMap<>();
+    final Map<Unit, JComboBox<Object>> boxes = new LinkedHashMap<>();
     for (final Map.Entry<Unit, List<Territory>> e : options.entrySet()) {
       c.gridy++;
       c.gridx = 0;
@@ -57,7 +59,11 @@ public final class FreeLandingDialog {
         panel.add(new JLabel("nowhere to land: lost"), c);
         continue;
       }
-      final JComboBox<Territory> box = new JComboBox<>(e.getValue().toArray(new Territory[0]));
+      // request 40: nothing is chosen for the player; left as it is, the nearest spot is taken
+      final List<Object> items = new ArrayList<>();
+      items.add(NEAREST);
+      items.addAll(e.getValue());
+      final JComboBox<Object> box = new JComboBox<>(items.toArray());
       boxes.put(u, box);
       panel.add(box, c);
     }

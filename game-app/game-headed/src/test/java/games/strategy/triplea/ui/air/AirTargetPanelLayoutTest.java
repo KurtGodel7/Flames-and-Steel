@@ -5,7 +5,10 @@ import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import games.strategy.engine.data.GameData;
@@ -73,7 +76,7 @@ class AirTargetPanelLayoutTest {
             throw new IllegalStateException(e);
           }
         });
-    final MapPanel map = mock(MapPanel.class);
+    map = mock(MapPanel.class);
     when(map.getData()).thenReturn(data);
     final games.strategy.triplea.ui.UiContext ui = TestUi.create(data);
     final AirTargetPanel.Host frame =
@@ -113,6 +116,9 @@ class AirTargetPanelLayoutTest {
 
   // request 38: German bombers on a base next to Soviet land, at war
   private Territory base;
+  // request 40: two more German bases with bombers, and the mocked map (to check it never scrolls)
+  private final List<Territory> bases = new ArrayList<>();
+  private MapPanel map;
 
   private void prepareBase() {
     final GamePlayer russians = data.getPlayerList().getPlayerId("Russians");
@@ -126,9 +132,17 @@ class AirTargetPanelLayoutTest {
       if (!t.isWater()
           && t.isOwnedBy(germans)
           && data.getMap().getNeighbors(t).stream().anyMatch(n -> n.isOwnedBy(russians))) {
-        base = t;
-        break;
+        bases.add(t);
+        if (bases.size() == 3) {
+          break;
+        }
       }
+    }
+    base = bases.isEmpty() ? null : bases.get(0);
+    for (final Territory t : bases.subList(Math.min(1, bases.size()), bases.size())) {
+      data.performChange(
+          games.strategy.engine.data.changefactory.ChangeFactory.addUnits(
+              t, data.getUnitTypeList().getUnitTypeOrThrow("mediumBomber").create(2, germans)));
     }
     Assumptions.assumeTrue(base != null, "no German land next to the Soviets");
     data.performChange(
@@ -333,8 +347,12 @@ class AirTargetPanelLayoutTest {
     one.put(dive, 1);
     SwingUtilities.invokeAndWait(
         () -> {
-          panel.chooseFront(germans, zone, false);
-          reach.forEach(t -> panel.assign(t, one));
+          // request 40: each move clears the selection, so the base is picked again each time
+          reach.forEach(
+              t -> {
+                panel.chooseFront(germans, zone, false);
+                panel.assign(t, one);
+              });
         });
     flush();
     final BufferedImage shot = render(panel, WIDTH, HEIGHT);
@@ -416,5 +434,58 @@ class AirTargetPanelLayoutTest {
             .anyMatch(t -> t.contains("Fighters: Escort and Defend")),
         is(true));
     assertThat(buttons("Pick from list…").size(), is(1));
+  }
+  // ---- request 40: the player chooses the order
+
+  @Test
+  void openingAStageSelectsNothing() throws Exception {
+    startPanel(false);
+    assertThat(panel.selectedZone() == null, is(true));
+    verify(map, never()).centerOn(any());
+  }
+
+  @Test
+  void afterAMoveNothingIsSelectedAndTheMapHasNotScrolled() throws Exception {
+    startPanel(false);
+    final TargetAssignment move = firstMove(base);
+    final IntegerMap<UnitType> one = new IntegerMap<>();
+    one.put(move.unitType(), 1);
+    SwingUtilities.invokeAndWait(
+        () -> {
+          panel.chooseFront(germans, base, false);
+          panel.assign(move.target(), one);
+        });
+    flush();
+    assertThat(panel.staged().size(), is(1));
+    assertThat(panel.selectedZone() == null, is(true));
+    verify(map, never()).centerOn(any());
+  }
+
+  @Test
+  void aircraftOnThreeBasesMoveInTheOrderThePlayerChooses() throws Exception {
+    Assumptions.assumeTrue(bases.size() == 3, "fewer than three German bases at the front");
+    startPanel(false);
+    final List<Territory> order = List.of(bases.get(2), bases.get(0), bases.get(1));
+    for (final Territory b : order) {
+      final TargetAssignment move = firstMove(b);
+      final IntegerMap<UnitType> one = new IntegerMap<>();
+      one.put(move.unitType(), 1);
+      SwingUtilities.invokeAndWait(
+          () -> {
+            panel.chooseFront(germans, b, false);
+            panel.assign(move.target(), one);
+          });
+      flush();
+    }
+    assertThat(panel.staged().stream().map(TargetAssignment::zone).toList(), is(order));
+  }
+
+  @Test
+  void nextBaseSelectsOnlyWhenPressed() throws Exception {
+    startPanel(false);
+    assertThat(panel.selectedZone() == null, is(true));
+    SwingUtilities.invokeAndWait(() -> panel.nextBase(germans));
+    flush();
+    assertThat(panel.selectedZone() != null, is(true));
   }
 }
