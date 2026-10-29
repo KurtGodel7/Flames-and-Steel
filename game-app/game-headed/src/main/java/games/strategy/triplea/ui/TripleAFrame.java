@@ -886,10 +886,15 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
           () -> {
             final GamePlayer viewer =
                 AirBattleSummaryPanel.viewer(data, p -> getLocalPlayers().playing(p));
-            final javax.swing.JScrollPane scroll =
-                new javax.swing.JScrollPane(
-                    new AirBattleSummaryPanel(data, getUiContext(), report, viewer));
+            final AirBattleSummaryPanel summary =
+                new AirBattleSummaryPanel(data, getUiContext(), report, viewer);
+            // request 47: the window fits the screen, the battles scroll inside it and OK stays
+            // in view
+            final java.awt.Rectangle screen = usableScreen();
+            summary.setMaxViewportHeight(Math.min(600, screen.height - 220));
+            final javax.swing.JScrollPane scroll = new javax.swing.JScrollPane(summary);
             scroll.setBorder(null);
+            scroll.getVerticalScrollBar().setUnitIncrement(24);
             EventThreadJOptionPane.showMessageDialog(
                 TripleAFrame.this,
                 scroll,
@@ -900,6 +905,21 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
     } catch (RejectedExecutionException e) {
       // The thread pool may have been shutdown. Nothing to do.
     }
+  }
+
+  /** Request 47: the part of this window's screen not taken by the taskbar. */
+  private java.awt.Rectangle usableScreen() {
+    final java.awt.GraphicsConfiguration gc = getGraphicsConfiguration();
+    if (gc == null) {
+      return new java.awt.Rectangle(java.awt.Toolkit.getDefaultToolkit().getScreenSize());
+    }
+    final java.awt.Rectangle bounds = gc.getBounds();
+    final java.awt.Insets insets = java.awt.Toolkit.getDefaultToolkit().getScreenInsets(gc);
+    return new java.awt.Rectangle(
+        bounds.x + insets.left,
+        bounds.y + insets.top,
+        bounds.width - insets.left - insets.right,
+        bounds.height - insets.top - insets.bottom);
   }
 
   private void showMessageDialog(String displayMessage, String title, int type) {

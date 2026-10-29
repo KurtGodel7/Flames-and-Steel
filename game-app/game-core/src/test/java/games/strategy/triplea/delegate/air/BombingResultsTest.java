@@ -167,7 +167,7 @@ class BombingResultsTest {
     assertThat(pus(germans), is(before - 10));
     assertThat(
         hamburgRow().notes(),
-        hasItem("12 PUs of bombing damage, capped at 10 (2 × the territory's value)"));
+        hasItem("Bombing: 12 PU of damage, capped at 10 (twice the territory's value)"));
   }
 
   @Test

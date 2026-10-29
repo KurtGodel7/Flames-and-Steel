@@ -13,6 +13,7 @@ import games.strategy.triplea.formatter.MyFormatter;
 import games.strategy.triplea.formatter.PlayerNames;
 import games.strategy.triplea.image.HitPointBar;
 import games.strategy.triplea.image.UnitImageFactory.ImageKey;
+import java.awt.AlphaComposite;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Component;
@@ -42,29 +43,43 @@ import javax.swing.UIManager;
 import org.triplea.swing.WrapLayout;
 
 /**
- * Request 46: the "Air battles this round" window. One row per battle: the place, the attacker's
- * units and the defender's drawn with the map's unit images (destroyed ones greyed with a red X,
- * damaged ones with their hit-point bar, aborted bombers tagged, a bombed factory with its PU loss),
- * and a short line of what pictures can't say. Rows are grouped for the viewing nation into "Your
- * losses", "Allies' losses" and "Enemy losses", largest loss first, and tinted red where the
- * viewer's side lost more, green where the enemy did.
+ * Request 46: the "Air battles this round" window. One row per battle: the place, then each side's
+ * units behind their nation's small flag (request 47), drawn with the map's unit images: destroyed
+ * ones faded in their own colours with a red X, damaged ones with their hit-point bar, aborted
+ * bombers tagged, a bombed factory with its PU loss. A short line holds only what pictures can't
+ * show. Rows are grouped for the viewing nation: "Your losses" (it lost a unit or PUs; damage alone
+ * is not a loss), "Enemy losses", "Allies' losses", "Neutral losses" and "No losses"; within each,
+ * battles where the viewer's units were damaged come first (with a badge), then the largest loss.
+ * Tinted red where the viewer's side lost more, green where the enemy did.
  */
 public class AirBattleSummaryPanel extends JPanel implements Scrollable {
   private static final long serialVersionUID = 1L;
   public static final String YOUR_LOSSES = "Your losses";
-  public static final String ALLIES_LOSSES = "Allies' losses";
   public static final String ENEMY_LOSSES = "Enemy losses";
+  public static final String ALLIES_LOSSES = "Allies' losses";
+  public static final String NEUTRAL_LOSSES = "Neutral losses";
+  public static final String NO_LOSSES = "No losses";
+  /**
+   * Request 47: optional game property naming neutral garrisons, "Ireland=Irish,Andalusia=Spanish";
+   * a territory not named is "Ireland garrison".
+   */
+  public static final String NEUTRAL_NAMES = "FS Neutral Garrison Names";
+
   private static final Color LOSS = new Color(0xCD, 0x28, 0x1E);
   private static final Color GAIN = new Color(0x2E, 0xA0, 0x43);
   private static final Color CROSS = new Color(0xE0, 0x20, 0x20);
   // the window's width; rows of pictures and their notes wrap within it
   private static final int WIDTH = 760;
+  private static final String MINUS = "−";
 
   private final transient GameData data;
   private final transient UiContext uiContext;
   private final transient @Nullable GamePlayer viewer;
   // section title -> its rows, in the order shown (for tests)
   private final Map<String, List<Row>> sections = new LinkedHashMap<>();
+  // request 47: the damage badges shown, by place (for tests)
+  private final Map<String, String> badges = new LinkedHashMap<>();
+  private int maxViewportHeight = 600;
 
   public AirBattleSummaryPanel(
       final GameData data,
@@ -78,8 +93,7 @@ public class AirBattleSummaryPanel extends JPanel implements Scrollable {
     setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
     sort(report.rows());
     if (viewer != null) {
-      final JLabel who = label("Shown for " + PlayerNames.display(viewer), Font.ITALIC, 0);
-      add(who);
+      add(label("Shown for " + PlayerNames.display(viewer), Font.ITALIC, 0));
       add(gap(6));
     }
     sections.forEach(
@@ -97,12 +111,10 @@ public class AirBattleSummaryPanel extends JPanel implements Scrollable {
       final List<String> totals = new ArrayList<>();
       report
           .bombingTotals()
-          .forEach((nation, loss) -> totals.add(nation + " " + MINUS + loss + " PUs"));
+          .forEach((nation, loss) -> totals.add(nation + " " + MINUS + loss + " PU"));
       add(label(text("Strategic bombing this round: " + String.join(", ", totals)), Font.BOLD, 0));
     }
   }
-
-  private static final String MINUS = "−";
 
   /**
    * The nation the window is drawn for: the next nation to move that this screen plays (on one
@@ -134,47 +146,98 @@ public class AirBattleSummaryPanel extends JPanel implements Scrollable {
     return sections;
   }
 
+  /** Request 47: the damage badge of each row that has one, by place. */
+  public Map<String, String> getBadges() {
+    return badges;
+  }
+
+  /** Request 47: the tallest the scrolling area may be (the window must fit the screen). */
+  public void setMaxViewportHeight(final int height) {
+    maxViewportHeight = Math.max(120, height);
+  }
+
+  private @Nullable GamePlayer player(final String nation) {
+    return data.getPlayerList().getPlayerId(nation);
+  }
+
+  private boolean neutral(final String nation) {
+    final GamePlayer p = player(nation);
+    return p == null || p.isNull();
+  }
+
   private boolean ours(final String nation) {
-    final GamePlayer p = data.getPlayerList().getPlayerId(nation);
-    return viewer != null && p != null && AirCover.sameSide(viewer, p);
+    final GamePlayer p = player(nation);
+    return viewer != null && p != null && !p.isNull() && AirCover.sameSide(viewer, p);
+  }
+
+  private boolean enemy(final String nation) {
+    return !neutral(nation) && !ours(nation);
   }
 
   private void sort(final List<Row> rows) {
     if (viewer == null) {
-      sections.put("Air battles", byLoss(rows, n -> true));
+      sections.put("Air battles", order(rows, n -> true));
       return;
     }
-    final List<Row> yours = new ArrayList<>();
-    final List<Row> allies = new ArrayList<>();
-    final List<Row> enemies = new ArrayList<>();
+    final Map<String, List<Row>> by = new LinkedHashMap<>();
+    for (final String title :
+        List.of(YOUR_LOSSES, ENEMY_LOSSES, ALLIES_LOSSES, NEUTRAL_LOSSES, NO_LOSSES)) {
+      by.put(title, new ArrayList<>());
+    }
     for (final Row row : rows) {
-      if (row.hurt().contains(viewer.getName())) {
-        yours.add(row);
-      } else if (row.hurt().stream().anyMatch(this::ours)) {
-        allies.add(row);
+      // the nations that lost a unit or PUs here (damage alone is not a loss)
+      final java.util.Set<String> lost = row.lossValue().keySet();
+      final String title;
+      if (lost.contains(viewer.getName())) {
+        title = YOUR_LOSSES;
+      } else if (lost.stream().anyMatch(this::enemy)) {
+        title = ENEMY_LOSSES;
+      } else if (lost.stream().anyMatch(this::ours)) {
+        title = ALLIES_LOSSES;
+      } else if (lost.stream().anyMatch(this::neutral)) {
+        title = NEUTRAL_LOSSES;
       } else {
-        enemies.add(row);
+        title = NO_LOSSES;
       }
+      by.get(title).add(row);
     }
-    put(YOUR_LOSSES, byLoss(yours, viewer.getName()::equals));
-    put(ALLIES_LOSSES, byLoss(allies, n -> ours(n) && !n.equals(viewer.getName())));
-    put(ENEMY_LOSSES, byLoss(enemies, n -> !ours(n)));
+    final Map<String, Predicate<String>> whose =
+        Map.of(
+            YOUR_LOSSES, viewer.getName()::equals,
+            ENEMY_LOSSES, this::enemy,
+            ALLIES_LOSSES, n -> ours(n) && !n.equals(viewer.getName()),
+            NEUTRAL_LOSSES, this::neutral,
+            NO_LOSSES, n -> true);
+    by.forEach(
+        (title, list) -> {
+          if (!list.isEmpty()) {
+            sections.put(title, order(list, whose.get(title)));
+          }
+        });
   }
 
-  private void put(final String title, final List<Row> rows) {
-    if (!rows.isEmpty()) {
-      sections.put(title, rows);
-    }
-  }
-
-  /** Largest PU loss of these nations first; then most hits; then by place. */
-  private static List<Row> byLoss(final List<Row> rows, final Predicate<String> nations) {
+  /** Battles where the viewer's units were damaged first; then the largest loss; then by place. */
+  private List<Row> order(final List<Row> rows, final Predicate<String> nations) {
     return rows.stream()
         .sorted(
-            Comparator.comparingInt((Row r) -> -r.lossOf(nations))
+            Comparator.comparingInt((Row r) -> damagedOfViewer(r) > 0 ? 0 : 1)
+                .thenComparingInt(r -> -r.lossOf(nations))
                 .thenComparingInt(r -> -r.hitsOf(nations))
                 .thenComparing(Row::place))
         .toList();
+  }
+
+  /** Request 47: how many of the viewer's units here were damaged and survived. */
+  int damagedOfViewer(final Row row) {
+    if (viewer == null) {
+      return 0;
+    }
+    final List<Stack> all = new ArrayList<>(row.attackers());
+    all.addAll(row.defenders());
+    return all.stream()
+        .filter(s -> s.owner().equals(viewer.getName()) && !s.destroyed() && s.hits() > 0)
+        .mapToInt(Stack::count)
+        .sum();
   }
 
   /** Red where the viewer's side lost more, green where the enemy did, else none. */
@@ -183,14 +246,13 @@ public class AirBattleSummaryPanel extends JPanel implements Scrollable {
     if (viewer == null) {
       return null;
     }
-    final Predicate<String> own = this::ours;
-    final int lossOwn = row.lossOf(own);
-    final int lossEnemy = row.lossOf(own.negate());
+    final int lossOwn = row.lossOf(this::ours);
+    final int lossEnemy = row.lossOf(this::enemy);
     // equal PU losses (e.g. only damage): the side that took more hits lost more
     final int diff =
         lossOwn != lossEnemy
             ? Integer.compare(lossOwn, lossEnemy)
-            : Integer.compare(row.hitsOf(own), row.hitsOf(own.negate()));
+            : Integer.compare(row.hitsOf(this::ours), row.hitsOf(this::enemy));
     return diff > 0 ? LOSS : diff < 0 ? GAIN : null;
   }
 
@@ -205,33 +267,93 @@ public class AirBattleSummaryPanel extends JPanel implements Scrollable {
         BorderFactory.createCompoundBorder(
             BorderFactory.createLineBorder(tint == null ? blend(base, Color.GRAY, 0.5) : tint, 1),
             BorderFactory.createEmptyBorder(4, 6, 4, 6)));
-    panel.add(label(text(row.place()), Font.BOLD, 1));
+    final JPanel title = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+    title.setOpaque(false);
+    title.setAlignmentX(Component.LEFT_ALIGNMENT);
+    title.add(label(text(row.place()), Font.BOLD, 1));
+    // request 47: damage is never hidden: a badge in the viewer's colour
+    final int damaged = damagedOfViewer(row);
+    if (damaged > 0 && viewer != null) {
+      final String badge = damaged + " of yours damaged";
+      badges.put(row.place(), badge);
+      title.add(badge(badge, uiContext.getMapData().getPlayerColor(viewer.getName())));
+    }
+    panel.add(title);
     final JPanel units = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 2));
     units.setOpaque(false);
     units.setAlignmentX(Component.LEFT_ALIGNMENT);
-    row.attackers().forEach(s -> units.add(stackLabel(s)));
+    addSide(units, row.attackers(), row);
     if (!row.attackers().isEmpty() && !row.defenders().isEmpty()) {
       final JLabel against = new JLabel("against");
       against.setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 6));
       units.add(against);
     }
-    row.defenders().forEach(s -> units.add(stackLabel(s)));
+    addSide(units, row.defenders(), row);
     panel.add(units);
-    // the notes wrap within the row's width
-    final JLabel notes =
-        new JLabel(
-            "<html><div style='width:"
-                + (WIDTH - 130)
-                + "px'>"
-                + escape(text(String.join("; ", row.notes())))
-                + "</div></html>");
-    notes.setAlignmentX(Component.LEFT_ALIGNMENT);
-    panel.add(notes);
+    // request 47: only what pictures can't show, each part kept whole, wrapping to the width
+    if (!row.notes().isEmpty()) {
+      final JPanel notes = new JPanel(new WrapLayout(FlowLayout.LEFT, 0, 0));
+      notes.setOpaque(false);
+      notes.setAlignmentX(Component.LEFT_ALIGNMENT);
+      for (int i = 0; i < row.notes().size(); i++) {
+        notes.add(new JLabel(text(row.notes().get(i)) + (i < row.notes().size() - 1 ? "  ·  " : "")));
+      }
+      panel.add(notes);
+    }
     return panel;
   }
 
-  private static String escape(final String s) {
-    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+  /** Request 47: each nation's units behind its small flag (a neutral garrison by name). */
+  private void addSide(final JPanel units, final List<Stack> side, final Row row) {
+    String owner = null;
+    for (final Stack s : side) {
+      if (!s.owner().equals(owner)) {
+        owner = s.owner();
+        units.add(nationLabel(owner, row.place()));
+      }
+      units.add(stackLabel(s, row.place()));
+    }
+  }
+
+  private JLabel nationLabel(final String nation, final String place) {
+    final GamePlayer p = player(nation);
+    if (p == null || p.isNull()) {
+      final JLabel name = new JLabel(garrisonName(place) + ":");
+      name.setFont(name.getFont().deriveFont(Font.ITALIC));
+      return name;
+    }
+    final JLabel flag = new JLabel(new ImageIcon(uiContext.getFlagImageFactory().getSmallFlag(p)));
+    flag.setToolTipText(PlayerNames.display(p));
+    return flag;
+  }
+
+  /** Request 47: "Irish garrison" (from the game property), else "Ireland garrison". */
+  String garrisonName(final String place) {
+    final String names;
+    try (GameData.Unlocker ignored = data.acquireReadLock()) {
+      names = data.getProperties().get(NEUTRAL_NAMES, "");
+    }
+    for (final String pair : names.split("[,;]")) {
+      final String[] kv = pair.split("=", 2);
+      if (kv.length == 2 && kv[0].trim().equals(place)) {
+        return kv[1].trim() + " garrison";
+      }
+    }
+    return place + " garrison";
+  }
+
+  private static JLabel badge(final String text, final @Nullable Color color) {
+    final Color back = color == null ? Color.GRAY : color;
+    final JLabel badge = new JLabel(" " + text + " ");
+    badge.setOpaque(true);
+    badge.setBackground(back);
+    // dark text on a light colour, white on a dark one
+    final double light =
+        (0.299 * back.getRed() + 0.587 * back.getGreen() + 0.114 * back.getBlue()) / 255;
+    badge.setForeground(light > 0.6 ? Color.BLACK : Color.WHITE);
+    badge.setFont(badge.getFont().deriveFont(Font.BOLD, badge.getFont().getSize2D() - 1f));
+    badge.setBorder(BorderFactory.createEmptyBorder(1, 3, 1, 3));
+    return badge;
   }
 
   private static Color background() {
@@ -251,24 +373,26 @@ public class AirBattleSummaryPanel extends JPanel implements Scrollable {
     return PlayerNames.inText(raw, data);
   }
 
-  JLabel stackLabel(final Stack stack) {
+  JLabel stackLabel(final Stack stack, final String place) {
     final GamePlayer owner = data.getPlayerList().getPlayerId(stack.owner());
     final UnitType type = data.getUnitTypeList().getUnitTypeOrThrow(stack.unitType());
     final JLabel label = new JLabel(stack.count() > 1 ? String.valueOf(stack.count()) : "");
     label.setIcon(icon(owner, type, stack));
     label.setHorizontalTextPosition(SwingConstants.RIGHT);
     label.setFont(label.getFont().deriveFont(Font.BOLD));
-    label.setToolTipText(describe(owner, type, stack));
+    label.setToolTipText(describe(owner, type, stack, place));
     return label;
   }
 
-  /** "2 British strategic bombers, damaged, aborted". */
-  String describe(final GamePlayer owner, final UnitType type, final Stack stack) {
+  /** "2 British strategic bombers, destroyed" or "1 Irish garrison infantry, destroyed". */
+  String describe(
+      final GamePlayer owner, final UnitType type, final Stack stack, final String place) {
     final List<String> parts = new ArrayList<>();
+    final String nation = owner.isNull() ? garrisonName(place) : AirCombat.adjective(owner);
     parts.add(
         stack.count()
             + " "
-            + AirCombat.adjective(owner)
+            + nation
             + " "
             + MyFormatter.pluralize(AirCombat.unitName(type), stack.count()));
     if (stack.destroyed()) {
@@ -280,7 +404,7 @@ public class AirBattleSummaryPanel extends JPanel implements Scrollable {
       parts.add("aborted");
     }
     if (stack.bombed() > 0) {
-      parts.add("bombed: " + PlayerNames.display(owner) + " " + MINUS + stack.bombed() + " PUs");
+      parts.add("bombed: " + MINUS + stack.bombed() + " PU");
     }
     return String.join(", ", parts);
   }
@@ -302,7 +426,10 @@ public class AirBattleSummaryPanel extends JPanel implements Scrollable {
     final Graphics2D g = image.createGraphics();
     g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
     if (stack.destroyed()) {
-      g.drawImage(greyed(base), 0, 0, null);
+      // request 47: faded in its own colours (a destroyed British bomber is still British)
+      g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.45f));
+      g.drawImage(base.getImage(), 0, 0, null);
+      g.setComposite(AlphaComposite.SrcOver);
       g.setColor(CROSS);
       g.setStroke(new BasicStroke(Math.max(2f, width / 14f), BasicStroke.CAP_ROUND, 0));
       final int m = Math.max(2, width / 8);
@@ -320,27 +447,6 @@ public class AirBattleSummaryPanel extends JPanel implements Scrollable {
     }
     g.dispose();
     return new ImageIcon(image);
-  }
-
-  /** The icon in faded grey (drawn at once, unlike GrayFilter's image, which loads later). */
-  private static BufferedImage greyed(final ImageIcon icon) {
-    final int width = Math.max(1, icon.getIconWidth());
-    final int height = Math.max(1, icon.getIconHeight());
-    final BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
-    final Graphics2D g = image.createGraphics();
-    g.drawImage(icon.getImage(), 0, 0, null);
-    g.dispose();
-    for (int y = 0; y < height; y++) {
-      for (int x = 0; x < width; x++) {
-        final int argb = image.getRGB(x, y);
-        final int alpha = (argb >>> 24) * 3 / 4;
-        final int grey =
-            (((argb >> 16) & 0xFF) * 30 + ((argb >> 8) & 0xFF) * 59 + (argb & 0xFF) * 11) / 100;
-        final int faded = 96 + grey * 5 / 8;
-        image.setRGB(x, y, (alpha << 24) | (faded << 16) | (faded << 8) | faded);
-      }
-    }
-    return image;
   }
 
   /** A small rounded tag at the top of the icon; returns where the next tag goes. */
@@ -375,11 +481,11 @@ public class AirBattleSummaryPanel extends JPanel implements Scrollable {
     return gap;
   }
 
-  // rows fit the window's width (pictures wrap); the window scrolls down
+  // rows fit the window's width (pictures and notes wrap); the window scrolls down
 
   @Override
   public Dimension getPreferredScrollableViewportSize() {
-    return new Dimension(WIDTH, Math.min(600, getPreferredSize().height));
+    return new Dimension(WIDTH, Math.min(maxViewportHeight, getPreferredSize().height));
   }
 
   @Override

@@ -143,7 +143,7 @@ class Request46Test {
     final List<Stack> aa = stacks(hamburgRow.defenders(), "aaGun");
     assertThat(aa.size(), is(1));
     assertThat(aa.get(0).destroyed(), is(false));
-    assertThat(hamburgRow.notes(), hasItem("German AA (1 gun): 1 hit"));
+    assertThat(hamburgRow.notes(), hasItem("AA: 1 hit"));
     assertThat(hamburgRow.hurt(), contains("British", "Germans"));
     assertThat(hamburgRow.lossValue().get("Germans") > 0, is(true));
   }
@@ -169,61 +169,75 @@ class Request46Test {
     assertThat(hamburgRow.lossValue().get("Germans"), is(loss));
   }
 
-  @Test
-  void theWindowPutsTheViewersLossesFirstAndNeverShowsInternalNames() throws Exception {
-    final AirBattleReport report = picturedRound();
-    final List<String> texts = new ArrayList<>();
-    final List<Map<String, List<Row>>> sections = new ArrayList<>();
-    for (final GamePlayer viewer : List.of(germans, british)) {
-      final AirBattleWindowPreview.Seen seen = AirBattleWindowPreview.draw(data, report, viewer);
-      sections.add(seen.sections());
-      texts.addAll(seen.texts());
-    }
-
-    // Germans: Hamburg (conscript lost) is theirs; Kiev (only Soviet losses) is the enemy's
-    final Map<String, List<Row>> german = sections.get(0);
-    assertThat(
-        german.get(AirBattleSummaryPanel.YOUR_LOSSES).stream().map(Row::place).toList(),
-        hasItem("Hamburg"));
-    assertThat(
-        german.get(AirBattleSummaryPanel.ENEMY_LOSSES).stream().map(Row::place).toList(),
-        hasItem("Kiev"));
-    assertThat(german.keySet().iterator().next(), is(AirBattleSummaryPanel.YOUR_LOSSES));
-    // British: their aborted bomber puts Hamburg under their own losses too
-    assertThat(
-        sections.get(1).get(AirBattleSummaryPanel.YOUR_LOSSES).stream().map(Row::place).toList(),
-        hasItem("Hamburg"));
-    // no XML unit names such as "strategicBomber" or "aaGun" anywhere in the window
-    final Pattern internal = Pattern.compile("\\b[a-z]+[A-Z][A-Za-z]*\\b");
-    for (final String text : texts) {
-      assertThat(text, internal.matcher(text).find(), is(false));
-    }
-    assertThat(texts, not(empty()));
-  }
-
   /**
-   * A round with several battles, seen in the window: two British strategic bombers strike
-   * Hamburg and one bombs its factory while German fighters defend; German dive
-   * bombers strike Kiev.
+   * Request 47, the round in James's screenshot: German fighters over Hamburg shoot down the
+   * British strategic bomber striking it, one fighter damaged by its return fire; another British
+   * bomber strikes neutral Ireland; German dive bombers strike Kiev.
    */
-  private AirBattleReport picturedRound() {
-    add(london, british, "strategicBomber", 3);
-    add(hamburg, germans, "fighter", 2);
+  private AirBattleReport screenshotRound() {
+    add(london, british, "strategicBomber", 2);
+    add(hamburg, germans, "fighter", 4);
     final Territory cracow = t("Cracow");
-    data.getProperties()
-        .getEditablePropertiesByName()
-        .get(AirCombat.DOGFIGHT_ROUNDS)
-        .setValueIfValid(2);
     return report(
         new AirStageRunner(data)
-            .die(2)
+            .die(0)
             .bombers(
                 british,
-                a(london, "strategicBomber", 2, TargetKind.LAND, "Hamburg"),
-                a(london, "strategicBomber", 1, TargetKind.STRATEGIC, "Hamburg"))
+                a(london, "strategicBomber", 1, TargetKind.LAND, "Hamburg"),
+                a(london, "strategicBomber", 1, TargetKind.LAND, "Ireland"))
             .bombers(germans, a(cracow, "diveBomber", 2, TargetKind.LAND, "Kiev"))
             .cover(
-                germans, new TargetAssignment(hamburg, type("fighter"), 2, AirCover.over(hamburg))));
+                germans, new TargetAssignment(hamburg, type("fighter"), 4, AirCover.over(hamburg))));
   }
 
+  @Test
+  void request47TheWindowSortsDamageAndNeutralsAndShowsNoInternalNames() throws Exception {
+    final AirBattleReport report = screenshotRound();
+    final Row hamburgRow = row(report, "Hamburg");
+    // the pictures show the losses: no losses sentence, only what pictures can't show
+    assertThat(
+        hamburgRow.notes().stream().noneMatch(n -> n.contains("lost") || n.contains("damaged")),
+        is(true));
+    assertThat(stacks(hamburgRow.attackers(), "strategicBomber").get(0).destroyed(), is(true));
+    assertThat(
+        stacks(hamburgRow.defenders(), "fighter").stream().anyMatch(s -> s.hits() > 0),
+        is(true));
+    assertThat(hamburgRow.lossValue().containsKey("Germans"), is(false));
+
+    final AirBattleWindowPreview.Seen german = AirBattleWindowPreview.draw(data, report, germans);
+    final Map<String, List<Row>> sections = german.sections();
+    // damage alone is not a loss: Hamburg is under Enemy losses, first there, with its badge
+    assertThat(sections.containsKey(AirBattleSummaryPanel.YOUR_LOSSES), is(false));
+    final List<String> enemy =
+        sections.get(AirBattleSummaryPanel.ENEMY_LOSSES).stream().map(Row::place).toList();
+    assertThat(enemy.get(0), is("Hamburg"));
+    assertThat(enemy, hasItem("Kiev"));
+    assertThat(german.badges().get("Hamburg"), is("1 of yours damaged"));
+    assertThat(
+        sections.get(AirBattleSummaryPanel.NEUTRAL_LOSSES).stream().map(Row::place).toList(),
+        contains("Ireland"));
+    // the neutral side is named, never "Neutral"; each nation's side has its flag
+    assertThat(german.texts(), hasItem("Ireland garrison:"));
+    assertThat(
+        german.texts().stream()
+            .filter(s -> !s.equals(AirBattleSummaryPanel.NEUTRAL_LOSSES))
+            .noneMatch(s -> s.contains("Neutral")),
+        is(true));
+    assertThat(german.texts(), hasItem("1 Ireland garrison infantry, destroyed"));
+    assertThat(german.texts(), hasItem("British"));
+    assertThat(german.texts(), hasItem("Germans"));
+    // no XML unit names such as "strategicBomber" or "aaGun" anywhere in the window
+    final Pattern internal = Pattern.compile("\b[a-z]+[A-Z][A-Za-z]*\b");
+    for (final String text : german.texts()) {
+      assertThat(text, internal.matcher(text).find(), is(false));
+    }
+    // British view of the same round: they lost a bomber at Hamburg
+    final AirBattleWindowPreview.Seen britishView =
+        AirBattleWindowPreview.draw(data, report, british);
+    assertThat(
+        britishView.sections().get(AirBattleSummaryPanel.YOUR_LOSSES).stream()
+            .map(Row::place)
+            .toList(),
+        hasItem("Hamburg"));
+  }
 }

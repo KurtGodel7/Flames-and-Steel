@@ -272,7 +272,7 @@ public class AirCombatDelegate extends BaseTripleADelegate {
     void bombed(final GamePlayer victim, final List<Unit> targets, final int loss) {
       if (targets.isEmpty()) {
         // no factory or SPC picture to carry the loss
-        notes.add(victim.getName() + " " + MINUS + loss + " PUs from bombing");
+        notes.add(MINUS + loss + " PU");
       } else {
         bombed.merge(targets.get(0), loss, Integer::sum);
       }
@@ -296,8 +296,6 @@ public class AirCombatDelegate extends BaseTripleADelegate {
           new java.util.HashMap<>();
       final Map<String, Integer> lossValue = new LinkedHashMap<>();
       final Set<String> hurt = new LinkedHashSet<>();
-      final Map<GamePlayer, List<Unit>> lostBy = new LinkedHashMap<>();
-      final Map<GamePlayer, List<Unit>> damagedBy = new LinkedHashMap<>();
       for (final Unit unit : shown) {
         final GamePlayer owner = unit.getOwner();
         if (destroyed(unit)) {
@@ -309,10 +307,8 @@ public class AirCombatDelegate extends BaseTripleADelegate {
                   .getInt(unit.getType());
           lossValue.merge(owner.getName(), cost, Integer::sum);
           hurt.add(owner.getName());
-          lostBy.computeIfAbsent(owner, k -> new ArrayList<>()).add(unit);
         } else if (damaged(unit)) {
           hurt.add(owner.getName());
-          damagedBy.computeIfAbsent(owner, k -> new ArrayList<>()).add(unit);
         }
       }
       pusLost.forEach(
@@ -351,23 +347,8 @@ public class AirCombatDelegate extends BaseTripleADelegate {
                     (Integer) key.get(5));
             (AirCover.sameSide(attacker, owner) ? attackers : defenders).add(stack);
           });
-      // each nation's losses first, then how the battle went
+      // request 47: text only for what the pictures can't show (they show losses and damage)
       final List<String> text = new ArrayList<>();
-      final Set<GamePlayer> nations = new LinkedHashSet<>(lostBy.keySet());
-      nations.addAll(damagedBy.keySet());
-      for (final GamePlayer nation : nations) {
-        final List<String> parts = new ArrayList<>();
-        if (lostBy.containsKey(nation)) {
-          parts.add("lost " + countText(lostBy.get(nation)));
-        }
-        if (damagedBy.containsKey(nation)) {
-          parts.add(countText(damagedBy.get(nation)) + " damaged");
-        }
-        text.add(nation.getName() + " " + String.join(", ", parts));
-      }
-      if (hurt.isEmpty()) {
-        text.add("No hits");
-      }
       if (dogfightRounds > 0) {
         text.add(dogfightRounds + MyFormatter.pluralize(" dogfight round", dogfightRounds));
       }
@@ -381,16 +362,6 @@ public class AirCombatDelegate extends BaseTripleADelegate {
           List.copyOf(hurt));
     }
 
-    /** "1 strategic bomber, 2 fighters" in display names. */
-    private static String countText(final List<Unit> units) {
-      final Map<games.strategy.engine.data.UnitType, Integer> byType = new LinkedHashMap<>();
-      units.forEach(u -> byType.merge(u.getType(), 1, Integer::sum));
-      final List<String> parts = new ArrayList<>();
-      byType.forEach(
-          (type, n) ->
-              parts.add(n + " " + MyFormatter.pluralize(AirCombat.unitName(type), n)));
-      return String.join(", ", parts);
-    }
   }
 
   /**
@@ -446,12 +417,9 @@ public class AirCombatDelegate extends BaseTripleADelegate {
               abortedByAa);
     }
     if (placeLog != null) {
+      // request 47: "AA: 1 hit" (the guns are in the pictures)
       placeLog.notes.add(
-          AirCombat.adjective(AirCombat.chooser(aaGuns))
-              + " AA ("
-              + aaGuns.size()
-              + MyFormatter.pluralize(" gun", aaGuns.size())
-              + "): "
+          "AA: "
               + (hit.all().isEmpty()
                   ? "no hits"
                   : hit.all().size() + MyFormatter.pluralize(" hit", hit.all().size())));
@@ -866,7 +834,7 @@ public class AirCombatDelegate extends BaseTripleADelegate {
               abortedBefore);
       lines.add(title + ": no attack (" + AirCombat.sideText(abortedBefore) + " aborted)");
       if (placeLog != null) {
-        placeLog.notes.add(strikeNote(strike) + ": no attack, every bomber aborted");
+        placeLog.notes.add(strikeNote(strike) + ": no attack, all bombers aborted");
       }
       return;
     }
@@ -974,7 +942,7 @@ public class AirCombatDelegate extends BaseTripleADelegate {
       strikeResult(title, strike, result);
       lines.add(title + ": " + result);
       if (placeLog != null) {
-        placeLog.notes.add(strikeNote(strike) + ": no attack, every bomber lost or aborted");
+        placeLog.notes.add(strikeNote(strike) + ": no attack, all bombers lost or aborted");
       }
       return;
     }
@@ -1099,11 +1067,10 @@ public class AirCombatDelegate extends BaseTripleADelegate {
             + lossAndAborts(strike, abortedNow));
   }
 
-  /** Request 46: "British strike on Kiev" or "British bombing of Hamburg", for a row's notes. */
+  /** Request 47: "Strike" or "Bombing", for a row's notes. */
   private static String strikeNote(final Strike strike) {
-    return AirCombat.adjective(AirCombat.chooser(strike.aircraft()))
-        + (strike.target().kind() == TargetKind.STRATEGIC ? " bombing of " : " strike on ")
-        + strike.target().territory().getName();
+    // request 47: the place is the row's title and the nation its flag
+    return strike.target().kind() == TargetKind.STRATEGIC ? "Bombing" : "Strike";
   }
 
   /** "2 infantry destroyed, 1 tank damaged". */
@@ -1234,7 +1201,7 @@ public class AirCombatDelegate extends BaseTripleADelegate {
       placeLog.bombed(victim, targets, loss);
       if (damage > capLeft) {
         placeLog.notes.add(
-            damage + " PUs of bombing damage, capped at " + capLeft + " (2 × the territory's value)");
+            "Bombing: " + damage + " PU of damage, capped at " + capLeft + " (twice the territory's value)");
       }
     }
     final Raid raid = new Raid(attacker, t, victim, loss);

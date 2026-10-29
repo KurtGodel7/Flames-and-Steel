@@ -24,7 +24,8 @@ import javax.swing.SwingUtilities;
  */
 public final class AirBattleWindowPreview {
   /** The window's sections (title to rows) and all its label and tooltip texts. */
-  public record Seen(Map<String, List<Row>> sections, List<String> texts) {}
+  public record Seen(
+      Map<String, List<Row>> sections, List<String> texts, Map<String, String> badges) {}
 
   private AirBattleWindowPreview() {}
 
@@ -37,10 +38,11 @@ public final class AirBattleWindowPreview {
         () -> {
           darkLook();
           final AirBattleSummaryPanel panel = new AirBattleSummaryPanel(data, ui, report, viewer);
+          panel.setMaxViewportHeight(3000);
           final List<String> texts = new java.util.ArrayList<>();
           snap(panel, "build/preview/request46_" + viewer.getName() + ".png");
           collectText(panel, texts);
-          seen[0] = new Seen(panel.getSections(), texts);
+          seen[0] = new Seen(panel.getSections(), texts, panel.getBadges());
         });
     return seen[0];
   }
