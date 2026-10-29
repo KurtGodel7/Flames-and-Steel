@@ -45,6 +45,10 @@ class UnitScrollerModel {
             .build();
     final List<Unit> units = t.getMatches(moveableUnitOwnedByMe);
     units.removeAll(skippedUnits);
+    // Flames and Steel (request 49): aircraft don't move in a normal move; not "units to move"
+    if (games.strategy.triplea.delegate.air.AirBases.usesBases(t.getData())) {
+      units.removeIf(games.strategy.triplea.delegate.air.AirBases::isAircraft);
+    }
     return units;
   }
 

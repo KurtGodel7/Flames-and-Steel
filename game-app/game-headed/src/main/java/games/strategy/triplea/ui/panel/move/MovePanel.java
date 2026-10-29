@@ -172,6 +172,12 @@ public class MovePanel extends AbstractMovePanel {
 
           // basic match criteria only
           final Predicate<Unit> unitsToMoveMatch = getMovableMatch(null, List.of());
+          // request 49: a click on nothing but own aircraft says why, as stock does for an
+          // illegal move (no window)
+          if (selectedUnits.isEmpty() && onlyOwnAircraft(units, territory, mouseDetails)) {
+            setStatusErrorMessage(AIRCRAFT_DONT_MOVE_HERE);
+            return;
+          }
           if (units.isEmpty() && selectedUnits.isEmpty() && !mouseDetails.isShiftDown()) {
             final List<Unit> unitsToMove = territory.getMatches(unitsToMoveMatch);
             if (unitsToMove.isEmpty()) {
@@ -1301,6 +1307,36 @@ public class MovePanel extends AbstractMovePanel {
     return option != JOptionPane.OK_OPTION;
   }
 
+  /** Request 49: whether the game puts aircraft on the map (they fly only in the air stages). */
+  private boolean airOnMap() {
+    try (GameData.Unlocker ignored = getData().acquireReadLock()) {
+      return games.strategy.triplea.delegate.air.AirBases.usesBases(getData());
+    }
+  }
+
+  /**
+   * Request 49: whether the click picked only the player's aircraft: a click on an aircraft stack,
+   * or a Shift-click or a click beside the stacks where nothing else of the player's could move.
+   */
+  private boolean onlyOwnAircraft(
+      final List<Unit> clicked, final Territory territory, final MouseDetails md) {
+    if (isEditMode() || !airOnMap()) {
+      return false;
+    }
+    final Predicate<Unit> aircraft = games.strategy.triplea.delegate.air.AirBases::isAircraft;
+    final Predicate<Unit> mine = Matches.unitIsOwnedBy(getCurrentPlayer());
+    final Collection<Unit> picked =
+        clicked.isEmpty() || md.isShiftDown() ? territory.getUnits() : clicked;
+    final List<Unit> own = picked.stream().filter(mine).toList();
+    return !own.isEmpty()
+        && own.stream().anyMatch(aircraft)
+        && own.stream().noneMatch(getMovableMatch(null, List.of()));
+  }
+
+  /** Request 49: the reason given when only aircraft were clicked in a normal move. */
+  static final String AIRCRAFT_DONT_MOVE_HERE =
+      "Aircraft move only in the air stages and at Planes Go Home.";
+
   private Predicate<Unit> getUnloadableMatch(final Route route, final Collection<Unit> units) {
     return getMovableMatch(route, units).and(Matches.unitIsLand());
   }
@@ -1319,6 +1355,11 @@ public class MovePanel extends AbstractMovePanel {
     }
     if (!nonCombat) {
       movableBuilder.and(Matches.unitCanNotMoveDuringCombatMove().negate());
+    }
+    // Flames and Steel (request 49): aircraft move only in the air stages; selection skips them as
+    // stock skips units that can't move (those on a carrier still sail with it)
+    if (!isEditMode() && airOnMap()) {
+      movableBuilder.and(u -> !games.strategy.triplea.delegate.air.AirBases.isAircraft(u));
     }
     if (route != null) {
       final Predicate<Unit> enoughMovement =

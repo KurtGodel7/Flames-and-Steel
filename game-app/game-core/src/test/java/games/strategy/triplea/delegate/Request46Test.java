@@ -223,7 +223,7 @@ class Request46Test {
             .filter(s -> !s.equals(AirBattleSummaryPanel.NEUTRAL_LOSSES))
             .noneMatch(s -> s.contains("Neutral")),
         is(true));
-    assertThat(german.texts(), hasItem("1 Ireland garrison infantry, destroyed"));
+    assertThat(german.texts(), hasItem("Ireland garrison infantry: destroyed by the strike, 3 PU"));
     assertThat(german.texts(), hasItem("British"));
     assertThat(german.texts(), hasItem("Germans"));
     // no XML unit names such as "strategicBomber" or "aaGun" anywhere in the window

@@ -724,12 +724,8 @@ public final class AirTargetPanel extends ActionPanel {
       problem = AirStage.problem(player, stage, Choice.of(staged), allied, revealed);
     }
     if (problem.isPresent()) {
+      // request 49: as stock reports an illegal move: red text in the status bar, no window
       frame.setStatusErrorMessage(problem.get());
-      JOptionPane.showMessageDialog(
-          JOptionPane.getFrameForComponent(this),
-          problem.get(),
-          stepTitle(),
-          JOptionPane.WARNING_MESSAGE);
       return;
     }
     clearSelection();

@@ -304,9 +304,31 @@ public class AirBattleSummaryPanel extends JPanel implements Scrollable {
   }
 
   /** Request 47: each nation's units behind its small flag (a neutral garrison by name). */
+  /**
+   * Request 49: the side's survivors first, then a thin divider, "Lost · 34 PU" and the units it
+   * lost; each nation's units behind its flag.
+   */
   private void addSide(final JPanel units, final List<Stack> side, final Row row) {
+    final List<Stack> survivors = side.stream().filter(s -> !s.destroyed()).toList();
+    final List<Stack> lost = side.stream().filter(Stack::destroyed).toList();
+    addWithFlags(units, survivors, row);
+    if (!lost.isEmpty()) {
+      final javax.swing.JSeparator divider =
+          new javax.swing.JSeparator(javax.swing.SwingConstants.VERTICAL);
+      divider.setPreferredSize(new Dimension(2, 36));
+      units.add(divider);
+      final int value = lost.stream().mapToInt(Stack::value).sum();
+      final JLabel label = new JLabel("Lost · " + value + " PU");
+      label.setFont(label.getFont().deriveFont(Font.BOLD, label.getFont().getSize2D() - 1f));
+      label.setForeground(blend(label.getForeground(), LOSS, 0.6));
+      units.add(label);
+      addWithFlags(units, lost, row);
+    }
+  }
+
+  private void addWithFlags(final JPanel units, final List<Stack> stacks, final Row row) {
     String owner = null;
-    for (final Stack s : side) {
+    for (final Stack s : stacks) {
       if (!s.owner().equals(owner)) {
         owner = s.owner();
         units.add(nationLabel(owner, row.place()));
@@ -376,7 +398,16 @@ public class AirBattleSummaryPanel extends JPanel implements Scrollable {
   JLabel stackLabel(final Stack stack, final String place) {
     final GamePlayer owner = data.getPlayerList().getPlayerId(stack.owner());
     final UnitType type = data.getUnitTypeList().getUnitTypeOrThrow(stack.unitType());
-    final JLabel label = new JLabel(stack.count() > 1 ? String.valueOf(stack.count()) : "");
+    // request 49: a damaged survivor with more than 2 hit points says how many are left, "4/5"
+    final int hitPoints = type.getUnitAttachment().getHitPoints();
+    final List<String> text = new ArrayList<>();
+    if (stack.count() > 1) {
+      text.add(String.valueOf(stack.count()));
+    }
+    if (!stack.destroyed() && stack.hits() > 0 && hitPoints > 2) {
+      text.add((hitPoints - stack.hits()) + "/" + hitPoints);
+    }
+    final JLabel label = new JLabel(String.join(" ", text));
     label.setIcon(icon(owner, type, stack));
     label.setHorizontalTextPosition(SwingConstants.RIGHT);
     label.setFont(label.getFont().deriveFont(Font.BOLD));
@@ -384,29 +415,39 @@ public class AirBattleSummaryPanel extends JPanel implements Scrollable {
     return label;
   }
 
-  /** "2 British strategic bombers, destroyed" or "1 Irish garrison infantry, destroyed". */
+  /**
+   * Request 49: the unit, its nation and what happened: "America Pacific cruiser: destroyed by
+   * the strike", "America Pacific battleship: 4 of 5 hit points left, damaged by the strike",
+   * "Japanese torpedo bomber: damaged in the interception, aborted, then destroyed by the ships'
+   * return fire".
+   */
   String describe(
       final GamePlayer owner, final UnitType type, final Stack stack, final String place) {
-    final List<String> parts = new ArrayList<>();
     final String nation = owner.isNull() ? garrisonName(place) : AirCombat.adjective(owner);
-    parts.add(
-        stack.count()
-            + " "
+    final String name =
+        (stack.count() > 1 ? stack.count() + " " : "")
             + nation
             + " "
-            + MyFormatter.pluralize(AirCombat.unitName(type), stack.count()));
-    if (stack.destroyed()) {
-      parts.add("destroyed");
-    } else if (stack.hits() > 0) {
-      parts.add(stack.hits() + MyFormatter.pluralize(" hit", stack.hits()) + " taken");
+            + MyFormatter.pluralize(AirCombat.unitName(type), stack.count());
+    final List<String> parts = new ArrayList<>();
+    final int hitPoints = type.getUnitAttachment().getHitPoints();
+    if (!stack.destroyed() && stack.hits() > 0 && hitPoints > 1) {
+      parts.add((hitPoints - stack.hits()) + " of " + hitPoints + " hit points left");
     }
-    if (stack.aborted()) {
+    if (!stack.story().isEmpty()) {
+      parts.add(stack.story());
+    } else if (stack.destroyed()) {
+      parts.add("destroyed");
+    } else if (stack.aborted()) {
       parts.add("aborted");
     }
     if (stack.bombed() > 0) {
       parts.add("bombed: " + MINUS + stack.bombed() + " PU");
     }
-    return String.join(", ", parts);
+    if (stack.destroyed() && stack.value() > 0) {
+      parts.add(stack.value() + " PU");
+    }
+    return name + ": " + (parts.isEmpty() ? "no hits" : String.join(", ", parts));
   }
 
   private ImageIcon icon(final GamePlayer owner, final UnitType type, final Stack stack) {
@@ -426,15 +467,17 @@ public class AirBattleSummaryPanel extends JPanel implements Scrollable {
     final Graphics2D g = image.createGraphics();
     g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
     if (stack.destroyed()) {
-      // request 47: faded in its own colours (a destroyed British bomber is still British)
-      g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.45f));
+      // request 47: faded in its own colours; request 49: at 60% with a thinner, see-through X,
+      // so a cruiser still looks like a cruiser
+      g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.6f));
       g.drawImage(base.getImage(), 0, 0, null);
-      g.setComposite(AlphaComposite.SrcOver);
+      g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.7f));
       g.setColor(CROSS);
-      g.setStroke(new BasicStroke(Math.max(2f, width / 14f), BasicStroke.CAP_ROUND, 0));
-      final int m = Math.max(2, width / 8);
+      g.setStroke(new BasicStroke(Math.max(1.5f, width / 26f), BasicStroke.CAP_ROUND, 0));
+      final int m = Math.max(2, width / 6);
       g.drawLine(m, m, width - m, height - m);
       g.drawLine(width - m, m, m, height - m);
+      g.setComposite(AlphaComposite.SrcOver);
     } else {
       g.drawImage(base.getImage(), 0, 0, null);
     }
@@ -442,7 +485,9 @@ public class AirBattleSummaryPanel extends JPanel implements Scrollable {
     if (stack.bombed() > 0) {
       tagTop = tag(g, MINUS + stack.bombed() + " PU", LOSS, width, tagTop);
     }
-    if (stack.aborted()) {
+    // request 49: one state per unit: a destroyed bomber shows the X only (the tooltip says it
+    // aborted first)
+    if (stack.aborted() && !stack.destroyed()) {
       tag(g, "aborted", new Color(0x60, 0x60, 0x60), width, tagTop);
     }
     g.dispose();

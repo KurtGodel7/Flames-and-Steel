@@ -197,8 +197,8 @@ public class AirBases {
       return Optional.empty();
     }
     return Optional.of(
-        "Aircraft fly only in the air phase and at round end; carriers take the aircraft on them"
-            + " with them.");
+        "Aircraft move only in the air stages and at Planes Go Home; carriers take the aircraft on"
+            + " them with them.");
   }
 
   /**

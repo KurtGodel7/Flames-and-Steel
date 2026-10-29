@@ -251,6 +251,10 @@ public class AirCombatDelegate extends BaseTripleADelegate {
     private final Map<GamePlayer, Integer> pusLost = new LinkedHashMap<>();
     private final List<String> notes = new ArrayList<>();
     private int dogfightRounds;
+    // request 49: how each unit fared, for its tooltip: what first damaged it and what destroyed it
+    private final Map<Unit, Integer> hitsSeen = new java.util.HashMap<>();
+    private final Map<Unit, String> damagedBy = new java.util.HashMap<>();
+    private final Map<Unit, String> destroyedBy = new java.util.HashMap<>();
 
     PlaceLog(final Place place, final GamePlayer attacker) {
       this.place = place;
@@ -267,6 +271,45 @@ public class AirCombatDelegate extends BaseTripleADelegate {
 
     void watch(final Collection<Unit> units, final Territory location, final boolean show) {
       units.forEach(u -> watch(u, location, show));
+    }
+
+    /**
+     * Request 49: after each part of the battle, what it did: units newly damaged were damaged
+     * "by" it, units newly gone were destroyed "by" it ("by the interceptors").
+     */
+    void after(final String by) {
+      for (final Unit unit : where.keySet()) {
+        if (destroyed(unit)) {
+          destroyedBy.putIfAbsent(unit, by);
+        } else if (unit.getHits() > hitsSeen.getOrDefault(unit, hitsBefore.get(unit))) {
+          damagedBy.putIfAbsent(unit, by);
+        }
+        if (!destroyed(unit)) {
+          hitsSeen.put(unit, unit.getHits());
+        }
+      }
+    }
+
+    /** "damaged by the interceptors, aborted, then destroyed by the ships' return fire". */
+    private String story(final Unit unit, final boolean aborted) {
+      final List<String> parts = new ArrayList<>();
+      if (damagedBy.containsKey(unit)) {
+        // "damaged, aborted, then destroyed by the ships' return fire" when both were the same
+        parts.add(
+            destroyed(unit) && damagedBy.get(unit).equals(destroyedBy.get(unit))
+                ? "damaged"
+                : "damaged " + damagedBy.get(unit));
+      }
+      if (aborted) {
+        parts.add("aborted");
+      }
+      if (destroyed(unit)) {
+        parts.add(
+            (parts.isEmpty() ? "" : "then ")
+                + "destroyed"
+                + (destroyedBy.containsKey(unit) ? " " + destroyedBy.get(unit) : ""));
+      }
+      return String.join(", ", parts);
     }
 
     void bombed(final GamePlayer victim, final List<Unit> targets, final int loss) {
@@ -323,28 +366,40 @@ public class AirCombatDelegate extends BaseTripleADelegate {
       final Map<List<Object>, int[]> counts = new LinkedHashMap<>();
       for (final Unit unit : shown) {
         final boolean dead = destroyed(unit);
+        final boolean wasAborted = abortedBombers.contains(unit);
         final List<Object> key =
             List.of(
                 unit.getOwner(),
                 unit.getType(),
                 dead ? 0 : unit.getHits(),
                 dead,
-                abortedBombers.contains(unit),
-                bombed.getOrDefault(unit, 0));
+                wasAborted,
+                bombed.getOrDefault(unit, 0),
+                story(unit, wasAborted));
         counts.computeIfAbsent(key, k -> new int[1])[0]++;
       }
       counts.forEach(
           (key, count) -> {
             final GamePlayer owner = (GamePlayer) key.get(0);
+            final games.strategy.engine.data.UnitType type =
+                (games.strategy.engine.data.UnitType) key.get(1);
+            final int each =
+                costs
+                    .computeIfAbsent(
+                        owner,
+                        p -> new games.strategy.triplea.util.TuvCostsCalculator().getCostsForTuv(p))
+                    .getInt(type);
             final AirBattleReport.Stack stack =
                 new AirBattleReport.Stack(
                     owner.getName(),
-                    ((games.strategy.engine.data.UnitType) key.get(1)).getName(),
+                    type.getName(),
                     count[0],
                     (Integer) key.get(2),
                     (Boolean) key.get(3),
                     (Boolean) key.get(4),
-                    (Integer) key.get(5));
+                    (Integer) key.get(5),
+                    each * count[0],
+                    (String) key.get(6));
             (AirCover.sameSide(attacker, owner) ? attackers : defenders).add(stack);
           });
       // request 47: text only for what the pictures can't show (they show losses and damage)
@@ -403,6 +458,9 @@ public class AirCombatDelegate extends BaseTripleADelegate {
     final Hit hit =
         AirCombat.takeHits(
             bridge, view, aaCasualties, place.zone(), bombers, aaGuns, roll, dice, text);
+    if (placeLog != null) {
+      placeLog.after("by AA fire");
+    }
     final List<Unit> abortedByAa = new ArrayList<>();
     for (final Unit bomber : alive(place.zone(), bombers)) {
       if (bomber.getHits() > 0 && aborted.add(bomber)) {
@@ -520,7 +578,14 @@ public class AirCombatDelegate extends BaseTripleADelegate {
           bridge, view, casualtyStep(playerA, round), zone, aliveA, aliveB, rollB, diceB, text);
     }
     // 2. interception: every surviving fighter-type, damaged or not
+    // request 49: what the dogfight did, then the interception
+    if (placeLog != null) {
+      placeLog.after("in the dogfight");
+    }
     intercept(zone, place.territory(), view, playerA, playerB, sideA, sideB, patrolsA, patrolsB);
+    if (placeLog != null) {
+      placeLog.after("in the interception");
+    }
     // 3. aborts: every damaged bomber
     final List<Unit> nowAborted = new ArrayList<>();
     for (final Unit bomber : alive(zone, everyone)) {
@@ -978,6 +1043,9 @@ public class AirCombatDelegate extends BaseTripleADelegate {
       final DiceRoll dice = view.showDice(roll, AirCombat.chooser(firing), strikeStep);
       final Hit hit =
           AirCombat.takeHits(bridge, view, strikeCasualties, t, left, firing, roll, dice, text);
+      if (placeLog != null) {
+        placeLog.after("by the strike");
+      }
       killed.addAll(hit.killed());
       damaged.removeAll(hit.killed());
       hit.damaged().stream().filter(u -> !damaged.contains(u)).forEach(damaged::add);
@@ -1004,6 +1072,9 @@ public class AirCombatDelegate extends BaseTripleADelegate {
                       + ", lost",
                   transports);
           bridge.addChange(ChangeFactory.removeUnits(t, transports));
+          if (placeLog != null) {
+            placeLog.after("left undefended");
+          }
         }
         // 4. ships destroyed or damaged this round fire back at the bombers that attacked, and at
         // those that aborted after earlier return fire (aborted before the strike: never)
@@ -1028,6 +1099,9 @@ public class AirCombatDelegate extends BaseTripleADelegate {
               back,
               backDice,
               backText);
+          if (placeLog != null) {
+            placeLog.after("by the ships' return fire");
+          }
           final List<Unit> nowAborted = new ArrayList<>();
           for (final Unit bomber : alive(strike.zone(), exposed)) {
             if (bomber.getHits() > 0 && aborted.add(bomber)) {

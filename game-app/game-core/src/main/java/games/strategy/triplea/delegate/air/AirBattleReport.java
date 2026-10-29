@@ -76,6 +76,9 @@ public record AirBattleReport(List<Row> rows, Map<String, Integer> bombingTotals
    * @param destroyed drawn greyed with a red X
    * @param aborted bombers that made no attack: a small "aborted" tag
    * @param bombed PUs this factory or SPC cost its owner ("−6 PU"), or 0
+   * @param value the PU value of these units (request 49: what a loss cost)
+   * @param story request 49: how they fared, for the tooltip, e.g. "damaged by the interceptors,
+   *     aborted, then destroyed by the ships' return fire" (empty: nothing happened to them)
    */
   public record Stack(
       String owner,
@@ -84,8 +87,10 @@ public record AirBattleReport(List<Row> rows, Map<String, Integer> bombingTotals
       int hits,
       boolean destroyed,
       boolean aborted,
-      int bombed)
+      int bombed,
+      int value,
+      String story)
       implements Serializable {
-    @Serial private static final long serialVersionUID = 1L;
+    @Serial private static final long serialVersionUID = 2L;
   }
 }
