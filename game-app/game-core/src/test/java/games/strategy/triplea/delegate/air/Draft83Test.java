@@ -40,8 +40,9 @@ class Draft83Test {
   @ParameterizedTest
   @CsvSource({
     "Germans, 6, 3, 4, 5",
-    "AmericansPacific, 4, 4, 6, 3",
-    "Americans, 4, 4, 6, 3",
+    // request 43 (draft 84): the two Americas differ
+    "AmericansPacific, 4, 4, 6, 4",
+    "Americans, 5, 3, 4, 3",
     "Japanese, 4, 3, 6, 4",
     "Italians, 4, 3, 5, 3",
     "British, 4, 3, 5, 3",

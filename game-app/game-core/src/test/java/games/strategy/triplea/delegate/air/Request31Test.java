@@ -217,14 +217,18 @@ class Request31Test {
   }
 
   @Test
-  void theAmericanCategoryEndsWithSuperfortress() {
+  void theAtlanticStrategicBomberCategoryEndsWithH2xRadarAndHasNoSuperfortress() {
+    // request 43 (draft 84): America Atlantic can no longer research the Superfortress
     final TechnologyFrontier category =
         ResearchCenters.getCategories(americans).stream()
             .filter(c -> c.getTechs().contains(tech("NordenBombsight")))
             .findFirst()
             .orElseThrow();
     final List<String> names = category.getTechs().stream().map(TechAdvance::getName).toList();
-    assertThat(names.get(names.size() - 1), is("Superfortress"));
-    assertThat(ResearchCenters.getStarsRequired(americans, tech("Superfortress")), is(2));
+    assertThat(names.get(names.size() - 1), is("H2XRadar"));
+    assertThat(
+        ResearchCenters.getCategories(americans).stream()
+            .anyMatch(c -> c.getTechs().contains(tech("Superfortress"))),
+        is(false));
   }
 }

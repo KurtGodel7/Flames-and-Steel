@@ -98,13 +98,15 @@ class Request43Test {
   @Test
   void fidoGivesTorpedoBombersABonusDieAgainstSubmarinesOnly() {
     assertThat(AirCombat.strikeText(unit(torpedo, americans), TargetKind.SUBS), is("3"));
+    final String againstShips =
+        AirCombat.strikeText(unit(torpedo, americans), TargetKind.SURFACE);
     final TechAdvance fido = spareTechs(americans, 1).get(0);
     set(TechAbilityAttachment.get(fido), "subBonus", "1:torpedoBomber");
     grant(americans, fido);
     assertThat(AirCombat.strikeText(unit(torpedo, americans), TargetKind.SUBS), is("3 + 1"));
     assertThat(AirCombat.strikeRounds(TargetKind.SUBS), is(2));
-    // against surface ships its naval bonus as before
-    assertThat(AirCombat.strikeText(unit(torpedo, americans), TargetKind.SURFACE), is("3 + 1"));
+    // against surface ships its naval bonus as before (draft 84: American torpedo bombers start at 0)
+    assertThat(AirCombat.strikeText(unit(torpedo, americans), TargetKind.SURFACE), is(againstShips));
     assertThat(
         AirCombat.airValuesText(torpedo, americans), containsString("against submarines 3 + 1"));
     assertThat(
