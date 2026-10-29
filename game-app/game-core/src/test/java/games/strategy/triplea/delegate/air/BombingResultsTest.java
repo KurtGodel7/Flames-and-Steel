@@ -62,7 +62,7 @@ class BombingResultsTest {
   private Territory hamburg;
   private AirCombatDelegate delegate;
   private final List<String> history = new ArrayList<>();
-  private final List<String> summaries = new ArrayList<>();
+  private final List<AirBattleReport> summaries = new ArrayList<>();
 
   @BeforeEach
   void setUp() {
@@ -106,12 +106,18 @@ class BombingResultsTest {
     delegate.setDelegateBridgeAndPlayer(strikes);
     delegate.start();
     delegate.end();
-    // request 30: no battle window; one summary of the air phase for everyone
-    final ArgumentCaptor<String> summary = ArgumentCaptor.forClass(String.class);
-    verify(strikes.getDisplayChannelBroadcaster(), atLeastOnce())
-        .reportMessageToAll(
-            summary.capture(), eq("Air battles this round"), eq(false), eq(false), eq(false));
+    // request 30: no battle window; one summary of the air phase for everyone (request 46: as
+    // pictures)
+    final ArgumentCaptor<AirBattleReport> summary = ArgumentCaptor.forClass(AirBattleReport.class);
+    verify(strikes.getDisplayChannelBroadcaster(), atLeastOnce()).showAirBattles(summary.capture());
     summaries.addAll(summary.getAllValues());
+  }
+
+  private AirBattleReport.Row hamburgRow() {
+    return summaries.get(0).rows().stream()
+        .filter(r -> r.place().equals("Hamburg"))
+        .findFirst()
+        .orElseThrow();
   }
 
   @Test
@@ -123,9 +129,13 @@ class BombingResultsTest {
     assertThat(pus(germans), is(before - 2));
     assertThat(germans.getTechAttachment().getBombedThisRound(), is(2));
     assertThat(
-        summaries.get(0),
-        containsString("Strategic bombing of Hamburg: Germans lose 2 PUs"));
-    assertThat(summaries.get(0), containsString("British bombed Hamburg: Germans −2 PUs"));
+        hamburgRow().defenders().stream()
+            .filter(s -> s.unitType().equals("factory"))
+            .findFirst()
+            .orElseThrow()
+            .bombed(),
+        is(2));
+    assertThat(summaries.get(0).bombingTotals().get("Germans"), is(2));
     assertThat(
         history,
         hasItem(
@@ -156,8 +166,8 @@ class BombingResultsTest {
 
     assertThat(pus(germans), is(before - 10));
     assertThat(
-        summaries.get(0),
-        containsString("12 PUs of damage, capped at 10: 2 × the territory's value"));
+        hamburgRow().notes(),
+        hasItem("12 PUs of bombing damage, capped at 10 (2 × the territory's value)"));
   }
 
   @Test

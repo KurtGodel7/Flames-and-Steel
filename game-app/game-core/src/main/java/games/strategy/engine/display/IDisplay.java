@@ -283,6 +283,13 @@ public interface IDisplay extends IChannelSubscriber {
   void battleStepText(
       UUID battleId, String step, List<String> lines, boolean keepDice, String summary);
 
+  /**
+   * Flames and Steel (request 46): the round's air battles as pictures, one window for all of them;
+   * each screen shows its own nation's losses first.
+   */
+  @RemoteActionCode(15)
+  void showAirBattles(games.strategy.triplea.delegate.air.AirBattleReport report);
+
   @RemoteActionCode(5)
   void gotoBattleStep(UUID battleId, String step);
 

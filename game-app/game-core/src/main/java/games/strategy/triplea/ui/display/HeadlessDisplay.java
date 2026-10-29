@@ -104,6 +104,10 @@ public class HeadlessDisplay implements IDisplay {
   public void gotoBattleStep(final UUID battleId, final String step) {}
 
   @Override
+  public void showAirBattles(
+      final games.strategy.triplea.delegate.air.AirBattleReport report) {}
+
+  @Override
   public void battleStepText(
       final UUID battleId,
       final String step,

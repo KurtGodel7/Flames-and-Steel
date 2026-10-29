@@ -654,7 +654,11 @@ public class AirCombat {
     if (games.strategy.triplea.formatter.UnitNames.isRenamed(type.getName())) {
       return games.strategy.triplea.formatter.UnitNames.of(type);
     }
-    return type.getName().replaceAll("(?<=[a-z0-9])(?=[A-Z])", " ").toLowerCase(Locale.ROOT);
+    // request 46: "AA gun", not "aa gun"
+    return type.getName()
+        .replaceAll("(?<=[a-z0-9])(?=[A-Z])", " ")
+        .toLowerCase(Locale.ROOT)
+        .replaceAll("\\baa\\b", "AA");
   }
 
   /**

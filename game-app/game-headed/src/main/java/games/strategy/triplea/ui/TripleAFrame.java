@@ -854,6 +854,35 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
     showMessageDialog(displayMessage, title, JOptionPane.INFORMATION_MESSAGE);
   }
 
+  /**
+   * Request 46: the round's air battles as pictures, in one window that scrolls; drawn for the
+   * next nation this screen plays.
+   */
+  public void showAirBattles(final games.strategy.triplea.delegate.air.AirBattleReport report) {
+    if (report.rows().isEmpty() && report.bombingTotals().isEmpty()) {
+      return;
+    }
+    try {
+      messageAndDialogThreadPool.submit(
+          () -> {
+            final GamePlayer viewer =
+                AirBattleSummaryPanel.viewer(data, p -> getLocalPlayers().playing(p));
+            final javax.swing.JScrollPane scroll =
+                new javax.swing.JScrollPane(
+                    new AirBattleSummaryPanel(data, getUiContext(), report, viewer));
+            scroll.setBorder(null);
+            EventThreadJOptionPane.showMessageDialog(
+                TripleAFrame.this,
+                scroll,
+                "Air battles this round",
+                JOptionPane.PLAIN_MESSAGE,
+                getUiContext().getCountDownLatchHandler());
+          });
+    } catch (RejectedExecutionException e) {
+      // The thread pool may have been shutdown. Nothing to do.
+    }
+  }
+
   private void showMessageDialog(String displayMessage, String title, int type) {
     try {
       messageAndDialogThreadPool.submit(

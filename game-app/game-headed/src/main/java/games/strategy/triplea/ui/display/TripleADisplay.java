@@ -148,6 +148,11 @@ public class TripleADisplay implements IDisplay {
   }
 
   @Override
+  public void showAirBattles(final games.strategy.triplea.delegate.air.AirBattleReport report) {
+    ui.showAirBattles(report);
+  }
+
+  @Override
   public void shutDown() {
     ui.stopGame();
   }
