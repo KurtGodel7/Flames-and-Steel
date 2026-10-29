@@ -409,6 +409,7 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
     rightHandSidePanel.add(tabsPanel, BorderLayout.CENTER);
 
     final MovePanel movePanel = new MovePanel(this);
+    movePanelForAir = movePanel;
     actionButtonsPanel = new ActionButtonsPanel(movePanel, this);
     // request 36: a failed autosave shows one line in the bottom bar
     games.strategy.engine.framework.RollingAutoSave.setFailureListener(
@@ -852,6 +853,24 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
     final String displayMessage =
         LocalizeHtml.localizeImgLinksInHtml(message, uiContext.getMapLocation());
     showMessageDialog(displayMessage, title, JOptionPane.INFORMATION_MESSAGE);
+  }
+
+  // request 47: the move panel's unit scroller also goes through an air stage's aircraft
+  private MovePanel movePanelForAir;
+
+  /** Request 47: the air stage's aircraft without orders in the unit scroller, or null. */
+  public void setAircraftScroller(
+      final @Nullable games.strategy.triplea.ui.unit.scroller.UnitScroller.Source source) {
+    if (movePanelForAir != null) {
+      movePanelForAir.setAircraftScroller(source);
+    }
+  }
+
+  /** Request 47: the air stage's count of aircraft without orders changed. */
+  public void refreshAircraftScroller() {
+    if (movePanelForAir != null) {
+      movePanelForAir.refreshAircraftScroller();
+    }
   }
 
   /**
@@ -1796,14 +1815,42 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
       final Map<Unit, List<games.strategy.engine.data.Territory>> options, final String why) {
     messageAndDialogThreadPool.waitForAll();
     requestWindowFocus();
+    // request 47: the how-to the first time for the nation (or with View > Show Air Stage Help)
+    final boolean help =
+        options.isEmpty()
+            || games.strategy.triplea.ui.air.AirHelp.showAsStageOpens(
+                data, options.keySet().iterator().next().getOwner(), "LOST_BASE");
     return Interruptibles.awaitResult(
             () ->
                 SwingAction.invokeAndWaitResult(
                     () ->
                         games.strategy.triplea.ui.air.FreeLandingDialog.show(
-                            TripleAFrame.this, options, why)))
+                            TripleAFrame.this, options, why, this::showOnMap, help)))
         .result
         .orElse(Map.of());
+  }
+
+  /** Request 47: brings the unit's place into view and flashes it. */
+  private void showOnMap(final Unit unit) {
+    games.strategy.engine.data.Territory where = null;
+    try (GameData.Unlocker ignored = data.acquireReadLock()) {
+      for (final games.strategy.engine.data.Territory t : data.getMap().getTerritories()) {
+        if (t.getUnitCollection().contains(unit)) {
+          where = t;
+          break;
+        }
+      }
+    }
+    if (where == null) {
+      return;
+    }
+    mapPanel.centerOn(where);
+    if (airMapMode != null) {
+      airMapMode.flash(where);
+    } else {
+      mapPanel.highlightTerritory(
+          where, MapPanel.AnimationDuration.STANDARD, MapPanel.HighlightDelay.SHORT_DELAY);
+    }
   }
 
   /** Request 35: the stage is still waiting for these nations (names only). */

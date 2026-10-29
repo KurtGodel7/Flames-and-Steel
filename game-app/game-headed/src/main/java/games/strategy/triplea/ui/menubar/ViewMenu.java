@@ -62,6 +62,7 @@ final class ViewMenu {
         .addMenuItem(getShowUnitsMenu(frame))
         .addMenuItem(getShowUnitsInStatusBarMenu(frame))
         .addMenuItemIf(frame.getAirMapMode() != null, () -> getShowAircraftInAir(frame))
+        .addMenuItemIf(frame.getAirMapMode() != null, () -> getShowAirStageHelp(frame))
         .addMenuItem(getFlagDisplayModeMenu(frame))
         .addMenuItemIf(mapData.useTerritoryEffectMarkers(), () -> getShowTerritoryEffects(frame))
         .addMenuItemIf(
@@ -271,6 +272,28 @@ final class ViewMenu {
         .selected(frame.getAirMapMode().isShowingAirMarkers())
         .actionListener(on -> frame.getAirMapMode().setShowingAirMarkers(on))
         .build();
+  }
+
+  /**
+   * Flames and Steel (request 47): the air stages' how-to text in the side panel every time, not
+   * only the first time a stage opens. On during round 1 until the player sets it.
+   */
+  private static JCheckBoxMenuItem getShowAirStageHelp(final TripleAFrame frame) {
+    final JCheckBoxMenuItem item =
+        new JCheckBoxMenuItem("Show Air Stage Help") {
+          private static final long serialVersionUID = 1L;
+
+          @Override
+          public void addNotify() {
+            // the menu opens: show the option as it is now (it changes after round 1)
+            super.addNotify();
+            setSelected(
+                games.strategy.triplea.ui.air.AirHelp.isOn(frame.getGameDataForNames()));
+          }
+        };
+    item.addActionListener(
+        e -> games.strategy.triplea.ui.air.AirHelp.setOn(item.isSelected()));
+    return item;
   }
 
   private static JCheckBoxMenuItem getShowUnitsInStatusBarMenu(final TripleAFrame frame) {

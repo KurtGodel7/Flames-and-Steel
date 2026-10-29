@@ -64,7 +64,10 @@ public final class AirMapMode implements MapOverlay {
   private final List<Consumer<Boolean>> modeListeners = new CopyOnWriteArrayList<>();
   // where airborne groups were drawn last, for pointing at them
   private final List<Drawn> drawn = new CopyOnWriteArrayList<>();
-  private volatile @Nullable String banner;
+  private volatile @Nullable Banner banner;
+  // where the banner was drawn last (map pixels), for its tooltip; and whether the tooltip is ours
+  private volatile @Nullable Rectangle bannerBox;
+  private volatile boolean bannerTip;
   // request 44: the View menu's switch for the markers of aircraft in the air
   private volatile boolean showAirMarkers = true;
   private static final int MARKER_WIDTH = 46;
@@ -184,10 +187,28 @@ public final class AirMapMode implements MapOverlay {
     timer.start();
   }
 
+  /**
+   * Request 47: the banner's text, "Germans: <b>1</b> aircraft without orders", and the how-to
+   * shown as its tooltip.
+   */
+  public record Banner(String before, String bold, String after, String help) {
+    public String text() {
+      return before + bold + after;
+    }
+  }
+
   /** Shows (or with null hides) a banner along the top of the visible map. */
-  public void setBanner(final @Nullable String text) {
+  public void setBanner(final @Nullable Banner text) {
     banner = text;
+    if (text == null) {
+      bannerBox = null;
+    }
     repaint();
+  }
+
+  /** For tests: the banner shown, or null. */
+  public @Nullable Banner getBanner() {
+    return banner;
   }
 
   private void repaint() {
@@ -472,6 +493,18 @@ public final class AirMapMode implements MapOverlay {
    * 44: a marker lists all of its nation's aircraft there).
    */
   private void pointedAt(final Point mapPoint) {
+    // request 47: the banner's tooltip says how the stage works
+    final Rectangle box = bannerBox;
+    final Banner shown = banner;
+    if (mapPanel != null) {
+      if (box != null && shown != null && box.contains(mapPoint)) {
+        mapPanel.setToolTipText(AirSelection.wrap(shown.help()));
+        bannerTip = true;
+      } else if (bannerTip) {
+        mapPanel.setToolTipText(null);
+        bannerTip = false;
+      }
+    }
     for (final Drawn d : drawn) {
       if (d.box().contains(mapPoint)) {
         status.accept(
@@ -516,24 +549,39 @@ public final class AirMapMode implements MapOverlay {
   }
 
   private void paintBanner(final Graphics2D g) {
-    final String text = banner;
+    final Banner text = banner;
     if (text == null) {
       return;
     }
     final Rectangle view = view();
-    g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 15));
-    final FontMetrics fm = g.getFontMetrics();
-    final int w = Math.min(view.width - 20, fm.stringWidth(text) + 30);
+    // request 47: short, with the count in bold
+    final Font plain = new Font(Font.SANS_SERIF, Font.PLAIN, 15);
+    final Font bold = plain.deriveFont(Font.BOLD);
+    final FontMetrics fm = g.getFontMetrics(plain);
+    final FontMetrics fmBold = g.getFontMetrics(bold);
+    final int textWidth =
+        fm.stringWidth(text.before()) + fmBold.stringWidth(text.bold()) + fm.stringWidth(text.after());
+    final int w = Math.min(view.width - 20, textWidth + 30);
     final int h = fm.getHeight() + 14;
     final int x = view.x + (view.width - w) / 2;
     final int y = view.y + 12;
+    bannerBox = new Rectangle(x, y, w, h);
     g.setColor(new Color(0x1C, 0x1C, 0x1C, 230));
     g.fillRoundRect(x, y, w, h, 12, 12);
     g.setColor(BANNER_LINE);
     g.setStroke(new BasicStroke(3f));
     g.drawRoundRect(x, y, w, h, 12, 12);
     g.setColor(Color.WHITE);
-    g.drawString(text, x + 15, y + 7 + fm.getAscent());
+    final int baseline = y + 7 + fm.getAscent();
+    int at = x + 15;
+    g.setFont(plain);
+    g.drawString(text.before(), at, baseline);
+    at += fm.stringWidth(text.before());
+    g.setFont(bold);
+    g.drawString(text.bold(), at, baseline);
+    at += fmBold.stringWidth(text.bold());
+    g.setFont(plain);
+    g.drawString(text.after(), at, baseline);
   }
 
   /** The visible part of the map, in map pixels (the whole map without a map panel). */

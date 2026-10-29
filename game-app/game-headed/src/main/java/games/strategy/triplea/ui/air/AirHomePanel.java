@@ -133,6 +133,92 @@ public final class AirHomePanel extends ActionPanel {
     return "AirHomePanel";
   }
 
+  // request 47: the stock unit scroller (its buttons and '.', ',' and 'S') goes through the
+  // aircraft in the air still to land; the place last gone to; whether the how-to shows
+  private volatile int toLand;
+  private final games.strategy.triplea.ui.unit.scroller.UnitScroller.Source scrollerSource =
+      new games.strategy.triplea.ui.unit.scroller.UnitScroller.Source() {
+        @Override
+        public String title() {
+          return "Aircraft to land: " + toLand;
+        }
+
+        @Override
+        public void next(final boolean forward) {
+          SwingUtilities.invokeLater(() -> nextToLand(forward));
+        }
+      };
+  private @Nullable Territory lastVisited;
+  private boolean helpShown;
+
+  private static final String HELP =
+      "Click aircraft in the air (or a group in this panel), then a green spot: your land or one of"
+          + " your carriers with room, within the range they have left. Aircraft on bases may"
+          + " rebase with their full range. Done lands the rest at the nearest spot; any with"
+          + " nowhere to land are lost. '.' and ',' (or the unit scroller's arrows) go to the next"
+          + " and previous aircraft still to land.";
+
+  /** Request 47: the airborne groups still to land, one per place and type. */
+  private List<Group> stillToLand(final GamePlayer player) {
+    final Map<String, Group> result = new LinkedHashMap<>();
+    for (final Group g : groups(player, true)) {
+      if (left(g) > 0) {
+        result.putIfAbsent(g.from().getName() + "|" + g.type().getName(), g);
+      }
+    }
+    return new ArrayList<>(result.values());
+  }
+
+  private int countToLand(final GamePlayer player) {
+    return stillToLand(player).stream().mapToInt(this::left).sum();
+  }
+
+  /** Request 47: "Germans: <b>2</b> aircraft must land", or "Germans: all aircraft have landed". */
+  AirMapMode.Banner banner(final GamePlayer player) {
+    final int n = countToLand(player);
+    final String who = PlayerNames.display(player) + ": ";
+    return n == 0
+        ? new AirMapMode.Banner(who, "all", " aircraft have landing orders", HELP)
+        : new AirMapMode.Banner(who, String.valueOf(n), " aircraft must land", HELP);
+  }
+
+  private void updateBanner(final @Nullable GamePlayer player) {
+    toLand = player == null || finished ? 0 : countToLand(player);
+    frame.refreshAircraftScroller();
+    if (frame.getAirMapMode() != null) {
+      frame.getAirMapMode().setBanner(player == null || finished ? null : banner(player));
+    }
+  }
+
+  /**
+   * Request 47: goes to the next (or previous) place with aircraft in the air still to land:
+   * centers the map on it, flashes it and selects one, as a plain click would.
+   */
+  void nextToLand(final boolean forward) {
+    if (!isActive() || !listening || finished) {
+      return;
+    }
+    final GamePlayer player = getCurrentPlayer();
+    final List<Territory> places =
+        stillToLand(player).stream().map(Group::from).distinct().toList();
+    if (places.isEmpty()) {
+      frame.setStatusMessage("Every aircraft in the air has a landing: press Done.");
+      return;
+    }
+    final int at = lastVisited == null ? -1 : places.indexOf(lastVisited);
+    final int i =
+        at < 0 ? (forward ? 0 : places.size() - 1) : Math.floorMod(at + (forward ? 1 : -1), places.size());
+    final Territory place = places.get(i);
+    lastVisited = place;
+    final Group g =
+        stillToLand(player).stream().filter(x -> x.from().equals(place)).findFirst().orElseThrow();
+    getMap().centerOn(place);
+    if (frame.getAirMapMode() != null) {
+      frame.getAirMapMode().flash(place);
+    }
+    select(player, g, 1);
+  }
+
   /** Shows the nation's screen, starting from these landings. */
   public void start(final GamePlayer player, final List<Landing> start) {
     SwingUtilities.invokeLater(
@@ -140,6 +226,9 @@ public final class AirHomePanel extends ActionPanel {
           finished = false;
           staged.clear();
           staged.addAll(start);
+          lastVisited = null;
+          helpShown = AirHelp.showAsStageOpens(getData(), player, "HOME");
+          frame.setAircraftScroller(scrollerSource);
           try (GameData.Unlocker ignored = getData().acquireReadLock()) {
             homeStep = getData().getSequence().getStep();
           }
@@ -156,10 +245,8 @@ public final class AirHomePanel extends ActionPanel {
           }
           showLanded();
           rebuild(player);
-          // request 40: nothing is selected for the player
-          frame.setStatusMessage(
-              "Click aircraft in the air (or a group on the right), then a green spot. Done lands"
-                  + " the rest at the nearest spot.");
+          // request 40: nothing is selected for the player; request 47: the banner says what waits
+          frame.clearStatusMessage();
         });
   }
 
@@ -183,6 +270,7 @@ public final class AirHomePanel extends ActionPanel {
             getMap().setMouseShadowUnits(null);
           }
           frame.clearStatusMessage();
+          frame.setAircraftScroller(null);
           rebuild(getCurrentPlayer());
           getMap().repaint();
         });
@@ -390,15 +478,13 @@ public final class AirHomePanel extends ActionPanel {
 
   private void rebuild(final @Nullable GamePlayer player) {
     layout.install(this);
+    updateBanner(player);
     if (player == null) {
       refresh.run();
       return;
     }
     actionLabel.setText(PlayerNames.display(player) + ": Planes Go Home");
-    actionLabel.setToolTipText(
-        "Each aircraft in the air lands within the range it has left, on your land or one of your"
-            + " carriers with room. Aircraft on bases may rebase with their full range. Done lands"
-            + " the rest at the nearest spot; any with nowhere to land are lost.");
+    actionLabel.setToolTipText(AirSelection.wrap(HELP));
     layout.top().add(leftAligned(actionLabel));
     if (finished) {
       layout.top().add(leftAligned(new JLabel("Landings sent.")));
@@ -418,6 +504,28 @@ public final class AirHomePanel extends ActionPanel {
     buttons.add(undoAll);
     buttons.add(createDoneButton());
     layout.top().add(leftAligned(buttons));
+    // request 47: what still has to land; a click goes to the next of them, as '.' does
+    final int n = toLand;
+    if (n == 0) {
+      layout.top().add(leftAligned(new JLabel("Every aircraft in the air has a landing.")));
+    } else {
+      final JButton next =
+          new JButton("<html>Aircraft to land: <b>" + n + "</b> &#8250;</html>");
+      next.setToolTipText(
+          "Goes to the next aircraft in the air still to land and selects one ('.' does the"
+              + " same; ',' goes back). Done lands them at the nearest spot.");
+      next.setBorderPainted(false);
+      next.setContentAreaFilled(false);
+      next.setFocusable(false);
+      next.setMargin(new Insets(0, 0, 0, 0));
+      next.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+      next.addActionListener(e -> nextToLand(true));
+      layout.top().add(leftAligned(next));
+    }
+    if (helpShown) {
+      // in the scrolling part, so the landings made keep their room
+      layout.body().add(leftAligned(AirHelp.text(HELP)));
+    }
     // landings made, newest first, laid out as stock's moves list (request 42)
     final List<AirMovesList.Entry> entries = new ArrayList<>();
     for (int i = staged.size() - 1; i >= 0; i--) {

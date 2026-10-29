@@ -183,6 +183,13 @@ public final class AirTargetPanel extends ActionPanel {
     void setStatusWarningMessage(String message);
 
     void clearStatusMessage();
+
+    /** Request 47: the stage's aircraft without orders in the unit scroller (null: none). */
+    default void setAircraftScroller(
+        final @Nullable games.strategy.triplea.ui.unit.scroller.UnitScroller.Source source) {}
+
+    /** Request 47: the count changed. */
+    default void refreshAircraftScroller() {}
   }
 
   public AirTargetPanel(final TripleAFrame frame) {
@@ -222,8 +229,38 @@ public final class AirTargetPanel extends ActionPanel {
           public void clearStatusMessage() {
             frame.clearStatusMessage();
           }
+
+          @Override
+          public void setAircraftScroller(
+              final @Nullable games.strategy.triplea.ui.unit.scroller.UnitScroller.Source source) {
+            frame.setAircraftScroller(source);
+          }
+
+          @Override
+          public void refreshAircraftScroller() {
+            frame.refreshAircraftScroller();
+          }
         });
   }
+
+  // request 47: the stock unit scroller (its buttons and the '.', ',' and 'S' keys) goes through
+  // the aircraft without orders
+  private volatile int withoutOrders;
+  private final games.strategy.triplea.ui.unit.scroller.UnitScroller.Source scrollerSource =
+      new games.strategy.triplea.ui.unit.scroller.UnitScroller.Source() {
+        @Override
+        public String title() {
+          return "Aircraft without orders: " + withoutOrders;
+        }
+
+        @Override
+        public void next(final boolean forward) {
+          SwingUtilities.invokeLater(() -> nextWithoutOrders(forward));
+        }
+      };
+  // request 47: the base last gone to with "next", and whether the how-to shows in the panel
+  private @Nullable Territory lastVisited;
+  private boolean helpShown;
 
   AirTargetPanel(final Host frame) {
     super(frame.getMapPanel().getData(), frame.getMapPanel());
@@ -306,6 +343,9 @@ public final class AirTargetPanel extends ActionPanel {
           }
           clearSelection();
           showAssigned();
+          lastVisited = null;
+          helpShown = AirHelp.showAsStageOpens(getData(), player, stage.name());
+          frame.setAircraftScroller(scrollerSource);
           if (!listening) {
             listening = true;
             getMap().addUnitSelectionListener(unitListener);
@@ -566,7 +606,87 @@ public final class AirTargetPanel extends ActionPanel {
         frame.getAirMapMode().setBanner(null);
       }
       frame.clearStatusMessage();
+      frame.setAircraftScroller(null);
     }
+  }
+
+  /**
+   * Request 47: goes to the next (or previous) base with aircraft without orders, in the order of
+   * the bases: centers the map on it, flashes it and selects one aircraft there, as a plain click
+   * would. Repeated, it goes round all of them.
+   */
+  void nextWithoutOrders(final boolean forward) {
+    if (!isActive() || !listening || finished) {
+      return;
+    }
+    final GamePlayer player = getCurrentPlayer();
+    final List<Group> waiting = waitingGroups(player);
+    if (waiting.isEmpty()) {
+      frame.setStatusMessage("Every aircraft that can fly has orders: press Done.");
+      return;
+    }
+    final List<Territory> order;
+    try (GameData.Unlocker ignored = getData().acquireReadLock()) {
+      order = new ArrayList<>(AirStage.bases(player, stage));
+    }
+    waiting.stream().map(Group::zone).filter(z -> !order.contains(z)).forEach(order::add);
+    final int n = order.size();
+    final int from = lastVisited == null ? -1 : order.indexOf(lastVisited);
+    Territory zone = null;
+    for (int step = 1; step <= n && zone == null; step++) {
+      final int i =
+          from < 0
+              ? (forward ? step - 1 : n - step)
+              : Math.floorMod(from + (forward ? step : -step), n);
+      final Territory t = order.get(i);
+      if (waiting.stream().anyMatch(g -> g.zone().equals(t))) {
+        zone = t;
+      }
+    }
+    if (zone == null) {
+      return;
+    }
+    lastVisited = zone;
+    final Territory place = zone;
+    final Group group = waiting.stream().filter(g -> g.zone().equals(place)).findFirst().orElseThrow();
+    getMap().centerOn(zone);
+    if (frame.getAirMapMode() != null) {
+      frame.getAirMapMode().flash(zone);
+    } else {
+      getMap()
+          .highlightTerritory(
+              zone, MapPanel.AnimationDuration.STANDARD, MapPanel.HighlightDelay.SHORT_DELAY);
+    }
+    // one aircraft selected, as a plain click on the stack selects one
+    clearSelection();
+    selectedZone = zone;
+    selected.put(group.type(), 1);
+    selectionChanged();
+    frame.setStatusMessage(
+        "1 "
+            + AirCombat.unitName(group.type())
+            + " at "
+            + zone.getName()
+            + " selected ("
+            + withoutOrders
+            + " without orders): click where it goes. '.' goes on, ',' goes back.");
+  }
+
+  /** For tests: the base selected and how many aircraft are selected there. */
+  @Nullable
+  Territory selectedBase() {
+    return selectedZone;
+  }
+
+  int selectedCount() {
+    return selected.totalValues();
+  }
+
+  /** For tests: the choices so far, as if made on the map. */
+  void setStagedForTests(final List<TargetAssignment> moves) {
+    staged.clear();
+    staged.addAll(moves);
+    strikesChanged();
   }
 
   private String lastKey(final GamePlayer player) {
@@ -941,21 +1061,39 @@ public final class AirTargetPanel extends ActionPanel {
    * groups. ..."; gone when none wait or the step ends.
    */
   private void updateBanner(final GamePlayer player, final int waiting) {
+    withoutOrders = finished ? 0 : aircraftWithoutOrders(player);
+    frame.refreshAircraftScroller();
     final AirMapMode mode = frame.getAirMapMode();
     if (mode == null) {
       return;
     }
-    mode.setBanner(
-        finished || waiting == 0
-            ? null
-            : player.getName()
-                + (coverMode ? ": place fighters for " : ": choose targets for ")
-                + aircraftWithoutOrders(player)
-                + " aircraft without orders"
-                + (coverMode
-                    ? ". Bombers are shown on their targets. Select fighters on the map as in a"
-                        + " normal move, then click where they go."
-                    : ". Select bombers on the map as in a normal move, then click a target."));
+    mode.setBanner(finished ? null : banner(player));
+  }
+
+  /**
+   * Request 47: "Germans: <b>1</b> aircraft without orders", or "Germans: all aircraft have
+   * orders"; the how-to is its tooltip.
+   */
+  AirMapMode.Banner banner(final GamePlayer player) {
+    final int idle = aircraftWithoutOrders(player);
+    final String who = PlayerNames.display(player) + ": ";
+    return idle == 0
+        ? new AirMapMode.Banner(who, "all", " aircraft have orders", help())
+        : new AirMapMode.Banner(who, String.valueOf(idle), " aircraft without orders", help());
+  }
+
+  /** Request 47: how the stage works, for the banner's tooltip and (at first) the side panel. */
+  private String help() {
+    return (coverMode
+            ? "Bombers are shown on their targets. Select fighters on the map as in a normal move"
+                + " (click for one, Ctrl+click the stack, Shift+click all there), then click a"
+                + " green territory: over your bombers' target to escort, over the enemy's to"
+                + " defend."
+            : "Select bombers on the map as in a normal move (click for one, Ctrl+click the"
+                + " stack, Shift+click all there), then click a green target.")
+        + " A place with nothing to attack is a rebase. Aircraft without orders stay home."
+        + " '.' and ',' (or the unit scroller's arrows) go to the next and previous aircraft"
+        + " without orders. Ctrl+Z undoes the last move.";
   }
 
   /** The player's bombers in the zone that do not have a target yet. */
@@ -1406,15 +1544,25 @@ public final class AirTargetPanel extends ActionPanel {
       buttons.add(repeat);
     }
     layout.top().add(leftAligned(buttons));
-    // 2. status line, in plain words
+    // 2. status line, in plain words; request 47: a click on it goes to the next aircraft
+    // without orders, as '.' and the unit scroller's arrow do
     final int idle = aircraftWithoutOrders(player);
-    final JLabel status =
-        new JLabel(
-            idle == 0
-                ? "Every aircraft that can fly has orders: press Done."
-                : "Aircraft without orders: "
-                    + idle
-                    + " (they stay home if you press Done)");
+    final JComponent status;
+    if (idle == 0) {
+      status = new JLabel("Every aircraft that can fly has orders: press Done.");
+    } else {
+      final JButton next = new JButton("<html>Aircraft without orders: <b>" + idle + "</b> &#8250;</html>");
+      next.setToolTipText(
+          "Goes to the next aircraft without orders and selects one ('.' does the same; ','"
+              + " goes back). They stay home if you press Done.");
+      next.setBorderPainted(false);
+      next.setContentAreaFilled(false);
+      next.setFocusable(false);
+      next.setMargin(new java.awt.Insets(0, 0, 0, 0));
+      next.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+      next.addActionListener(e -> nextWithoutOrders(true));
+      status = next;
+    }
     status.setBorder(BorderFactory.createEmptyBorder(2, 5, 2, 0));
     layout.top().add(leftAligned(status));
     // 3. moves made, always in view, newest first
@@ -1430,6 +1578,11 @@ public final class AirTargetPanel extends ActionPanel {
     pick.addActionListener(e -> openPickDialog(player));
     layout.body().add(Box.createVerticalStrut(4));
     layout.body().add(leftAligned(pick));
+    // request 47: the how-to, the first time the stage opens (in the scrolling part, so the moves
+    // made keep their room)
+    if (helpShown) {
+      layout.body().add(leftAligned(AirHelp.text(help())));
+    }
     layout.body().add(Box.createVerticalGlue());
     refresh.run();
   }
@@ -1458,23 +1611,39 @@ public final class AirTargetPanel extends ActionPanel {
     } else {
       items = AirMovesList.build(frame.getUiContext(), newestFirst);
     }
-    final JScrollPane scroll = new JScrollPane(items);
+    final JComponent list = items;
+    // request 47: as tall as its first MOVE_ROWS moves are now (a move is taller when Show and
+    // Undo sit under it); more scroll inside it
+    final JScrollPane scroll =
+        new JScrollPane(items) {
+          private static final long serialVersionUID = 1L;
+
+          @Override
+          public Dimension getPreferredSize() {
+            int h = 0;
+            final java.awt.Component[] rows = list.getComponents();
+            if (list instanceof JLabel || rows.length == 0) {
+              h = list.getPreferredSize().height;
+            } else {
+              for (int i = 0; i < Math.min(rows.length, MOVE_ROWS); i++) {
+                h += rows[i].getPreferredSize().height;
+              }
+            }
+            final java.awt.Insets in = getInsets();
+            return new Dimension(200, h + in.top + in.bottom + 4);
+          }
+
+          @Override
+          public Dimension getMaximumSize() {
+            return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
+          }
+        };
     scroll.setBorder(
         BorderFactory.createTitledBorder(
             "Moves made" + (newestFirst.isEmpty() ? "" : " (" + newestFirst.size() + ")")));
     scroll.getVerticalScrollBar().setUnitIncrement(16);
     scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
-    // the box is as tall as its first MOVE_ROWS moves; more scroll inside it
-    final int rows = Math.max(1, Math.min(newestFirst.size(), MOVE_ROWS));
-    // each stock-style row is as tall as its unit picture plus the "From -> To" line
-    final int rowHeight =
-        newestFirst.isEmpty()
-            ? ROW_HEIGHT
-            : (items.getPreferredSize().height + newestFirst.size() - 1) / newestFirst.size();
-    final int height = rows * rowHeight + 30;
     // request 44: no wider than the side panel gives it (the list follows its width)
-    scroll.setPreferredSize(new Dimension(200, height));
-    scroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, height));
     scroll.setAlignmentX(LEFT_ALIGNMENT);
     return scroll;
   }

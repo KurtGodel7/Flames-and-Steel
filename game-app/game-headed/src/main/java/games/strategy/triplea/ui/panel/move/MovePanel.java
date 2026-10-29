@@ -1575,11 +1575,11 @@ public class MovePanel extends AbstractMovePanel {
 
   private void registerKeyBindings(final JFrame frame) {
     SwingKeyBinding.addKeyBinding(
-        frame, KeyCode.S, unitScrollerAction(unitScroller::skipCurrentUnits));
+        frame, KeyCode.S, scrollerKey(unitScroller::skipCurrentUnits));
     SwingKeyBinding.addKeyBinding(
-        frame, KeyCode.PERIOD, unitScrollerAction(unitScroller::centerOnNextMovableUnit));
+        frame, KeyCode.PERIOD, scrollerKey(unitScroller::centerOnNextMovableUnit));
     SwingKeyBinding.addKeyBinding(
-        frame, KeyCode.COMMA, unitScrollerAction(unitScroller::centerOnPreviousMovableUnit));
+        frame, KeyCode.COMMA, scrollerKey(unitScroller::centerOnPreviousMovableUnit));
     SwingKeyBinding.addKeyBinding(frame, KeyCode.F, this::highlightMovableUnits);
     SwingKeyBinding.addKeyBinding(
         frame,
@@ -1598,6 +1598,29 @@ public class MovePanel extends AbstractMovePanel {
         scrollerAction.run();
       }
     };
+  }
+
+  /** Request 47: the scroller's keys also work while an air stage feeds it its aircraft. */
+  private Runnable scrollerKey(final Runnable scrollerAction) {
+    return () -> {
+      if (this.isVisible() || unitScroller.hasSource()) {
+        scrollerAction.run();
+      }
+    };
+  }
+
+  /**
+   * Request 47: an air stage's aircraft without orders in the unit scroller (its buttons and the
+   * '.', ',' and 'S' keys), or null when the stage ends.
+   */
+  public void setAircraftScroller(final @Nullable UnitScroller.Source source) {
+    unitScroller.setSource(source);
+    SwingUtilities.invokeLater(() -> unitScrollerPanel.setVisible(source != null || isVisible()));
+  }
+
+  /** Request 47: the air stage's count changed. */
+  public void refreshAircraftScroller() {
+    unitScroller.refresh();
   }
 
   @Override

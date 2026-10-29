@@ -80,6 +80,20 @@ public class UnitScroller {
   private final JLabel territoryNameLabel = new JLabelBuilder().biggerFont().centerAlign().build();
   private final JPanel selectUnitImagePanel = new JPanel();
 
+  /**
+   * Flames and Steel (request 47): in the air stages the scroller goes through the aircraft
+   * without orders instead of units to move; the same buttons and keys.
+   */
+  public interface Source {
+    /** The scroller's one-line title, e.g. "Aircraft without orders: 1". */
+    String title();
+
+    /** Goes to the next (or previous) place with aircraft without orders. */
+    void next(boolean forward);
+  }
+
+  private volatile @Nullable Source source;
+
   private CollapsiblePanel collapsiblePanel;
   // request 34: whether the scroller is folded to one line in this game (a new game starts folded)
   private boolean collapsedThisGame = true;
@@ -149,7 +163,36 @@ public class UnitScroller {
                 .build()));
   }
 
+  /** Request 47: the air stage's aircraft without orders (null: back to units to move). */
+  public void setSource(final @Nullable Source source) {
+    this.source = source;
+    updateMovesLeft();
+  }
+
+  public boolean hasSource() {
+    return source != null;
+  }
+
+  /** Request 47: the air stage's count changed. */
+  public void refresh() {
+    updateMovesLeft();
+  }
+
   private void updateMovesLeft() {
+    final Source air = source;
+    if (air != null) {
+      Optional.ofNullable(collapsiblePanel)
+          .ifPresent(
+              panel -> {
+                movesLeft = 0;
+                SwingUtilities.invokeLater(
+                    () -> {
+                      panel.setTitle(air.title());
+                      clearUnitAvatarArea();
+                    });
+              });
+      return;
+    }
     Optional.ofNullable(collapsiblePanel)
         .ifPresent(
             panel -> {
@@ -289,6 +332,10 @@ public class UnitScroller {
    * units will not be highlighted.
    */
   public void skipCurrentUnits() {
+    if (source != null) {
+      source.next(true);
+      return;
+    }
     if (lastFocusedTerritory != null) {
       skippedUnits.addAll(getMovableUnits(lastFocusedTerritory));
       updateMovesLeft();
@@ -313,6 +360,9 @@ public class UnitScroller {
   }
 
   private void wakeAllUnits() {
+    if (source != null) {
+      return;
+    }
     sleepingUnits.clear();
     skippedUnits.clear();
     updateMovesLeft();
@@ -320,6 +370,10 @@ public class UnitScroller {
   }
 
   public void centerOnNextMovableUnit() {
+    if (source != null) {
+      source.next(true);
+      return;
+    }
     centerOnMovableUnit(true);
 
     if (lastFocusedTerritory != null) {
@@ -357,6 +411,10 @@ public class UnitScroller {
   }
 
   public void centerOnPreviousMovableUnit() {
+    if (source != null) {
+      source.next(false);
+      return;
+    }
     centerOnMovableUnit(false);
     showAllUnitsMovedIfNeeded();
   }

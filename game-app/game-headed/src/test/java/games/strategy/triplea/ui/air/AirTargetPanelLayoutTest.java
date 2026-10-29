@@ -674,11 +674,12 @@ class AirTargetPanelLayoutTest {
     assertThat(
         all(panel).stream().anyMatch(c -> c instanceof javax.swing.JComboBox), is(false));
     assertThat(buttons("Next base").isEmpty(), is(true));
+    // request 47: the line is a link that goes to the next aircraft without orders
     assertThat(
         all(panel).stream()
-            .filter(c -> c instanceof JLabel l && l.getText() != null)
-            .map(c -> ((JLabel) c).getText())
-            .anyMatch(text -> text.startsWith("Aircraft without orders: ")),
+            .filter(c -> c instanceof AbstractButton b && b.getText() != null)
+            .map(c -> ((AbstractButton) c).getText())
+            .anyMatch(text -> text.contains("Aircraft without orders: ")),
         is(true));
     assertThat(panel.staged().isEmpty(), is(false));
     SwingUtilities.invokeAndWait(() -> buttons("Undo All").get(0).doClick());
@@ -812,6 +813,91 @@ class AirTargetPanelLayoutTest {
     }
   }
 
+  /**
+   * Request 47: in the game's own surroundings (a 1440×900 window, the side panel at its default
+   * width in the split pane, under the tabs), no part of any Show or Undo button is hidden.
+   */
+  @Test
+  void undoIsWhollyVisibleInTheGameWindowAtTheDefaultWidth() throws Exception {
+    final Territory[] t = cracowAndBialystok();
+    startPanel(false);
+    SwingUtilities.invokeAndWait(
+        () -> {
+          panel.click(dives(t[0]), t[0], click());
+          panel.click(List.of(), t[1], click());
+          panel.click(dives(t[0]), t[0], click());
+          panel.click(List.of(), t[1], click());
+        });
+    flush();
+    final javax.swing.JFrame window = new javax.swing.JFrame();
+    SwingUtilities.invokeAndWait(
+        () -> {
+          final javax.swing.JPanel side = new javax.swing.JPanel(new java.awt.BorderLayout());
+          final javax.swing.JPanel smallMap = new javax.swing.JPanel();
+          smallMap.setPreferredSize(new java.awt.Dimension(400, 185));
+          side.add(smallMap, java.awt.BorderLayout.NORTH);
+          final javax.swing.JTabbedPane tabs = new javax.swing.JTabbedPane();
+          tabs.addTab("Actions", panel);
+          for (final String tab : List.of("Players", "Resources", "Research", "Territory")) {
+            tabs.addTab(tab, new javax.swing.JPanel());
+          }
+          side.add(tabs, java.awt.BorderLayout.CENTER);
+          side.setPreferredSize(new java.awt.Dimension(400, 800));
+          final javax.swing.JPanel mapArea = new javax.swing.JPanel();
+          mapArea.setPreferredSize(new java.awt.Dimension(3000, 800));
+          final javax.swing.JSplitPane split =
+              new javax.swing.JSplitPane(javax.swing.JSplitPane.HORIZONTAL_SPLIT, mapArea, side);
+          split.setDividerSize(8);
+          split.setResizeWeight(1.0);
+          window.add(split);
+          window.pack();
+          window.setBounds(-5000, -5000, 1440, 900);
+          window.validate();
+          split.resetToPreferredSizes();
+          window.validate();
+          layoutAll(window.getContentPane());
+        });
+    flush();
+    final List<String> hidden = new ArrayList<>();
+    // the default width, then narrowed by the player (or left narrow by the window opening small)
+    for (final int sideWidth : List.of(0, 300, 240, 200, 170)) {
+      SwingUtilities.invokeAndWait(
+          () -> {
+            final javax.swing.JSplitPane split =
+                (javax.swing.JSplitPane) window.getContentPane().getComponent(0);
+            if (sideWidth > 0) {
+              split.setDividerLocation(split.getWidth() - split.getDividerSize() - sideWidth);
+            }
+            window.validate();
+            layoutAll(window.getContentPane());
+          });
+      // a move whose buttons went under it is laid out again (as the game does at once)
+      flush();
+      SwingUtilities.invokeAndWait(
+          () -> {
+            window.validate();
+            layoutAll(window.getContentPane());
+            for (final String text : List.of("Show", "Undo")) {
+              for (final AbstractButton b : buttons(text)) {
+                final Rectangle visible = b.getVisibleRect();
+                if (visible.width < b.getWidth() || visible.height < b.getHeight()) {
+                  hidden.add(
+                      text
+                          + " shows "
+                          + visible.width
+                          + " of "
+                          + b.getWidth()
+                          + " px; panel "
+                          + panel.getWidth());
+                }
+              }
+            }
+          });
+    }
+    window.dispose();
+    assertThat(hidden.toString(), hidden.isEmpty(), is(true));
+  }
+
   /** Request 44 screenshots: the map around the places, drawn as the game draws it. */
   private BufferedImage mapAround(
       final games.strategy.triplea.ui.UiContext ui,
@@ -923,6 +1009,125 @@ class AirTargetPanelLayoutTest {
         mapAround(ui, java.util.Set.of(), List.of(airMap), t[0], t[1]),
         "png",
         SHOTS.resolve("request44_turn_air_map_mode.png").toFile());
+  }
+
+  /**
+   * Request 47: orders for every German bomber that can fly, except {@code keep} of the type on
+   * each base given (bases in the order given).
+   */
+  private List<TargetAssignment> ordersLeaving(final Map<Territory, Integer> keep) {
+    final var stage = games.strategy.triplea.delegate.air.AirStage.Stage.BOMBERS;
+    final List<TargetAssignment> orders = new ArrayList<>();
+    final Map<Territory, Integer> left = new java.util.HashMap<>(keep);
+    for (final Territory zone : games.strategy.triplea.delegate.air.AirStage.bases(germans, stage)) {
+      final IntegerMap<UnitType> free = panel.unassigned(germans, zone);
+      for (final UnitType type : free.keySet()) {
+        final List<Target> targets =
+            games.strategy.triplea.delegate.air.AirStage.candidates(
+                germans, zone, type, stage, Map.of());
+        if (targets.isEmpty()) {
+          continue;
+        }
+        final int stay = Math.min(free.getInt(type), left.getOrDefault(zone, 0));
+        left.put(zone, left.getOrDefault(zone, 0) - stay);
+        if (free.getInt(type) - stay > 0) {
+          orders.add(new TargetAssignment(zone, type, free.getInt(type) - stay, targets.get(0)));
+        }
+      }
+    }
+    return orders;
+  }
+
+  @Test
+  void request47TheBannerSaysHowManyAircraftHaveNoOrders() throws Exception {
+    startPanel(false);
+    SwingUtilities.invokeAndWait(
+        () -> panel.setStagedForTests(ordersLeaving(Map.of(bases.get(1), 1))));
+    flush();
+    final AirMapMode.Banner banner = panel.banner(germans);
+    assertThat(banner.text(), is("Germans: 1 aircraft without orders"));
+    assertThat(banner.bold(), is("1"));
+    // the how-to is in its tooltip, not in the banner
+    assertThat(banner.help(), org.hamcrest.Matchers.containsString("Select bombers on the map"));
+    SwingUtilities.invokeAndWait(
+        () -> {
+          panel.setStagedForTests(List.of());
+          panel.setStagedForTests(ordersLeaving(Map.of()));
+        });
+    flush();
+    assertThat(panel.banner(germans).text(), is("Germans: all aircraft have orders"));
+  }
+
+  @Test
+  void request47NextGoesRoundThePlacesWithAircraftWithoutOrdersAndSelectsOne() throws Exception {
+    startPanel(false);
+    // 3 without orders in 2 places: 2 on the first base, 1 on another
+    final Territory first = bases.get(0);
+    final Territory second = bases.get(1);
+    SwingUtilities.invokeAndWait(
+        () -> panel.setStagedForTests(ordersLeaving(Map.of(first, 2, second, 1))));
+    flush();
+    final List<Territory> visited = new ArrayList<>();
+    for (int i = 0; i < 3; i++) {
+      SwingUtilities.invokeAndWait(
+          () -> {
+            panel.nextWithoutOrders(true);
+            visited.add(panel.selectedBase());
+            assertThat(panel.selectedCount(), is(1));
+          });
+    }
+    final List<Territory> order =
+        games.strategy.triplea.delegate.air.AirStage.bases(
+                germans, games.strategy.triplea.delegate.air.AirStage.Stage.BOMBERS)
+            .stream()
+            .filter(z -> z.equals(first) || z.equals(second))
+            .toList();
+    assertThat(visited, is(List.of(order.get(0), order.get(1), order.get(0))));
+    final org.mockito.InOrder centered = org.mockito.Mockito.inOrder(map);
+    centered.verify(map).centerOn(order.get(0));
+    centered.verify(map).centerOn(order.get(1));
+    centered.verify(map).centerOn(order.get(0));
+    // back the other way
+    SwingUtilities.invokeAndWait(() -> panel.nextWithoutOrders(false));
+    assertThat(panel.selectedBase(), is(order.get(1)));
+  }
+
+  @Test
+  void request47ScreenshotOfOneAircraftWithoutOrdersAfterNext() throws Exception {
+    final Territory[] t = cracowAndBialystok();
+    startPanel(false);
+    // every bomber has orders but one of Cracow's dive bombers
+    SwingUtilities.invokeAndWait(
+        () -> panel.setStagedForTests(ordersLeaving(Map.of(t[0], 1))));
+    flush();
+    SwingUtilities.invokeAndWait(() -> panel.nextWithoutOrders(true));
+    flush();
+    assertThat(panel.selectedBase(), is(t[0]));
+    final BufferedImage side = render(panel, WIDTH, HEIGHT);
+    final org.mockito.ArgumentCaptor<games.strategy.triplea.ui.panels.map.MapOverlay> overlay =
+        org.mockito.ArgumentCaptor.forClass(games.strategy.triplea.ui.panels.map.MapOverlay.class);
+    verify(map, org.mockito.Mockito.atLeastOnce()).addOverlay(overlay.capture());
+    final games.strategy.triplea.ui.UiContext ui = TestUi.create(data);
+    final BufferedImage around =
+        mapAround(ui, java.util.Set.copyOf(offMap()), List.of(overlay.getValue()), t[0], t[1]);
+    // the banner as the map draws it
+    final AirMapMode airMap = new AirMapMode(ui, null, data, text -> {});
+    airMap.setBanner(panel.banner(germans));
+    final java.awt.Dimension mapSize = ui.getMapData().getMapDimensions();
+    final BufferedImage banner = new BufferedImage(520, 52, BufferedImage.TYPE_INT_ARGB);
+    final java.awt.Graphics2D bg = banner.createGraphics();
+    bg.translate(-(mapSize.width / 2 - 260), 0);
+    airMap.paint(bg, data);
+    bg.dispose();
+    final int width = around.getWidth() + side.getWidth();
+    final int height = Math.max(around.getHeight(), side.getHeight());
+    final BufferedImage shot = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+    final java.awt.Graphics2D g = shot.createGraphics();
+    g.drawImage(around, 0, 0, null);
+    g.drawImage(banner, (around.getWidth() - banner.getWidth()) / 2, 0, null);
+    g.drawImage(side, around.getWidth(), 0, null);
+    g.dispose();
+    ImageIO.write(shot, "png", SHOTS.resolve("request47_bomber_stage_next.png").toFile());
   }
 
   private Territory AirBases_airborne() {
