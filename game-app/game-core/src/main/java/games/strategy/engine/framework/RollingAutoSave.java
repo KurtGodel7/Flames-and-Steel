@@ -40,14 +40,13 @@ import lombok.extern.slf4j.Slf4j;
  *       file, the rename and the clean-up run on a background thread. A save due while one is
  *       being written replaces any save still waiting (only the newest waits). The file is written
  *       to a temporary file and moved over the target, so a crash leaves the previous file.
- *   <li>A marker file says a game is running; a normal end removes it. If it is there at start-up,
- *       the last game did not close normally (see {@link #wasInterrupted}).
+ *   <li>Request 45: nothing is offered at start-up; the start screen's "Autosave" button lists the
+ *       saves newest first ({@link #all}).
  * </ul>
  */
 @Slf4j
 public final class RollingAutoSave {
   public static final String PREFIX = "FS_R";
-  private static final String MARKER = ".fs_game_running";
   private static final ExecutorService WRITER =
       Executors.newSingleThreadExecutor(
           r -> {
@@ -305,46 +304,24 @@ public final class RollingAutoSave {
     return new long[] {lastSnapshotMillis, lastWriteMillis, lastBytes};
   }
 
-  // ---- recovery
-
-  /** A game started: until it ends normally, the marker says so. */
-  public static void markRunning() {
-    try {
-      Files.createDirectories(hostFolder());
-      Files.writeString(hostFolder().resolve(MARKER), String.valueOf(System.currentTimeMillis()));
-    } catch (final IOException | RuntimeException e) {
-      log.debug("Could not write the running marker", e);
-    }
-  }
-
-  /** The game ended normally. */
-  public static void markStopped() {
-    try {
-      Files.deleteIfExists(hostFolder().resolve(MARKER));
-    } catch (final IOException | RuntimeException e) {
-      log.debug("Could not remove the running marker", e);
-    }
-  }
-
-  /** Whether the last game did not end normally (the marker is still there). */
-  public static boolean wasInterrupted() {
-    try {
-      return Files.exists(hostFolder().resolve(MARKER));
-    } catch (final RuntimeException e) {
-      return false;
-    }
-  }
+  // ---- loading (request 45: only when the player asks; no start-up prompt)
 
   /** The newest autosave of this fork (host or client copy), if any. */
   public static Optional<Path> latest() {
+    return all().stream().findFirst();
+  }
+
+  /** Every autosave of this fork (host and client copies), newest first. */
+  public static List<Path> all() {
     try (Stream<Path> host = list(hostFolder());
         Stream<Path> client = list(clientFolder())) {
       return Stream.concat(host, client)
           .filter(f -> f.getFileName().toString().startsWith(PREFIX))
           .filter(f -> f.getFileName().toString().endsWith(GameDataFileUtils.getExtension()))
-          .max(Comparator.comparingLong(RollingAutoSave::modified));
+          .sorted(Comparator.comparingLong(RollingAutoSave::modified).reversed())
+          .toList();
     } catch (final IOException | RuntimeException e) {
-      return Optional.empty();
+      return List.of();
     }
   }
 

@@ -44,7 +44,9 @@ public class AirCombat {
     /** A factory territory of the bombed nation (strategic bombing). */
     STRATEGIC,
     /** Request 30: fighter-types placed over a territory, to escort or defend (see AirCover). */
-    COVER
+    COVER,
+    /** Request 45: aircraft sent to a landing spot with no attack; no air battle. */
+    REBASE
   }
 
   /** A target a nation's aircraft may attack (or, for fighters, a place they may cover). */
@@ -58,6 +60,7 @@ public class AirCombat {
         case SUBS -> territory.getName() + ": submarines";
         case STRATEGIC -> territory.getName() + ": strategic bombing";
         case COVER -> territory.getName() + ": fighter cover";
+        case REBASE -> territory.getName() + " (rebase)";
       };
     }
   }
@@ -142,6 +145,7 @@ public class AirCombat {
       case STRATEGIC -> air != null && air.getBombingDamage() > 0;
       case SUBS -> air != null && air.isCanAttackSubs();
       case COVER -> air != null && air.isFighter();
+      case REBASE -> false;
       default -> air == null || !air.isFighter();
     };
   }

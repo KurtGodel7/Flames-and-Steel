@@ -78,10 +78,13 @@ public class AirPriority {
       final Map<GamePlayer, ? extends Collection<TargetAssignment>> choices) {
     for (final GamePlayer locker : lockersOf(player)) {
       final Collection<TargetAssignment> theirs = choices.get(locker);
-      if (theirs != null && theirs.stream().anyMatch(a -> a.target().territory().equals(t))) {
+      // request 45: rebasing aircraft join no battle, so they lock nobody out
+      if (theirs != null
+          && theirs.stream()
+              .anyMatch(a -> a.target().territory().equals(t) && !AirStage.isRebase(a))) {
         return Optional.of(locker);
       }
-      if (!AirBases.airborneOver(locker, t).isEmpty()) {
+      if (AirBases.airborneOver(locker, t).stream().anyMatch(u -> !u.getFlightRebase())) {
         return Optional.of(locker);
       }
     }
@@ -103,7 +106,9 @@ public class AirPriority {
       }
       for (final GamePlayer other : rule.lockedOut()) {
         final Collection<TargetAssignment> theirs = bombers.get(other);
-        if (theirs != null && theirs.stream().anyMatch(a -> a.target().territory().equals(t))) {
+        if (theirs != null
+            && theirs.stream()
+                .anyMatch(a -> a.target().territory().equals(t) && !AirStage.isRebase(a))) {
           return Optional.of(other);
         }
       }

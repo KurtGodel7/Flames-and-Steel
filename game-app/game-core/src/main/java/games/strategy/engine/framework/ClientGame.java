@@ -84,7 +84,6 @@ public class ClientGame extends AbstractGame {
             // we want to skip the first iteration, since that simply advances us to step 0
             if (firstRun) {
               firstRun = false;
-              RollingAutoSave.markRunning();
             } else {
               try (GameData.Unlocker ignored = gameData.acquireWriteLock()) {
                 gameData.getSequence().next();
@@ -209,7 +208,6 @@ public class ClientGame extends AbstractGame {
    * player associated with this node.
    */
   public void shutDown() {
-    RollingAutoSave.markStopped();
     if (isGameOver) {
       return;
     }

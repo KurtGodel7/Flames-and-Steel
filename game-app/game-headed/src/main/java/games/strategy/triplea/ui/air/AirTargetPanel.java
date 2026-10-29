@@ -403,9 +403,68 @@ public final class AirTargetPanel extends ActionPanel {
 
   private boolean mayGo(
       final GamePlayer player, final Territory zone, final UnitType type, final Target target) {
+    if (target.kind() == TargetKind.REBASE) {
+      return mayRebase(player, zone, type, target.territory());
+    }
     return targetsFor(player, zone, type).contains(target)
         && AirPriority.lockedBy(player, target.territory(), allied).isEmpty()
         && AirPriority.raidTakenBy(player, target, allied).isEmpty();
+  }
+
+  /** Request 45: whether aircraft of the type on the base may rebase to the territory. */
+  private boolean mayRebase(
+      final GamePlayer player, final Territory zone, final UnitType type, final Territory to) {
+    try (GameData.Unlocker ignored = getData().acquireReadLock()) {
+      return AirStage.rebaseProblem(player, zone, type, to, stage, revealed).isEmpty();
+    }
+  }
+
+  /**
+   * Request 45: whether a click on the territory would be a rebase: it holds nothing to attack, and
+   * in the fighter stage no bombers are going there.
+   */
+  private boolean isRebasePlace(final GamePlayer player, final Territory territory) {
+    try (GameData.Unlocker ignored = getData().acquireReadLock()) {
+      return !AirBases.isAirborneTerritory(territory)
+          && AirCombat.targetsIn(player, territory).isEmpty()
+          && !(coverMode && AirStage.bomberPlaces(revealed).contains(territory));
+    }
+  }
+
+  /** Request 45: why the selection can't rebase to the territory, or empty if some of it can. */
+  private Optional<String> rebaseWhyNot(final GamePlayer player, final Territory territory) {
+    Optional<String> first = Optional.empty();
+    try (GameData.Unlocker ignored = getData().acquireReadLock()) {
+      for (final UnitType type : selected.keySet()) {
+        final Optional<String> why =
+            AirStage.rebaseProblem(player, selectedZone, type, territory, stage, revealed);
+        if (why.isEmpty()) {
+          return Optional.empty();
+        }
+        if (first.isEmpty()) {
+          first = why;
+        }
+      }
+    }
+    return first;
+  }
+
+  /**
+   * Request 45: the selection flies to the territory with no attack, as a stock non-combat move
+   * made during combat move; the types that can't go there stay selected with the reason.
+   */
+  private void rebaseTo(final GamePlayer player, final Territory territory) {
+    final IntegerMap<UnitType> going = new IntegerMap<>();
+    for (final UnitType type : selected.keySet()) {
+      if (selected.getInt(type) > 0 && mayRebase(player, selectedZone, type, territory)) {
+        going.put(type, selected.getInt(type));
+      }
+    }
+    if (going.isEmpty()) {
+      frame.setStatusErrorMessage(rebaseWhyNot(player, territory).orElse(""));
+      return;
+    }
+    assign(AirStage.rebaseTo(territory), going);
   }
 
   /** The nation's own choices and its allies', for the caps. */
@@ -693,7 +752,12 @@ public final class AirTargetPanel extends ActionPanel {
             .map(Map.Entry::getKey)
             .toList();
     if (here.isEmpty()) {
-      frame.setStatusErrorMessage(whyNotTarget(player, territory));
+      // request 45: nothing to attack there, so it is a rebase
+      if (isRebasePlace(player, territory)) {
+        rebaseTo(player, territory);
+      } else {
+        frame.setStatusErrorMessage(whyNotTarget(player, territory));
+      }
       return;
     }
     Target target = here.get(0);
@@ -802,7 +866,11 @@ public final class AirTargetPanel extends ActionPanel {
     }
     final List<TargetAssignment> before = List.copyOf(staged);
     // request 30: never more than the side's cap over one place
-    int room = room(player, zone, target.territory());
+    // request 45: rebases count against no cap
+    int room =
+        target.kind() == TargetKind.REBASE
+            ? Integer.MAX_VALUE
+            : room(player, zone, target.territory());
     boolean trimmed = false;
     final IntegerMap<UnitType> free = available(player, zone);
     for (final UnitType type : List.copyOf(counts.keySet())) {
@@ -1044,7 +1112,19 @@ public final class AirTargetPanel extends ActionPanel {
               parts.add(describe(player, target) + diceText(player, target));
             }
           });
-      if (parts.isEmpty()) {
+      if (parts.isEmpty() && isRebasePlace(player, territory)) {
+        // request 45: a move with no attack is a rebase
+        final Optional<String> why = rebaseWhyNot(player, territory);
+        if (why.isPresent()) {
+          frame.setStatusWarningMessage(why.get());
+        } else {
+          frame.setStatusMessage(
+              territory.getName()
+                  + ": rebase, no attack; they land here at Planes Go Home  ·  "
+                  + landingText(player, territory)
+                  + "  (click to send them)");
+        }
+      } else if (parts.isEmpty()) {
         frame.setStatusWarningMessage(whyNotTarget(player, territory));
       } else {
         frame.setStatusMessage(
@@ -1138,6 +1218,7 @@ public final class AirTargetPanel extends ActionPanel {
               + "; "
               + badge(player, selectedZone, t);
       case COVER -> coverText(player, t, aaText);
+      case REBASE -> t.getName() + ": rebase, no attack";
     };
   }
 
@@ -1209,6 +1290,7 @@ public final class AirTargetPanel extends ActionPanel {
       case SUBS -> "Submarines";
       case STRATEGIC -> "Strategic bombing";
       case COVER -> "Escort or defend";
+      case REBASE -> "Rebase";
     };
   }
 
@@ -1407,10 +1489,11 @@ public final class AirTargetPanel extends ActionPanel {
           case SURFACE -> " (surface ships)";
           case SUBS -> " (submarines)";
           case STRATEGIC -> " (strategic bombing)";
+          case REBASE -> " (rebase)";
           default -> "";
         };
     final String role;
-    if (!coverMode) {
+    if (!coverMode || AirStage.isRebase(a)) {
       role = "";
     } else if (AirCover.sideCount(player, a.target().territory(), false, revealed) > 0) {
       role = " (escort)";
@@ -1874,14 +1957,19 @@ public final class AirTargetPanel extends ActionPanel {
           continue;
         }
         final Target target = new Target(place, a.target().kind());
-        if (!targetsFor(player, zone, type).contains(target)) {
+        final boolean rebase = target.kind() == TargetKind.REBASE;
+        if (rebase
+            ? !mayRebase(player, zone, type, place)
+            : !targetsFor(player, zone, type).contains(target)) {
           skipped += a.count();
           continue;
         }
         final int count =
             Math.min(
                 a.count(),
-                Math.min(available(player, zone).getInt(type), room(player, zone, place)));
+                Math.min(
+                    available(player, zone).getInt(type),
+                    rebase ? Integer.MAX_VALUE : room(player, zone, place)));
         if (count > 0) {
           staged.add(new TargetAssignment(zone, type, count, target));
         }

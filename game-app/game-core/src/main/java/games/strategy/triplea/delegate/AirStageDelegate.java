@@ -178,7 +178,12 @@ public class AirStageDelegate extends BaseTripleADelegate implements IAirStageDe
       choosing.clear();
       choosing.addAll(order);
       for (final GamePlayer p : order) {
-        startAsk(p, stage, order, Choice.none(), "");
+        // request 45: aircraft sent to rebase start out landed at their destination
+        final Choice start =
+            stage == Stage.HOME
+                ? new Choice(List.of(), AirHome.withRebases(p, List.of()))
+                : Choice.none();
+        startAsk(p, stage, order, start, "");
       }
     }
     bridge.leaveDelegateExecution();
@@ -318,7 +323,10 @@ public class AirStageDelegate extends BaseTripleADelegate implements IAirStageDe
       final GamePlayer p, final Stage stage, final List<GamePlayer> order, final Choice choice) {
     final Set<Territory> mine = new HashSet<>();
     final Set<AirCombat.Target> raids = new HashSet<>();
-    choice.targets().forEach(a -> mine.add(a.target().territory()));
+    // request 45: rebases join no battle, so they lock nobody out and are never handed back
+    choice.targets().stream()
+        .filter(a -> !AirStage.isRebase(a))
+        .forEach(a -> mine.add(a.target().territory()));
     choice.targets().stream()
         .filter(a -> a.target().kind() == AirCombat.TargetKind.STRATEGIC)
         .forEach(a -> raids.add(a.target()));
@@ -334,7 +342,9 @@ public class AirStageDelegate extends BaseTripleADelegate implements IAirStageDe
       final Set<String> why = new java.util.LinkedHashSet<>();
       for (final TargetAssignment a : e.getValue().targets()) {
         final Territory t = a.target().territory();
-        if (locked && mine.contains(t)) {
+        if (AirStage.isRebase(a)) {
+          kept.add(a);
+        } else if (locked && mine.contains(t)) {
           why.add(AirPriority.lockedText(t, p));
         } else if (raidLocked && raids.contains(a.target())) {
           why.add(AirPriority.raidText(t, p));
@@ -470,11 +480,25 @@ public class AirStageDelegate extends BaseTripleADelegate implements IAirStageDe
           change.add(
               ChangeFactory.unitPropertyChange(
                   f.plane(), f.rangeLeft(), Unit.PropertyName.FLIGHT_RANGE_LEFT));
+          if (AirStage.isRebase(a)) {
+            // request 45: airborne for the round, landing at the destination (or its carrier)
+            change.add(
+                ChangeFactory.unitPropertyChange(f.plane(), true, Unit.PropertyName.FLIGHT_REBASE));
+            AirBases.rebaseCarrier(p, a.unitType(), f.over())
+                .ifPresent(
+                    c ->
+                        change.add(
+                            ChangeFactory.unitPropertyChange(
+                                f.plane(), c, Unit.PropertyName.FLIGHT_CARRIER)));
+          }
         }
         byBase.computeIfAbsent(a.zone(), k -> new ArrayList<>()).addAll(these);
         bridge
             .getHistoryWriter()
             .addChildToEvent(PlayerNames.display(p) + ": " + AirStage.describe(a), these);
+        if (AirStage.isRebase(a)) {
+          continue;
+        }
         toBattle
             .computeIfAbsent(p, k -> new ArrayList<>())
             .add(new TargetAssignment(airborne, a.unitType(), these.size(), a.target()));

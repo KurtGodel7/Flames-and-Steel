@@ -177,7 +177,8 @@ public class AirCover {
         continue;
       }
       for (final TargetAssignment a : e.getValue()) {
-        if (a.target().territory().equals(t) && isCover(a) == fighters) {
+        // request 45: rebasing aircraft join no battle and count against no cap
+        if (a.target().territory().equals(t) && isCover(a) == fighters && !AirStage.isRebase(a)) {
           count += a.count();
         }
       }
@@ -209,6 +210,9 @@ public class AirCover {
     final Map<GamePlayer, Collection<TargetAssignment>> all = new LinkedHashMap<>(others);
     all.put(player, List.copyOf(own));
     for (final TargetAssignment a : own) {
+      if (AirStage.isRebase(a)) {
+        continue;
+      }
       final boolean fighters = isCover(a);
       final Territory t = a.target().territory();
       final int cap = cap(player, t, fighters, bombers);

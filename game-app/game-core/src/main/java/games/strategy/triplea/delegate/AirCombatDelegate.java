@@ -666,7 +666,7 @@ public class AirCombatDelegate extends BaseTripleADelegate {
                           AirCombat.atWar(attacker, u.getOwner())
                               && (Matches.unitCanProduceUnits().test(u)
                                   || ApcAttachment.isApc(u.getType())));
-          case COVER -> List.of(); // fighter cover is never a strike
+          case COVER, REBASE -> List.of(); // fighter cover and rebases are never strikes
         };
     final List<Unit> defenders = new ArrayList<>(targets);
     aaGuns.stream().filter(u -> !defenders.contains(u)).forEach(defenders::add);
@@ -1097,6 +1097,7 @@ public class AirCombatDelegate extends BaseTripleADelegate {
                             && AirCombat.isFighterType(u)
                             && u.getType().equals(a.unitType())
                             && over.equals(u.getFlightOver())
+                            && !u.getFlightRebase()
                             && !used.contains(u))
                 .sorted(java.util.Comparator.comparingInt(Unit::getHits))
                 .limit(a.count())
@@ -1126,6 +1127,7 @@ public class AirCombatDelegate extends BaseTripleADelegate {
                             && AirCombat.isBomber(u)
                             && u.getType().equals(a.unitType())
                             && over.equals(u.getFlightOver())
+                            && !u.getFlightRebase()
                             && !used.contains(u))
                 .sorted(java.util.Comparator.comparingInt(Unit::getHits))
                 .limit(a.count())

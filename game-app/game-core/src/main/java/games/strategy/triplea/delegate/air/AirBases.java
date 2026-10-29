@@ -303,6 +303,7 @@ public class AirBases {
     if (isAirborne(unit)) {
       return "In the air over "
           + unit.getFlightOver().getName()
+          + (unit.getFlightRebase() ? " (rebase)" : "")
           + ": lands at round end, "
           + unit.getFlightRangeLeft()
           + steps(unit.getFlightRangeLeft())
@@ -585,20 +586,9 @@ public class AirBases {
   public static Optional<String> flightProblem(
       final Unit plane, final Territory from, final Territory target) {
     final GamePlayer player = plane.getOwner();
-    final int range = AirRange.range(plane.getType(), player);
     final OptionalInt left = rangeLeftAt(plane, from, target);
     if (left.isEmpty()) {
-      final OptionalInt far = distance(player, from, target, 60);
-      return Optional.of(
-          target.getName()
-              + (far.isPresent()
-                  ? " is " + far.getAsInt() + steps(far.getAsInt()) + " from " + from.getName()
-                  : " can't be reached from " + from.getName())
-              + "; "
-              + AirRange.pluralName(plane.getType()).toLowerCase(java.util.Locale.ROOT)
-              + " fly "
-              + range
-              + ".");
+      return outOfRange(player, plane.getType(), from, target);
     }
     final Landing landing =
         landingOptions(new Flight(plane, target, left.getAsInt()), carrierReaches(player));
@@ -622,6 +612,29 @@ public class AirBases {
                     .append(steps(n.getValue()))
                     .append(")"));
     return Optional.of(text.append(".").toString());
+  }
+
+  /**
+   * Why aircraft of the type can't fly from one territory to another within their full range, or
+   * empty: "Hamburg is 5 steps from Warsaw; fighters fly 3".
+   */
+  public static Optional<String> outOfRange(
+      final GamePlayer player, final UnitType type, final Territory from, final Territory to) {
+    final int range = AirRange.range(type, player);
+    if (distance(player, from, to, range).isPresent()) {
+      return Optional.empty();
+    }
+    final OptionalInt far = distance(player, from, to, 60);
+    return Optional.of(
+        to.getName()
+            + (far.isPresent()
+                ? " is " + far.getAsInt() + steps(far.getAsInt()) + " from " + from.getName()
+                : " can't be reached from " + from.getName())
+            + "; "
+            + AirRange.pluralName(type).toLowerCase(java.util.Locale.ROOT)
+            + " fly "
+            + range
+            + ".");
   }
 
   /** The nearest land base to the territory within {@code max} steps, with its distance. */
@@ -656,6 +669,26 @@ public class AirBases {
           + zone.getName();
     }
     return "nowhere to land";
+  }
+
+  /**
+   * Request 45: the own carrier that aircraft of this type rebasing to the sea zone fly to: one in
+   * the zone (one with room first), else one that could reach it this round; empty if none.
+   */
+  public static Optional<Unit> rebaseCarrier(
+      final GamePlayer player, final UnitType type, final Territory zone) {
+    if (!zone.isWater() || !canUseCarriers(type)) {
+      return Optional.empty();
+    }
+    final List<Unit> there =
+        zone.getUnitCollection().getMatches(u -> u.isOwnedBy(player) && fits(type, u));
+    if (!there.isEmpty()) {
+      return Optional.of(there.get(0));
+    }
+    return carrierReaches(player).entrySet().stream()
+        .filter(e -> fits(type, e.getKey()) && e.getValue().contains(zone))
+        .map(Map.Entry::getKey)
+        .findFirst();
   }
 
   /** Every own carrier of the nation with the sea zones it could reach this round. */

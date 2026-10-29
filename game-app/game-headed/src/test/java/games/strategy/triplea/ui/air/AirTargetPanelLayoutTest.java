@@ -538,6 +538,54 @@ class AirTargetPanelLayoutTest {
   }
 
   @Test
+  void request45AClickOnOwnLandWithNothingToAttackIsARebase() throws Exception {
+    final Territory[] t = cracowAndBialystok();
+    final var player = germans;
+    final Territory home =
+        data.getMap().getNeighbors(t[0]).stream()
+            .filter(
+                n ->
+                    !n.isWater()
+                        && games.strategy.triplea.delegate.air.AirBases.isLandBase(player, n)
+                        && games.strategy.triplea.delegate.air.AirCombat.targetsIn(player, n)
+                            .isEmpty())
+            .findFirst()
+            .orElseThrow();
+    final var dive = data.getUnitTypeList().getUnitTypeOrThrow("diveBomber");
+    final int range = games.strategy.triplea.delegate.air.AirRange.range(dive, player);
+    final Territory far =
+        data.getMap().getTerritories().stream()
+            .filter(
+                n ->
+                    !n.isWater()
+                        && n.isOwnedBy(player)
+                        && games.strategy.triplea.delegate.air.AirCombat.targetsIn(player, n)
+                            .isEmpty()
+                        && games.strategy.triplea.delegate.air.AirBases.distance(
+                                player, t[0], n, range)
+                            .isEmpty())
+            .findFirst()
+            .orElseThrow();
+    startPanel(false);
+    SwingUtilities.invokeAndWait(
+        () -> {
+          panel.click(dives(t[0]), t[0], click());
+          panel.click(List.of(), far, click());
+        });
+    flush();
+    assertThat(panel.staged().size(), is(0));
+    SwingUtilities.invokeAndWait(() -> panel.click(List.of(), home, click()));
+    flush();
+    assertThat(panel.staged().size(), is(1));
+    assertThat(
+        panel.staged().get(0).target().kind(),
+        is(games.strategy.triplea.delegate.air.AirCombat.TargetKind.REBASE));
+    assertThat(
+        panel.moveText(germans, panel.staged().get(0)),
+        is(t[0].getName() + " -> " + home.getName() + " (rebase)"));
+  }
+
+  @Test
   void aPlainClickMovesOneDiveBomberAndCtrlClickTheWholeStack() throws Exception {
     final Territory[] t = cracowAndBialystok();
     startPanel(false);

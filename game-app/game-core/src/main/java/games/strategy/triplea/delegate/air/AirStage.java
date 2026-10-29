@@ -134,8 +134,67 @@ public class AirStage {
   public static Set<Territory> bomberPlaces(
       final Map<GamePlayer, ? extends Collection<TargetAssignment>> bombers) {
     final Set<Territory> result = new LinkedHashSet<>();
-    bombers.values().forEach(list -> list.forEach(a -> result.add(a.target().territory())));
+    bombers.values().forEach(
+        list ->
+            list.stream().filter(a -> !isRebase(a)).forEach(a -> result.add(a.target().territory())));
     return result;
+  }
+
+  /** Request 45: whether the choice sends aircraft to rebase (no attack, no air battle). */
+  public static boolean isRebase(final TargetAssignment a) {
+    return a.target().kind() == TargetKind.REBASE;
+  }
+
+  /** Request 45: the rebase "target" for a territory. */
+  public static Target rebaseTo(final Territory territory) {
+    return new Target(territory, TargetKind.REBASE);
+  }
+
+  /**
+   * Request 45: why aircraft of the type on the base can't be sent to rebase at the territory, on
+   * their own, or empty. A rebase goes within full range to land the nation may land on now, or to
+   * a sea zone one of its own carriers is in or could reach this round; never where there is
+   * something to attack, and in the fighter stage never where bombers are going (fighters sent
+   * there escort or defend). The landing room shared with other flights is checked by {@link
+   * #problem}.
+   */
+  public static Optional<String> rebaseProblem(
+      final GamePlayer player,
+      final Territory base,
+      final UnitType type,
+      final Territory to,
+      final Stage stage,
+      final Map<GamePlayer, ? extends Collection<TargetAssignment>> bombers) {
+    if (stage == Stage.HOME || !isOfStage(type, stage)) {
+      return Optional.of(typeName(type) + " don't fly in this stage.");
+    }
+    if (AirBases.isAirborneTerritory(to)) {
+      return Optional.of("Pick a territory on the map.");
+    }
+    if (to.equals(base)) {
+      return Optional.of(to.getName() + ": they are already there.");
+    }
+    if (!AirCombat.targetsIn(player, to).isEmpty()
+        || to.anyUnitsMatch(u -> AirCombat.atWar(player, u.getOwner()))) {
+      return Optional.of(to.getName() + " has enemy units: a move there is an attack, not a rebase.");
+    }
+    if (stage == Stage.FIGHTERS && bomberPlaces(bombers).contains(to)) {
+      return Optional.of(
+          "Bombers are going to " + to.getName() + " this round: fighters sent there escort or defend.");
+    }
+    if (to.isWater()) {
+      if (!AirBases.canUseCarriers(type)) {
+        return Optional.of(to.getName() + ": " + typeName(type).toLowerCase(java.util.Locale.ROOT)
+            + " can't land on carriers.");
+      }
+      if (AirBases.rebaseCarrier(player, type, to).isEmpty()) {
+        return Optional.of(
+            to.getName() + ": none of your carriers is there or can get there this round.");
+      }
+    } else if (!AirBases.isLandBase(player, to)) {
+      return Optional.of(to.getName() + ": not land your aircraft may land on now.");
+    }
+    return AirBases.outOfRange(player, type, base, to);
   }
 
   /**
@@ -204,6 +263,9 @@ public class AirStage {
         aircraftAt(player, base, stage).stream().filter(u -> u.getType().equals(type)).toList();
     if (here.isEmpty()) {
       return Optional.of("No " + typeName(type).toLowerCase(java.util.Locale.ROOT) + " at " + base.getName() + ".");
+    }
+    if (target.kind() == TargetKind.REBASE) {
+      return rebaseProblem(player, base, type, target.territory(), stage, bombers);
     }
     if (stage == Stage.FIGHTERS) {
       if (target.kind() != TargetKind.COVER) {
@@ -287,28 +349,37 @@ public class AirStage {
         return Optional.of(typeName(a.unitType()) + " don't fly in this stage.");
       }
       final String key = a.zone().getName() + "|" + a.unitType().getName();
-      final List<Target> legal =
-          listed.computeIfAbsent(
-              key, k -> candidates(player, a.zone(), a.unitType(), stage, bombers, reach));
-      if (!legal.contains(a.target())) {
-        return Optional.of(
-            whyNot(player, a.zone(), a.unitType(), a.target(), stage, bombers)
-                .orElse(
-                    typeName(a.unitType())
-                        + " at "
-                        + a.zone().getName()
-                        + " can't take "
-                        + a.target().describe()
-                        + "."));
-      }
-      final Optional<GamePlayer> locker = AirPriority.lockedBy(player, a.target().territory(), others);
-      if (locker.isPresent()) {
-        return Optional.of(AirPriority.lockedText(a.target().territory(), locker.get()));
-      }
-      // request 43 section 1: one nation's bombers per factory
-      final Optional<GamePlayer> raider = AirPriority.raidTakenBy(player, a.target(), others);
-      if (raider.isPresent()) {
-        return Optional.of(AirPriority.raidText(a.target().territory(), raider.get()));
+      if (isRebase(a)) {
+        // request 45: no attack, so no caps or priority; only the spot and the range
+        final Optional<String> why =
+            rebaseProblem(player, a.zone(), a.unitType(), a.target().territory(), stage, bombers);
+        if (why.isPresent()) {
+          return why;
+        }
+      } else {
+        final List<Target> legal =
+            listed.computeIfAbsent(
+                key, k -> candidates(player, a.zone(), a.unitType(), stage, bombers, reach));
+        if (!legal.contains(a.target())) {
+          return Optional.of(
+              whyNot(player, a.zone(), a.unitType(), a.target(), stage, bombers)
+                  .orElse(
+                      typeName(a.unitType())
+                          + " at "
+                          + a.zone().getName()
+                          + " can't take "
+                          + a.target().describe()
+                          + "."));
+        }
+        final Optional<GamePlayer> locker = AirPriority.lockedBy(player, a.target().territory(), others);
+        if (locker.isPresent()) {
+          return Optional.of(AirPriority.lockedText(a.target().territory(), locker.get()));
+        }
+        // request 43 section 1: one nation's bombers per factory
+        final Optional<GamePlayer> raider = AirPriority.raidTakenBy(player, a.target(), others);
+        if (raider.isPresent()) {
+          return Optional.of(AirPriority.raidText(a.target().territory(), raider.get()));
+        }
       }
       used.add(key, a.count());
       final long available =

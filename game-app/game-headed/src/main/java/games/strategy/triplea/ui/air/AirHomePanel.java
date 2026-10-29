@@ -428,7 +428,13 @@ public final class AirHomePanel extends ActionPanel {
               player,
               l.unitType(),
               l.count(),
-              l.from().getName() + " -> " + l.to().getName() + (l.airborne() ? "" : " (rebase)"),
+              l.from().getName()
+                  + " -> "
+                  + l.to().getName()
+                  // request 45: a rebase ordered in an air stage, landed here by default
+                  + (!l.airborne()
+                      ? " (rebase)"
+                      : AirHome.isRebaseLanding(player, l) ? " (rebase order)" : ""),
               () -> {
                 selected = null;
                 spots = Map.of();

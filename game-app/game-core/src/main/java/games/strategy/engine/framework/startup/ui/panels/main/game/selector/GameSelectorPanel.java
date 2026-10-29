@@ -65,6 +65,13 @@ public final class GameSelectorPanel extends JPanel implements Observer {
           .toolTip("Open a game saved on your computer.")
           .build();
 
+  // Flames and Steel (request 45)
+  private final JButton loadAutoSave =
+      new JButtonBuilder()
+          .title("Autosave")
+          .toolTip("Open one of the game's autosaves, newest first.")
+          .build();
+
   private final JButton mapOptions =
       new JButtonBuilder()
           .title("Game Options")
@@ -128,6 +135,9 @@ public final class GameSelectorPanel extends JPanel implements Observer {
     add(loadSavedGame, buildGridRow(0, row, new Insets(0, 10, 10, 10)));
     row++;
 
+    add(loadAutoSave, buildGridRow(0, row, new Insets(0, 10, 10, 10)));
+    row++;
+
     final JButton downloadMapButton =
         new JButtonBuilder()
             .title("Download Maps")
@@ -178,6 +188,14 @@ public final class GameSelectorPanel extends JPanel implements Observer {
               clientModelForHostBots.executeChangeGameToSaveGameClientAction(
                   JOptionPane.getFrameForComponent(this));
             }
+          }
+        });
+
+    // Flames and Steel (request 45): the autosaves, newest first, when the player wants them
+    loadAutoSave.addActionListener(
+        e -> {
+          if (canSelectLocalGameData()) {
+            AutoSavePicker.choose(this).ifPresent(this::loadSaveFile);
           }
         });
 
@@ -278,6 +296,7 @@ public final class GameSelectorPanel extends JPanel implements Observer {
           final boolean canSelectGameData = canSelectLocalGameData();
           final boolean canChangeHostBotGameData = canChangeHostBotGameData();
           loadSavedGame.setEnabled(canSelectGameData || canChangeHostBotGameData);
+          loadAutoSave.setEnabled(canSelectGameData);
           loadNewGame.setEnabled(canSelectGameData || canChangeHostBotGameData);
           // Disable game options if there are none.
           mapOptions.setEnabled(

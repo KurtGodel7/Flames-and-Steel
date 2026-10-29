@@ -60,6 +60,9 @@ public class Unit extends GameDataComponent implements DynamicallyModifiable {
     // Flames and Steel (request 38): an airborne aircraft's territory and the range it has left
     FLIGHT_OVER("flightOver"),
     FLIGHT_RANGE_LEFT("flightRangeLeft"),
+    // Flames and Steel (request 45): an airborne aircraft sent to rebase, and the carrier it flies to
+    FLIGHT_REBASE("flightRebase"),
+    FLIGHT_CARRIER("flightCarrier"),
     ;
 
     private final String value;
@@ -125,6 +128,10 @@ public class Unit extends GameDataComponent implements DynamicallyModifiable {
   @Nullable private Territory flightOver = null;
   // Flames and Steel (request 38): the range an airborne aircraft has left to land with
   private int flightRangeLeft = 0;
+  // Flames and Steel (request 45): sent to rebase (no attack); lands at its destination
+  private boolean flightRebase = false;
+  // Flames and Steel (request 45): the carrier a rebasing aircraft flies to, or null
+  @Nullable private Unit flightCarrier = null;
 
   /** Creates new Unit. Owner can be null. */
   public Unit(final UnitType type, @Nullable final GamePlayer owner, final GameData data) {
@@ -324,6 +331,11 @@ public class Unit extends GameDataComponent implements DynamicallyModifiable {
                         case FLIGHT_RANGE_LEFT ->
                             MutableProperty.ofSimple(
                                 this::setFlightRangeLeft, this::getFlightRangeLeft);
+                        case FLIGHT_REBASE ->
+                            MutableProperty.ofSimple(this::setFlightRebase, this::getFlightRebase);
+                        case FLIGHT_CARRIER ->
+                            MutableProperty.ofSimple(
+                                this::setFlightCarrier, this::getFlightCarrier);
                       });
     };
   }
@@ -413,6 +425,24 @@ public class Unit extends GameDataComponent implements DynamicallyModifiable {
 
   private void setFlightRangeLeft(final int value) {
     flightRangeLeft = value;
+  }
+
+  /** Flames and Steel (request 45): whether an airborne aircraft was sent to rebase, not attack. */
+  public boolean getFlightRebase() {
+    return flightRebase;
+  }
+
+  private void setFlightRebase(final boolean value) {
+    flightRebase = value;
+  }
+
+  /** Flames and Steel (request 45): the carrier a rebasing aircraft flies to, or null. */
+  public @Nullable Unit getFlightCarrier() {
+    return flightCarrier;
+  }
+
+  private void setFlightCarrier(final @Nullable Unit value) {
+    flightCarrier = value;
   }
 
   private void setWasInAirBattle(final boolean value) {

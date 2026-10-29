@@ -207,10 +207,71 @@ public class AirHome {
   }
 
   /**
+   * Request 45: the player's landings plus, for every aircraft sent to rebase and left out, a
+   * landing at its destination: the land it flew to if the nation may still land there, or the
+   * carrier it flew to (wherever that carrier is now, within the range left), else an own carrier
+   * in the sea zone it flew to. A landing that no longer fits (room) is left out; those aircraft
+   * then land like any other airborne aircraft, or are lost.
+   */
+  public static List<Landing> withRebases(final GamePlayer player, final List<Landing> chosen) {
+    List<Landing> result = new ArrayList<>(chosen);
+    final Set<Unit> landed = new HashSet<>();
+    unitsFor(player, chosen).values().forEach(landed::addAll);
+    for (final AirBases.Flight f : AirStage.airborneFlights(player)) {
+      final Unit u = f.plane();
+      if (!u.getFlightRebase() || landed.contains(u)) {
+        continue;
+      }
+      final Optional<Territory> spot = rebaseSpot(player, u);
+      if (spot.isEmpty()) {
+        continue;
+      }
+      final List<Landing> more = new ArrayList<>(result);
+      more.add(new Landing(f.over(), true, u.getType(), 1, spot.get()));
+      final List<Landing> merged = merge(more);
+      if (problem(player, merged).isEmpty()) {
+        result = merged;
+      }
+    }
+    return result;
+  }
+
+  /** Request 45: where a rebasing aircraft lands, if its destination is still legal. */
+  private static Optional<Territory> rebaseSpot(final GamePlayer player, final Unit u) {
+    final Territory over = u.getFlightOver();
+    if (over == null) {
+      return Optional.empty();
+    }
+    final Map<Territory, Integer> reach =
+        spots(player, new Group(over, true, u.getType(), u.getFlightRangeLeft(), List.of(u)));
+    if (!over.isWater()) {
+      return reach.containsKey(over) ? Optional.of(over) : Optional.empty();
+    }
+    final Unit carrier = u.getFlightCarrier();
+    if (carrier != null && carrier.isOwnedBy(player) && AirBases.fits(u.getType(), carrier)) {
+      for (final Territory zone : reach.keySet()) {
+        if (zone.isWater() && zone.getUnitCollection().contains(carrier)) {
+          return Optional.of(zone);
+        }
+      }
+    }
+    return reach.containsKey(over) ? Optional.of(over) : Optional.empty();
+  }
+
+  /** Request 45: whether the landing lands aircraft that were sent to rebase. */
+  public static boolean isRebaseLanding(final GamePlayer player, final Landing landing) {
+    return landing.airborne()
+        && AirBases.airborneOver(player, landing.from()).stream()
+            .anyMatch(u -> u.getType().equals(landing.unitType()) && u.getFlightRebase());
+  }
+
+  /**
    * The player's landings plus the default for every airborne aircraft left out: the nearest spot
    * with room, in the order of {@link #spots}. Aircraft that stayed home and are left out stay.
    */
-  public static List<Landing> withDefaults(final GamePlayer player, final List<Landing> chosen) {
+  public static List<Landing> withDefaults(final GamePlayer player, final List<Landing> landings) {
+    // request 45: aircraft sent to rebase land at their destination first, if it is still legal
+    final List<Landing> chosen = withRebases(player, landings);
     final List<Landing> result = new ArrayList<>(chosen);
     final Map<Landing, List<Unit>> units = unitsFor(player, chosen);
     final Set<Unit> landed = new HashSet<>();
@@ -290,6 +351,10 @@ public class AirHome {
         for (final Unit u : list) {
           change.add(ChangeFactory.unitPropertyChange(u, null, Unit.PropertyName.FLIGHT_OVER));
           change.add(ChangeFactory.unitPropertyChange(u, 0, Unit.PropertyName.FLIGHT_RANGE_LEFT));
+          if (u.getFlightRebase()) {
+            change.add(ChangeFactory.unitPropertyChange(u, false, Unit.PropertyName.FLIGHT_REBASE));
+            change.add(ChangeFactory.unitPropertyChange(u, null, Unit.PropertyName.FLIGHT_CARRIER));
+          }
         }
         change.add(ChangeFactory.moveUnits(airborne, l.to(), list));
       } else if (!l.from().equals(l.to())) {

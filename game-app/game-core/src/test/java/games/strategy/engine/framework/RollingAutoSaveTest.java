@@ -176,14 +176,26 @@ class RollingAutoSaveTest {
   }
 
   @Test
-  void anInterruptedGameIsSeenAndANormalEndIsNot() {
-    RollingAutoSave.markRunning();
-    assertThat(RollingAutoSave.wasInterrupted(), is(true));
-    RollingAutoSave.markStopped();
-    assertThat(RollingAutoSave.wasInterrupted(), is(false));
+  void autosavesHaveReadableNames() {
     assertThat(
         RollingAutoSave.describe(Path.of("FS_R04_037_America-Atlantic_Combat-Move.tsvg")),
         is("Round 4, America Atlantic, Combat Move"));
     assertThat(RollingAutoSave.describe(Path.of("FS_R04_start.tsvg")), is("Round 4, start"));
+  }
+
+  @Test
+  void theAutosaveListIsNewestFirstAndNoStartUpMarkerIsWritten() throws Exception {
+    final Path host = RollingAutoSave.hostFolder();
+    Files.createDirectories(RollingAutoSave.clientFolder());
+    final Path old = Files.writeString(host.resolve("FS_R03_start.tsvg"), "x");
+    final Path copy =
+        Files.writeString(RollingAutoSave.clientFolder().resolve("FS_R04_start.tsvg"), "x");
+    final Path newest = Files.writeString(host.resolve("FS_R04_012_Germans_Combat-Move.tsvg"), "x");
+    Files.setLastModifiedTime(old, java.nio.file.attribute.FileTime.fromMillis(1_000_000));
+    Files.setLastModifiedTime(copy, java.nio.file.attribute.FileTime.fromMillis(2_000_000));
+    Files.setLastModifiedTime(newest, java.nio.file.attribute.FileTime.fromMillis(3_000_000));
+    assertThat(RollingAutoSave.all(), is(java.util.List.of(newest, copy, old)));
+    assertThat(RollingAutoSave.latest().orElseThrow(), is(newest));
+    assertThat(Files.exists(host.resolve(".fs_game_running")), is(false));
   }
 }

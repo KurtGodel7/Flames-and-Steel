@@ -315,10 +315,6 @@ public class ServerGame extends AbstractGame {
 
   /** Starts the game in a new thread. */
   public void startGame() {
-    // request 36: until the game ends normally, the start-up screen can offer to resume it
-    if (delegateAutosavesEnabled) {
-      RollingAutoSave.markRunning();
-    }
     try {
       setUpGameForRunningSteps();
       while (!isGameOver) {
@@ -364,7 +360,6 @@ public class ServerGame extends AbstractGame {
    * will then be shut down.
    */
   public void stopGame() {
-    RollingAutoSave.markStopped();
     if (isGameOver) {
       log.warn("Game previously stopped, cannot stop again.");
       return;
