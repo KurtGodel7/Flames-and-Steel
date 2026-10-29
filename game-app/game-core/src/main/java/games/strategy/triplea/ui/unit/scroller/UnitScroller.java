@@ -188,11 +188,17 @@ public class UnitScroller {
                 SwingUtilities.invokeLater(
                     () -> {
                       panel.setTitle(air.title());
+                      // request 48: the bar does exactly what '.' does
+                      panel.setAction(
+                          this::centerOnNextMovableUnit,
+                          "Goes to the next aircraft without orders and selects one, as '.' does"
+                              + " (',' goes back).");
                       clearUnitAvatarArea();
                     });
               });
       return;
     }
+    Optional.ofNullable(collapsiblePanel).ifPresent(panel -> panel.setAction(null, null));
     Optional.ofNullable(collapsiblePanel)
         .ifPresent(
             panel -> {

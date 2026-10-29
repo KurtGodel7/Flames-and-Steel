@@ -3,6 +3,7 @@ package games.strategy.triplea.ui.air;
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
 import java.awt.Color;
+import java.awt.Component;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
@@ -10,14 +11,13 @@ import java.util.Set;
 import java.util.WeakHashMap;
 import javax.annotation.Nullable;
 import javax.swing.JComponent;
-import javax.swing.JLabel;
 import javax.swing.UIManager;
 
 /**
  * Request 47: the how-to sentences of the air stages. They are always in the banner's tooltip; in
  * the side panel (small grey text) they show the first time each stage opens for a nation in a
- * game, or every time while the View menu's "Show Air Stage Help" is on. That option is on during
- * a game's first round and off after, until the player sets it.
+ * game (request 48: until the first move there), or every time while the View menu's "Show Air
+ * Stage Help" is on. That option is off unless the player turns it on.
  */
 public final class AirHelp {
   private static final Map<GameData, Set<String>> seen =
@@ -26,15 +26,9 @@ public final class AirHelp {
 
   private AirHelp() {}
 
-  /** The View menu option: the player's choice, else on in round 1 only. */
+  /** The View menu option: off unless the player turned it on (request 48). */
   public static boolean isOn(final GameData data) {
-    final Boolean choice = chosen;
-    if (choice != null) {
-      return choice;
-    }
-    try (GameData.Unlocker ignored = data.acquireReadLock()) {
-      return data.getSequence().getRound() <= 1;
-    }
+    return Boolean.TRUE.equals(chosen);
   }
 
   public static void setOn(final boolean on) {
@@ -52,14 +46,62 @@ public final class AirHelp {
     return first || isOn(data);
   }
 
-  /** The help as small grey text that wraps in the side panel. */
+  /** The help as small grey text that wraps to the width of the panel it is in. */
   static JComponent text(final String help) {
-    final JLabel label =
-        new JLabel("<html><div style='width:220px'>" + help + "</div></html>");
+    final javax.swing.JTextArea area =
+        new javax.swing.JTextArea(help) {
+          private static final long serialVersionUID = 1L;
+
+          @Override
+          public java.awt.Dimension getPreferredSize() {
+            // as wide as the panel gives it; as tall as the wrapped text needs at that width
+            final java.awt.Container parent = getParent();
+            final int width =
+                parent != null && parent.getWidth() > 0
+                    ? parent.getWidth() - parent.getInsets().left - parent.getInsets().right
+                    : 260;
+            if (getWidth() != width) {
+              setSize(width, Short.MAX_VALUE);
+            }
+            return new java.awt.Dimension(width, super.getPreferredSize().height);
+          }
+
+          @Override
+          public java.awt.Dimension getMaximumSize() {
+            return new java.awt.Dimension(Integer.MAX_VALUE, getPreferredSize().height);
+          }
+        };
+    area.setEditable(false);
+    area.setFocusable(false);
+    area.setOpaque(false);
+    area.setLineWrap(true);
+    area.setWrapStyleWord(true);
     final Color grey = UIManager.getColor("Label.disabledForeground");
-    label.setForeground(grey == null ? Color.GRAY : grey);
-    label.setFont(label.getFont().deriveFont(label.getFont().getSize2D() - 1f));
-    label.setBorder(javax.swing.BorderFactory.createEmptyBorder(2, 5, 4, 0));
-    return label;
+    area.setForeground(grey == null ? Color.GRAY : grey);
+    final java.awt.Font font = UIManager.getFont("Label.font");
+    if (font != null) {
+      area.setFont(font.deriveFont(font.getSize2D() - 1f));
+    }
+    area.setBorder(javax.swing.BorderFactory.createEmptyBorder(2, 5, 4, 2));
+    area.setAlignmentX(Component.LEFT_ALIGNMENT);
+    // a new width needs a new height: lay the panel out again
+    area.addComponentListener(
+        new java.awt.event.ComponentAdapter() {
+          private int lastWidth = -1;
+
+          @Override
+          public void componentResized(final java.awt.event.ComponentEvent e) {
+            if (area.getWidth() != lastWidth) {
+              lastWidth = area.getWidth();
+              javax.swing.SwingUtilities.invokeLater(
+                  () -> {
+                    if (area.getParent() instanceof JComponent c) {
+                      c.revalidate();
+                    }
+                  });
+            }
+          }
+        });
+    return area;
   }
 }

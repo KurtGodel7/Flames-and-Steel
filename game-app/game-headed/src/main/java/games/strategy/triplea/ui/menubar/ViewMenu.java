@@ -276,7 +276,7 @@ final class ViewMenu {
 
   /**
    * Flames and Steel (request 47): the air stages' how-to text in the side panel every time, not
-   * only the first time a stage opens. On during round 1 until the player sets it.
+   * only the first time a stage opens. Off unless the player turns it on (request 48).
    */
   private static JCheckBoxMenuItem getShowAirStageHelp(final TripleAFrame frame) {
     final JCheckBoxMenuItem item =
@@ -285,7 +285,7 @@ final class ViewMenu {
 
           @Override
           public void addNotify() {
-            // the menu opens: show the option as it is now (it changes after round 1)
+            // the menu opens: show the option as it is now
             super.addNotify();
             setSelected(
                 games.strategy.triplea.ui.air.AirHelp.isOn(frame.getGameDataForNames()));

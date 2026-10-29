@@ -4,6 +4,7 @@ import games.strategy.engine.framework.system.SystemProperties;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.util.function.Consumer;
+import javax.annotation.Nullable;
 import javax.swing.JButton;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
@@ -29,6 +30,8 @@ public class CollapsiblePanel extends JPanel {
   private String title;
   private final JButton toggleButton;
   private final Consumer<Boolean> toggleStatePersistence;
+  // Flames and Steel (request 48): when set, the bar runs this instead of opening or closing
+  private @Nullable Runnable action;
 
   public CollapsiblePanel(
       final JPanel content, final String title, final Consumer<Boolean> toggleStatePersistence) {
@@ -36,7 +39,15 @@ public class CollapsiblePanel extends JPanel {
     this.title = title;
     this.toggleButton = new JButton();
     this.toggleStatePersistence = toggleStatePersistence;
-    toggleButton.addActionListener(e -> toggleState());
+    toggleButton.addActionListener(
+        e -> {
+          final Runnable run = action;
+          if (run != null) {
+            run.run();
+          } else {
+            toggleState();
+          }
+        });
     setLayout(new BorderLayout());
     if (SystemProperties.isMac() && SwingComponents.isUsingNativeLookAndFeel()) {
       // We want the button to have square corners with the Mac native look and feel. Setting the
@@ -56,6 +67,21 @@ public class CollapsiblePanel extends JPanel {
   public void setTitle(final String title) {
     this.title = title;
     SwingUtilities.invokeLater(this::updateButtonText);
+  }
+
+  /**
+   * Request 48: the bar becomes a button that runs the action (with this tooltip), or with null
+   * opens and closes the panel again.
+   */
+  public void setAction(final @Nullable Runnable action, final @Nullable String tooltip) {
+    this.action = action;
+    toggleButton.setToolTipText(tooltip);
+    SwingUtilities.invokeLater(this::updateButtonText);
+  }
+
+  /** For tests: the bar's button. */
+  public JButton getToggleButton() {
+    return toggleButton;
   }
 
   private void toggleState() {
@@ -78,7 +104,8 @@ public class CollapsiblePanel extends JPanel {
   }
 
   private void updateButtonText() {
-    final String indicator = isCollapsed() ? COLLAPSED_TEXT : EXPANDED_TEXT;
+    final String indicator =
+        action != null ? COLLAPSED_TEXT : isCollapsed() ? COLLAPSED_TEXT : EXPANDED_TEXT;
     toggleButton.setText(title + indicator);
   }
 }

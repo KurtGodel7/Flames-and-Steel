@@ -261,6 +261,8 @@ public final class AirTargetPanel extends ActionPanel {
   // request 47: the base last gone to with "next", and whether the how-to shows in the panel
   private @Nullable Territory lastVisited;
   private boolean helpShown;
+  // request 48: the moves the stage opened with; the how-to goes once the player makes one more
+  private int helpBaseline;
 
   AirTargetPanel(final Host frame) {
     super(frame.getMapPanel().getData(), frame.getMapPanel());
@@ -345,6 +347,7 @@ public final class AirTargetPanel extends ActionPanel {
           showAssigned();
           lastVisited = null;
           helpShown = AirHelp.showAsStageOpens(getData(), player, stage.name());
+          helpBaseline = staged.size();
           frame.setAircraftScroller(scrollerSource);
           if (!listening) {
             listening = true;
@@ -670,6 +673,26 @@ public final class AirTargetPanel extends ActionPanel {
             + " selected ("
             + withoutOrders
             + " without orders): click where it goes. '.' goes on, ',' goes back.");
+  }
+
+  /**
+   * Request 30: one move per place with aircraft, whose place shows its side's counts against the
+   * caps. Request 48: a rebase is no attack and counts against no cap, so it gets no badge.
+   */
+  List<TargetAssignment> badgedMoves() {
+    final java.util.Set<String> badged = new java.util.HashSet<>();
+    final List<TargetAssignment> withBadges = new ArrayList<>(staged);
+    allied.values().forEach(withBadges::addAll);
+    if (coverMode) {
+      revealed.values().forEach(withBadges::addAll);
+    }
+    final List<TargetAssignment> result = new ArrayList<>();
+    for (final TargetAssignment a : withBadges) {
+      if (!AirStage.isRebase(a) && badged.add(a.target().territory().getName())) {
+        result.add(a);
+      }
+    }
+    return result;
   }
 
   /** For tests: the base selected and how many aircraft are selected there. */
@@ -1544,27 +1567,28 @@ public final class AirTargetPanel extends ActionPanel {
       buttons.add(repeat);
     }
     layout.top().add(leftAligned(buttons));
-    // 2. status line, in plain words; request 47: a click on it goes to the next aircraft
-    // without orders, as '.' and the unit scroller's arrow do
+    // 2. status line, in plain words; request 48: the one control that goes to them is the unit
+    // scroller's bar at the bottom of the side panel (and '.' / ',')
     final int idle = aircraftWithoutOrders(player);
-    final JComponent status;
-    if (idle == 0) {
-      status = new JLabel("Every aircraft that can fly has orders: press Done.");
-    } else {
-      final JButton next = new JButton("<html>Aircraft without orders: <b>" + idle + "</b> &#8250;</html>");
-      next.setToolTipText(
-          "Goes to the next aircraft without orders and selects one ('.' does the same; ','"
-              + " goes back). They stay home if you press Done.");
-      next.setBorderPainted(false);
-      next.setContentAreaFilled(false);
-      next.setFocusable(false);
-      next.setMargin(new java.awt.Insets(0, 0, 0, 0));
-      next.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
-      next.addActionListener(e -> nextWithoutOrders(true));
-      status = next;
+    final JLabel status =
+        new JLabel(
+            idle == 0
+                ? "Every aircraft that can fly has orders: press Done."
+                : "<html>Aircraft without orders: <b>" + idle + "</b></html>");
+    if (idle > 0) {
+      status.setToolTipText(
+          "They stay home if you press Done. '.' (or the bar at the bottom of this panel) goes to"
+              + " the next of them; ',' goes back.");
     }
     status.setBorder(BorderFactory.createEmptyBorder(2, 5, 2, 0));
     layout.top().add(leftAligned(status));
+    // request 48: the how-to, the first time the stage opens, until the first move
+    if (staged.size() > helpBaseline) {
+      helpShown = false;
+    }
+    if (helpShown) {
+      layout.top().add(AirHelp.text(help()));
+    }
     // 3. moves made, always in view, newest first
     layout.top().add(movesBox(player, true));
     // 4. the list, in its own window
@@ -1578,11 +1602,6 @@ public final class AirTargetPanel extends ActionPanel {
     pick.addActionListener(e -> openPickDialog(player));
     layout.body().add(Box.createVerticalStrut(4));
     layout.body().add(leftAligned(pick));
-    // request 47: the how-to, the first time the stage opens (in the scrolling part, so the moves
-    // made keep their room)
-    if (helpShown) {
-      layout.body().add(leftAligned(AirHelp.text(help())));
-    }
     layout.body().add(Box.createVerticalGlue());
     refresh.run();
   }
@@ -2216,22 +2235,14 @@ public final class AirTargetPanel extends ActionPanel {
       }
       // request 30: each place with aircraft shows its side's counts against the caps
       if (player != null) {
-        final java.util.Set<String> badged = new java.util.HashSet<>();
-        final List<TargetAssignment> withBadges = new ArrayList<>(staged);
-        allied.values().forEach(withBadges::addAll);
-        if (coverMode) {
-          revealed.values().forEach(withBadges::addAll);
-        }
-        for (final TargetAssignment a : withBadges) {
-          if (badged.add(a.target().territory().getName())) {
-            final Point end = draw.middle(a.target().territory());
-            AirDraw.tag(
-                g,
-                badge(player, a.zone(), a.target().territory()),
-                end.x,
-                coverMode ? end.y + below + h / 2 + 14 : end.y - h / 2 - 14,
-                new Color(255, 230, 120));
-          }
+        for (final TargetAssignment a : badgedMoves()) {
+          final Point end = draw.middle(a.target().territory());
+          AirDraw.tag(
+              g,
+              badge(player, a.zone(), a.target().territory()),
+              end.x,
+              coverMode ? end.y + below + h / 2 + 14 : end.y - h / 2 - 14,
+              new Color(255, 230, 120));
         }
       }
     }

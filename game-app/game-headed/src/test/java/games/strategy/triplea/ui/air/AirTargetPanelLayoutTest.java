@@ -107,7 +107,25 @@ class AirTargetPanelLayoutTest {
 
           @Override
           public void clearStatusMessage() {}
+
+          // request 48: the game's own unit scroller, as the game window wires it
+          @Override
+          public void setAircraftScroller(
+              final games.strategy.triplea.ui.unit.scroller.UnitScroller.Source source) {
+            scroller.setSource(source);
+          }
+
+          @Override
+          public void refreshAircraftScroller() {
+            scroller.refresh();
+          }
         };
+    when(map.getUiContext()).thenReturn(ui);
+    SwingUtilities.invokeAndWait(
+        () -> {
+          scroller = new games.strategy.triplea.ui.unit.scroller.UnitScroller(data, map, () -> false);
+          scrollerBar = scroller.build();
+        });
     prepareBase();
     final AtomicReference<AirTargetPanel> made = new AtomicReference<>();
     SwingUtilities.invokeAndWait(() -> made.set(new AirTargetPanel(frame)));
@@ -119,6 +137,9 @@ class AirTargetPanelLayoutTest {
   // request 40: two more German bases with bombers, and the mocked map (to check it never scrolls)
   private final List<Territory> bases = new ArrayList<>();
   private MapPanel map;
+  // request 48: the stock unit scroller and its bar at the bottom of the side panel
+  private games.strategy.triplea.ui.unit.scroller.UnitScroller scroller;
+  private org.triplea.swing.CollapsiblePanel scrollerBar;
 
   private void prepareBase() {
     final GamePlayer russians = data.getPlayerList().getPlayerId("Russians");
@@ -674,11 +695,11 @@ class AirTargetPanelLayoutTest {
     assertThat(
         all(panel).stream().anyMatch(c -> c instanceof javax.swing.JComboBox), is(false));
     assertThat(buttons("Next base").isEmpty(), is(true));
-    // request 47: the line is a link that goes to the next aircraft without orders
+    // request 48: the line is plain text again (the unit scroller's bar is the control)
     assertThat(
         all(panel).stream()
-            .filter(c -> c instanceof AbstractButton b && b.getText() != null)
-            .map(c -> ((AbstractButton) c).getText())
+            .filter(c -> c instanceof JLabel l && l.getText() != null)
+            .map(c -> ((JLabel) c).getText())
             .anyMatch(text -> text.contains("Aircraft without orders: ")),
         is(true));
     assertThat(panel.staged().isEmpty(), is(false));
@@ -1090,6 +1111,249 @@ class AirTargetPanelLayoutTest {
     // back the other way
     SwingUtilities.invokeAndWait(() -> panel.nextWithoutOrders(false));
     assertThat(panel.selectedBase(), is(order.get(1)));
+  }
+
+  /** Request 48: presses a button as the mouse does (enter, press, release, click). */
+  private static void mouseClick(final AbstractButton button) {
+    final long now = System.currentTimeMillis();
+    final int x = Math.max(1, button.getWidth() / 2);
+    final int y = Math.max(1, button.getHeight() / 2);
+    for (final int id :
+        new int[] {
+          java.awt.event.MouseEvent.MOUSE_ENTERED,
+          java.awt.event.MouseEvent.MOUSE_PRESSED,
+          java.awt.event.MouseEvent.MOUSE_RELEASED,
+          java.awt.event.MouseEvent.MOUSE_CLICKED
+        }) {
+      button.dispatchEvent(
+          new java.awt.event.MouseEvent(
+              button,
+              id,
+              now,
+              id == java.awt.event.MouseEvent.MOUSE_ENTERED
+                  ? 0
+                  : java.awt.event.InputEvent.BUTTON1_DOWN_MASK,
+              x,
+              y,
+              1,
+              false,
+              java.awt.event.MouseEvent.BUTTON1));
+    }
+  }
+
+  /** Request 48: the side panel and the scroller's bar under it, shown in a window. */
+  private javax.swing.JFrame sideWindow() throws Exception {
+    final javax.swing.JFrame window = new javax.swing.JFrame();
+    SwingUtilities.invokeAndWait(
+        () -> {
+          final javax.swing.JPanel side = new javax.swing.JPanel(new java.awt.BorderLayout());
+          side.add(panel, java.awt.BorderLayout.CENTER);
+          side.add(scrollerBar, java.awt.BorderLayout.SOUTH);
+          window.add(side);
+          window.setBounds(-5000, -5000, WIDTH, HEIGHT);
+          window.setVisible(true);
+          window.validate();
+        });
+    flush();
+    return window;
+  }
+
+  @Test
+  void request48TheBottomBarAndTheKeyGoToTheAircraftWithoutOrders() throws Exception {
+    startPanel(false);
+    // 1 German bomber without orders, on a base off to one side
+    final Territory base1 = bases.get(1);
+    SwingUtilities.invokeAndWait(() -> panel.setStagedForTests(ordersLeaving(Map.of(base1, 1))));
+    flush();
+    final javax.swing.JFrame window = sideWindow();
+    flush();
+    // the bar says how many, and it is the one control (the side panel line is plain text)
+    assertThat(scrollerBar.getToggleButton().getText(), org.hamcrest.Matchers.startsWith(
+        "Aircraft without orders: 1"));
+    assertThat(
+        all(panel).stream()
+            .anyMatch(c -> c instanceof AbstractButton b && b.getText() != null
+                && b.getText().contains("without orders")),
+        is(false));
+    // the bar, clicked with the mouse
+    SwingUtilities.invokeAndWait(() -> mouseClick(scrollerBar.getToggleButton()));
+    flush();
+    assertThat(panel.selectedBase(), is(base1));
+    assertThat(panel.selectedCount(), is(1));
+    verify(map, org.mockito.Mockito.atLeastOnce()).centerOn(base1);
+    // the '.' key runs the same thing
+    SwingUtilities.invokeAndWait(
+        () -> {
+          panel.click(List.of(), base1, mouse(0, java.awt.event.MouseEvent.BUTTON3));
+          scroller.centerOnNextMovableUnit();
+        });
+    flush();
+    assertThat(panel.selectedBase(), is(base1));
+    assertThat(panel.selectedCount(), is(1));
+    window.dispose();
+  }
+
+  @Test
+  void request48TheBarGoesRoundTwoPlacesAndBack() throws Exception {
+    startPanel(false);
+    final Territory first = bases.get(0);
+    final Territory second = bases.get(1);
+    SwingUtilities.invokeAndWait(
+        () -> panel.setStagedForTests(ordersLeaving(Map.of(first, 2, second, 1))));
+    flush();
+    final javax.swing.JFrame window = sideWindow();
+    final List<Territory> visited = new ArrayList<>();
+    for (int i = 0; i < 3; i++) {
+      SwingUtilities.invokeAndWait(() -> mouseClick(scrollerBar.getToggleButton()));
+      flush();
+      visited.add(panel.selectedBase());
+    }
+    window.dispose();
+    final List<Territory> order =
+        games.strategy.triplea.delegate.air.AirStage.bases(
+                germans, games.strategy.triplea.delegate.air.AirStage.Stage.BOMBERS)
+            .stream()
+            .filter(z -> z.equals(first) || z.equals(second))
+            .toList();
+    assertThat(visited, is(List.of(order.get(0), order.get(1), order.get(0))));
+  }
+
+  private List<javax.swing.JTextArea> helpTexts() {
+    return all(panel).stream()
+        .filter(c -> c instanceof javax.swing.JTextArea a && a.getText().contains("Select bombers"))
+        .map(c -> (javax.swing.JTextArea) c)
+        .toList();
+  }
+
+  @Test
+  void request48HelpShowsOnlyAtTheFirstBomberStageUntilTheFirstMoveAndIsNotClipped()
+      throws Exception {
+    final Territory[] t = cracowAndBialystok();
+    startPanel(false);
+    final javax.swing.JFrame window = sideWindow();
+    // shown whole: as wide as the panel, all its lines in view
+    SwingUtilities.invokeAndWait(
+        () -> {
+          window.validate();
+          layoutAll(window.getContentPane());
+        });
+    flush();
+    SwingUtilities.invokeAndWait(
+        () -> {
+          window.validate();
+          layoutAll(window.getContentPane());
+          final List<javax.swing.JTextArea> help = helpTexts();
+          assertThat(help.size(), is(1));
+          final javax.swing.JTextArea area = help.get(0);
+          final Rectangle visible = area.getVisibleRect();
+          assertThat(area.getWidth() <= panel.getWidth(), is(true));
+          assertThat(visible.width, is(area.getWidth()));
+          assertThat(visible.height, is(area.getHeight()));
+          assertThat(area.getHeight() >= area.getPreferredSize().height, is(true));
+          assertThat(area.getLineCount() > 0, is(true));
+        });
+    // gone after the first move
+    SwingUtilities.invokeAndWait(
+        () -> {
+          panel.click(dives(t[0]), t[0], click());
+          panel.click(List.of(), t[1], click());
+        });
+    flush();
+    assertThat(helpTexts().isEmpty(), is(true));
+    window.dispose();
+    // the next bomber stage of the game: no help (View option off)
+    startPanel(false);
+    assertThat(helpTexts().isEmpty(), is(true));
+  }
+
+  @Test
+  void request48BeforeAndAfterPressingTheBar() throws Exception {
+    final Territory[] t = cracowAndBialystok();
+    startPanel(false);
+    // every German bomber has orders but one of Cracow's dive bombers
+    SwingUtilities.invokeAndWait(() -> panel.setStagedForTests(ordersLeaving(Map.of(t[0], 1))));
+    flush();
+    final javax.swing.JFrame window = sideWindow();
+    final java.awt.Container side = (java.awt.Container) window.getContentPane().getComponent(0);
+    final org.mockito.ArgumentCaptor<games.strategy.triplea.ui.panels.map.MapOverlay> overlay =
+        org.mockito.ArgumentCaptor.forClass(games.strategy.triplea.ui.panels.map.MapOverlay.class);
+    verify(map, org.mockito.Mockito.atLeastOnce()).addOverlay(overlay.capture());
+    final games.strategy.triplea.ui.UiContext ui = TestUi.create(data);
+    final BufferedImage before =
+        shot(ui, side, overlay.getValue(), "Before: nothing selected", t[0], t[1]);
+    SwingUtilities.invokeAndWait(() -> mouseClick(scrollerBar.getToggleButton()));
+    flush();
+    assertThat(panel.selectedBase(), is(t[0]));
+    final BufferedImage after =
+        shot(ui, side, overlay.getValue(), "After pressing the bar: Cracow's dive bomber selected",
+            t[0], t[1]);
+    window.dispose();
+    final BufferedImage both =
+        new BufferedImage(
+            before.getWidth() + after.getWidth() + 12,
+            Math.max(before.getHeight(), after.getHeight()),
+            BufferedImage.TYPE_INT_RGB);
+    final java.awt.Graphics2D g = both.createGraphics();
+    g.setColor(java.awt.Color.DARK_GRAY);
+    g.fillRect(0, 0, both.getWidth(), both.getHeight());
+    g.drawImage(before, 0, 0, null);
+    g.drawImage(after, before.getWidth() + 12, 0, null);
+    g.dispose();
+    ImageIO.write(both, "png", SHOTS.resolve("request48_before_after_bar.png").toFile());
+  }
+
+  /** Request 48: the map around the places (with the banner) beside the side panel and its bar. */
+  private BufferedImage shot(
+      final games.strategy.triplea.ui.UiContext ui,
+      final java.awt.Container side,
+      final games.strategy.triplea.ui.panels.map.MapOverlay overlay,
+      final String caption,
+      final Territory... places) throws Exception {
+    final BufferedImage around =
+        mapAround(ui, java.util.Set.copyOf(offMap()), List.of(overlay), places);
+    final AirMapMode airMap = new AirMapMode(ui, null, data, text -> {});
+    airMap.setBanner(panel.banner(germans));
+    final java.awt.Dimension mapSize = ui.getMapData().getMapDimensions();
+    final BufferedImage banner = new BufferedImage(520, 52, BufferedImage.TYPE_INT_ARGB);
+    final java.awt.Graphics2D bg = banner.createGraphics();
+    bg.translate(-(mapSize.width / 2 - 260), 0);
+    airMap.paint(bg, data);
+    bg.dispose();
+    final BufferedImage panelShot = render(side, WIDTH, 760);
+    final int width = around.getWidth() + panelShot.getWidth();
+    final int height = Math.max(around.getHeight(), panelShot.getHeight()) + 30;
+    final BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+    final java.awt.Graphics2D g = image.createGraphics();
+    g.setColor(java.awt.Color.BLACK);
+    g.fillRect(0, 0, width, height);
+    g.setColor(java.awt.Color.WHITE);
+    g.setFont(new java.awt.Font(java.awt.Font.SANS_SERIF, java.awt.Font.BOLD, 18));
+    g.drawString(caption, 10, 22);
+    g.drawImage(around, 0, 30, null);
+    g.drawImage(banner, (around.getWidth() - banner.getWidth()) / 2, 30, null);
+    g.drawImage(panelShot, around.getWidth(), 30, null);
+    g.dispose();
+    return image;
+  }
+
+  @Test
+  void request48ARebaseHasNoCapBadge() throws Exception {
+    startPanel(false);
+    final Territory sicily = data.getMap().getTerritoryOrThrow("Sicily");
+    final Territory croatia = data.getMap().getTerritoryOrThrow("Croatia");
+    final TargetAssignment rebase =
+        new TargetAssignment(
+            sicily,
+            data.getUnitTypeList().getUnitTypeOrThrow("diveBomber"),
+            1,
+            new Target(croatia, games.strategy.triplea.delegate.air.AirCombat.TargetKind.REBASE));
+    final TargetAssignment attack = firstMove(base);
+    SwingUtilities.invokeAndWait(() -> panel.setStagedForTests(List.of(rebase, attack)));
+    flush();
+    final List<Territory> badged =
+        panel.badgedMoves().stream().map(a -> a.target().territory()).toList();
+    assertThat(badged.contains(croatia), is(false));
+    assertThat(badged.contains(attack.target().territory()), is(true));
   }
 
   @Test

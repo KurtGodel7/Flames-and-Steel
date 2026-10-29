@@ -150,6 +150,7 @@ public final class AirHomePanel extends ActionPanel {
       };
   private @Nullable Territory lastVisited;
   private boolean helpShown;
+  private int helpBaseline;
 
   private static final String HELP =
       "Click aircraft in the air (or a group in this panel), then a green spot: your land or one of"
@@ -228,6 +229,7 @@ public final class AirHomePanel extends ActionPanel {
           staged.addAll(start);
           lastVisited = null;
           helpShown = AirHelp.showAsStageOpens(getData(), player, "HOME");
+          helpBaseline = staged.size();
           frame.setAircraftScroller(scrollerSource);
           try (GameData.Unlocker ignored = getData().acquireReadLock()) {
             homeStep = getData().getSequence().getStep();
@@ -504,27 +506,26 @@ public final class AirHomePanel extends ActionPanel {
     buttons.add(undoAll);
     buttons.add(createDoneButton());
     layout.top().add(leftAligned(buttons));
-    // request 47: what still has to land; a click goes to the next of them, as '.' does
+    // request 47: what still has to land; request 48: the unit scroller's bar at the bottom of the
+    // side panel (and '.' / ',') goes to them
     final int n = toLand;
-    if (n == 0) {
-      layout.top().add(leftAligned(new JLabel("Every aircraft in the air has a landing.")));
-    } else {
-      final JButton next =
-          new JButton("<html>Aircraft to land: <b>" + n + "</b> &#8250;</html>");
-      next.setToolTipText(
-          "Goes to the next aircraft in the air still to land and selects one ('.' does the"
-              + " same; ',' goes back). Done lands them at the nearest spot.");
-      next.setBorderPainted(false);
-      next.setContentAreaFilled(false);
-      next.setFocusable(false);
-      next.setMargin(new Insets(0, 0, 0, 0));
-      next.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
-      next.addActionListener(e -> nextToLand(true));
-      layout.top().add(leftAligned(next));
+    final JLabel still =
+        new JLabel(
+            n == 0
+                ? "Every aircraft in the air has a landing."
+                : "<html>Aircraft to land: <b>" + n + "</b></html>");
+    if (n > 0) {
+      still.setToolTipText(
+          "Done lands them at the nearest spot. '.' (or the bar at the bottom of this panel) goes"
+              + " to the next of them; ',' goes back.");
+    }
+    layout.top().add(leftAligned(still));
+    // request 48: the how-to, the first time, until the first landing is chosen
+    if (staged.size() > helpBaseline) {
+      helpShown = false;
     }
     if (helpShown) {
-      // in the scrolling part, so the landings made keep their room
-      layout.body().add(leftAligned(AirHelp.text(HELP)));
+      layout.top().add(AirHelp.text(HELP));
     }
     // landings made, newest first, laid out as stock's moves list (request 42)
     final List<AirMovesList.Entry> entries = new ArrayList<>();
