@@ -54,8 +54,17 @@ public class UnitSeparator {
    */
   public static List<UnitCategory> getSortedUnitCategories(
       @Nonnull final Territory territory, final MapData mapData) {
-    final List<UnitCategory> categories =
-        new ArrayList<>(UnitSeparator.categorize(territory.getUnits()));
+    return getSortedUnitCategories(territory, mapData, Set.of());
+  }
+
+  /** As above, leaving out some units (Flames and Steel request 44: aircraft with orders). */
+  public static List<UnitCategory> getSortedUnitCategories(
+      @Nonnull final Territory territory, final MapData mapData, final Set<Unit> leaveOut) {
+    final Collection<Unit> units =
+        leaveOut.isEmpty()
+            ? territory.getUnits()
+            : territory.getUnits().stream().filter(u -> !leaveOut.contains(u)).toList();
+    final List<UnitCategory> categories = new ArrayList<>(UnitSeparator.categorize(units));
     categories.removeIf(uc -> !mapData.shouldDrawUnit(uc.getType().getName()));
     categories.sort(getComparatorUnitCategories(territory));
     return categories;

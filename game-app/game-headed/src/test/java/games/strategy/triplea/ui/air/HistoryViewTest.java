@@ -5,12 +5,9 @@ import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.is;
 
 import games.strategy.engine.data.GameData;
-import games.strategy.engine.data.Territory;
 import games.strategy.engine.framework.GameDataManager;
 import games.strategy.engine.framework.GameDataUtils;
 import games.strategy.engine.history.HistoryNode;
-import games.strategy.triplea.delegate.Matches;
-import games.strategy.triplea.formatter.MyFormatter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -71,6 +68,9 @@ class HistoryViewTest {
               || name.endsWith("AirTargets")
               || name.endsWith("AirCover")
               || name.startsWith("airReveal")
+              || name.equals("airBomberStage")
+              || name.equals("airFighterStage")
+              || name.equals("airPlanesHome")
               || name.equals("airDogfights")
               || name.equals("airStrikes");
       assertThat(name, AirMapMode.isAirStep(step), is(expected));
@@ -82,22 +82,6 @@ class HistoryViewTest {
           step.getName(),
           AirMapMode.isAirStep(step),
           is(AirMapMode.isAirStep(history.getSequence().getStep(i))));
-    }
-
-    // James's question: how many aircraft fought over Bomb Germany
-    final Territory bombGermany = history.getMap().getTerritoryOrThrow("Air - Bomb Germany");
-    for (final HistoryNode node : nodes) {
-      if (node.toString().startsWith("Dogfight in Air - Bomb Germany")) {
-        // the state just before the dogfight: the node before it
-        history.getHistory().gotoNode(nodes.get(nodes.indexOf(node) - 1));
-        System.out.println(
-            node
-                + " ("
-                + node.getParent().getParent()
-                + "): "
-                + MyFormatter.unitsToText(
-                    bombGermany.getUnitCollection().getMatches(Matches.unitIsAir())));
-      }
     }
   }
 

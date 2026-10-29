@@ -329,6 +329,49 @@ class Request38Test {
     assertThat(AirPriority.lockedBy(russians, hamburg, westernFirst), is(Optional.empty()));
   }
 
+  // ---- request 43 section 1: one nation's bombers per factory per round
+
+  @Test
+  void twoAlliesBombingOneFactoryTheEarlierNationKeepsIt() {
+    hamburgWithAnArmy();
+    data.getProperties().set(AirPriority.ONE_NATION_PER_RAID, true);
+    final GamePlayer americans = BasedMap.p(data, "Americans");
+    final List<GamePlayer> order = AirPriority.turnOrder(data);
+    final GamePlayer earlier = order.indexOf(british) < order.indexOf(americans) ? british : americans;
+    final GamePlayer later = earlier == british ? americans : british;
+    add(london, british, "strategicBomber", 1);
+    add(london, americans, "strategicBomber", 1);
+    final AirStageRunner stages =
+        new AirStageRunner(data)
+            .bombers(later, a(london, type("strategicBomber"), 1, bomb(hamburg)))
+            .bombers(earlier, a(london, type("strategicBomber"), 1, bomb(hamburg)))
+            .run();
+    // whichever answered first, the later nation was told why and its bomber stayed at home
+    assertThat(
+        stages.problems(),
+        hasItem(containsString(AirPriority.raidText(hamburg, earlier))));
+    assertThat(over(hamburg, earlier, "strategicBomber"), is(1));
+    assertThat(over(hamburg, later, "strategicBomber"), is(0));
+    assertThat(count(london, later, "strategicBomber"), is(1));
+  }
+
+  @Test
+  void alliesMayStillMixTacticalStrikesOnOneTerritory() {
+    hamburgWithAnArmy();
+    data.getProperties().set(AirPriority.ONE_NATION_PER_RAID, true);
+    final GamePlayer americans = BasedMap.p(data, "Americans");
+    add(london, british, "mediumBomber", 1);
+    add(london, americans, "mediumBomber", 1);
+    final AirStageRunner stages =
+        new AirStageRunner(data)
+            .bombers(british, a(london, type("mediumBomber"), 1, land(hamburg)))
+            .bombers(americans, a(london, type("mediumBomber"), 1, land(hamburg)))
+            .run();
+    assertThat(stages.problems().stream().noneMatch(p -> p.contains("raid this round")), is(true));
+    assertThat(over(hamburg, british, "mediumBomber"), is(1));
+    assertThat(over(hamburg, americans, "mediumBomber"), is(1));
+  }
+
   /** A Soviet base next to Hamburg. */
   private Territory sovietHanover() {
     final Territory hanover = t("Hanover");

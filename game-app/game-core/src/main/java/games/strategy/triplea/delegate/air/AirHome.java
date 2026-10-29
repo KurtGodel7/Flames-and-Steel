@@ -96,7 +96,7 @@ public class AirHome {
    * The aircraft that land or rebase in these landings, by landing: from each group, that many of
    * the type (damaged first is not needed: all are healed).
    */
-  private static Map<Landing, List<Unit>> unitsFor(
+  public static Map<Landing, List<Unit>> unitsFor(
       final GamePlayer player, final Collection<Landing> landings) {
     final List<Group> groups = new ArrayList<>(airborneGroups(player));
     groups.addAll(basedGroups(player));

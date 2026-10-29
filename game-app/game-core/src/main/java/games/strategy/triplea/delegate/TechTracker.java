@@ -81,34 +81,91 @@ public class TechTracker {
     return getCached(player, type, "getDogfightBonus", getter);
   }
 
+  /** Flames and Steel: which bonus die of a bomber (request 39, request 43 for subs). */
+  public enum StrikeBonusKind {
+    LAND,
+    NAVAL,
+    SUB
+  }
+
   /**
    * Flames and Steel (request 39): the value of the bomber type's extra die against land units
-   * ({@code naval} false) or surface ships, for this nation: the type's own bonus, raised to the
-   * highest "set" of the nation's techs (a set never lowers it), plus every tech's addition.
+   * ({@code naval} false) or surface ships, for this nation.
    */
   public int getStrikeBonus(GamePlayer player, UnitType type, boolean naval) {
+    return getStrikeBonus(player, type, naval ? StrikeBonusKind.NAVAL : StrikeBonusKind.LAND);
+  }
+
+  /**
+   * Flames and Steel (request 39): the value of the bomber type's extra die against land units,
+   * surface ships or (request 43) submarines, for this nation: its starting value (the nation's
+   * own "base" value for the type if it has one, request 43, else the type's), raised to the
+   * highest "set" of the nation's techs (a set never lowers it), plus every tech's addition.
+   */
+  public int getStrikeBonus(GamePlayer player, UnitType type, StrikeBonusKind kind) {
     final Supplier<Integer> getter =
         () -> {
+          final var base =
+              switch (kind) {
+                case LAND -> player.getTechAttachment().getLandBonusBase();
+                case NAVAL -> player.getTechAttachment().getNavalBonusBase();
+                case SUB -> player.getTechAttachment().getSubBonusBase();
+              };
           final int own =
-              games.strategy.triplea.attachments.AirUnitAttachment.get(type)
-                  .map(a -> naval ? a.getNavalBonus() : a.getLandBonus())
-                  .orElse(0);
+              base.containsKey(type)
+                  ? base.getInt(type)
+                  : games.strategy.triplea.attachments.AirUnitAttachment.get(type)
+                      .map(
+                          a ->
+                              switch (kind) {
+                                case LAND -> a.getLandBonus();
+                                case NAVAL -> a.getNavalBonus();
+                                case SUB -> a.getSubBonus();
+                              })
+                      .orElse(0);
           final int set =
               getCurrentTechAdvances(player).stream()
                   .map(TechAbilityAttachment::get)
                   .filter(Objects::nonNull)
                   .mapToInt(
-                      a -> (naval ? a.getNavalBonusSet() : a.getLandBonusSet()).getInt(type))
+                      a ->
+                          (switch (kind) {
+                                case LAND -> a.getLandBonusSet();
+                                case NAVAL -> a.getNavalBonusSet();
+                                case SUB -> a.getSubBonusSet();
+                              })
+                              .getInt(type))
                   .max()
                   .orElse(0);
           final int added =
               getSumOfBonuses(
-                  naval ? TechAbilityAttachment::getNavalBonus : TechAbilityAttachment::getLandBonus,
+                  switch (kind) {
+                    case LAND -> TechAbilityAttachment::getLandBonus;
+                    case NAVAL -> TechAbilityAttachment::getNavalBonus;
+                    case SUB -> TechAbilityAttachment::getSubBonus;
+                  },
                   type,
                   player);
           return Math.max(0, Math.max(own, set) + added);
         };
-    return getCached(player, type, naval ? "getNavalStrikeBonus" : "getLandStrikeBonus", getter);
+    return getCached(player, type, "get" + kind + "StrikeBonus", getter);
+  }
+
+  /** Flames and Steel (request 43, VT Proximity Fuze): added to the nation's ships vs aircraft. */
+  public int getAntiAircraftBonus(GamePlayer player) {
+    return getCurrentTechAdvances(player).stream()
+        .map(TechAbilityAttachment::get)
+        .filter(Objects::nonNull)
+        .mapToInt(TechAbilityAttachment::getAntiAircraftBonus)
+        .sum();
+  }
+
+  /** Flames and Steel (request 43, Combat Air Patrol): the nation's carriers intercept. */
+  public boolean hasCarrierInterception(GamePlayer player) {
+    return getCurrentTechAdvances(player).stream()
+        .map(TechAbilityAttachment::get)
+        .filter(Objects::nonNull)
+        .anyMatch(TechAbilityAttachment::getCarrierInterception);
   }
 
   /**

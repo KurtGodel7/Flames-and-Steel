@@ -85,7 +85,6 @@ public final class AirTargetPanel extends ActionPanel {
   private static final Color DIM_FILL = new Color(0, 0, 0, 110);
   private static final Color STRIKE_LINE = new Color(255, 80, 60);
   private static final Color PREVIEW_BLOCKED = new Color(230, 60, 50);
-  private static final Color ENEMY_LINE = new Color(170, 90, 255);
   private static final Color ALLY_LINE = new Color(90, 170, 255);
 
   private final Host frame;
@@ -101,6 +100,11 @@ public final class AirTargetPanel extends ActionPanel {
   private Map<Target, Boolean> targets = Map.of();
 
   private boolean listening;
+  // request 44: aircraft with orders, by target, drawn there until the stage ends
+  private volatile Map<Territory, List<Unit>> ordered = Map.of();
+  private volatile boolean ordersShown;
+  private boolean overlayAdded;
+  private @Nullable games.strategy.engine.data.GameStep stageStep;
   // Flames and Steel (request 16): after Done the strikes are the game's; the panel only shows them
   private boolean finished;
   // what the mouse points at, for the strike preview
@@ -290,6 +294,9 @@ public final class AirTargetPanel extends ActionPanel {
           coverMode = stage == Stage.FIGHTERS;
           this.revealed = new HashMap<>(bombers);
           finished = false;
+          try (GameData.Unlocker ignored = getData().acquireReadLock()) {
+            stageStep = getData().getSequence().getStep();
+          }
           staged.clear();
           staged.addAll(start);
           this.store = store;
@@ -303,7 +310,10 @@ public final class AirTargetPanel extends ActionPanel {
             listening = true;
             getMap().addUnitSelectionListener(unitListener);
             getMap().addMapSelectionListener(hoverListener);
-            getMap().addOverlay(overlay);
+            if (!overlayAdded) {
+              overlayAdded = true;
+              getMap().addOverlay(overlay);
+            }
           }
           rebuild(player);
           strikesChanged();
@@ -321,6 +331,9 @@ public final class AirTargetPanel extends ActionPanel {
         () -> {
           allied = new HashMap<>(choices);
           if (finished || !listening || !player.equals(getCurrentPlayer())) {
+            if (ordersShown) {
+              showAssigned();
+            }
             getMap().repaint();
             return;
           }
@@ -329,9 +342,14 @@ public final class AirTargetPanel extends ActionPanel {
             for (final TargetAssignment a : List.copyOf(staged)) {
               final Optional<GamePlayer> locker =
                   AirPriority.lockedBy(player, a.target().territory(), allied);
-              if (locker.isPresent()) {
+              // request 43 section 1: an earlier ally's raid on the same factory
+              final Optional<GamePlayer> raider = AirPriority.raidTakenBy(player, a.target(), allied);
+              if (locker.isPresent() || raider.isPresent()) {
                 staged.remove(a);
-                final String text = AirPriority.lockedText(a.target().territory(), locker.get());
+                final String text =
+                    locker.isPresent()
+                        ? AirPriority.lockedText(a.target().territory(), locker.get())
+                        : AirPriority.raidText(a.target().territory(), raider.get());
                 if (!why.contains(text)) {
                   why.add(text);
                 }
@@ -344,6 +362,7 @@ public final class AirTargetPanel extends ActionPanel {
             selectionChanged();
             strikesChanged();
           } else {
+            showAssigned();
             rebuild(player);
             getMap().repaint();
           }
@@ -385,7 +404,8 @@ public final class AirTargetPanel extends ActionPanel {
   private boolean mayGo(
       final GamePlayer player, final Territory zone, final UnitType type, final Target target) {
     return targetsFor(player, zone, type).contains(target)
-        && AirPriority.lockedBy(player, target.territory(), allied).isEmpty();
+        && AirPriority.lockedBy(player, target.territory(), allied).isEmpty()
+        && AirPriority.raidTakenBy(player, target, allied).isEmpty();
   }
 
   /** The nation's own choices and its allies', for the caps. */
@@ -474,7 +494,11 @@ public final class AirTargetPanel extends ActionPanel {
       listening = false;
       getMap().removeUnitSelectionListener(unitListener);
       getMap().removeMapSelectionListener(hoverListener);
-      getMap().removeOverlay(overlay);
+      // request 44: the orders stay drawn (and off their bases) until the stage ends
+      if (!ordersShown && overlayAdded) {
+        overlayAdded = false;
+        getMap().removeOverlay(overlay);
+      }
       getMap().setUnitHighlight(List.of());
       getMap().setRoute(null);
       getMap().setMouseShadowUnits(null);
@@ -1188,9 +1212,49 @@ public final class AirTargetPanel extends ActionPanel {
     };
   }
 
-  /** The choices are drawn by this panel's overlay; the bases keep their stacks until take-off. */
+  /**
+   * Request 44: as in a stock move, aircraft with orders (own and the allies' so far) are drawn
+   * only over their target, not on their base; undo puts them back. The aircraft are the ones the
+   * game will send (the same choice as at take-off).
+   */
   private void showAssigned() {
-    // nothing to do: stock stacks stay where they are until the reveal
+    final Map<Territory, List<Unit>> byTarget = new LinkedHashMap<>();
+    final java.util.Set<Unit> flying = new java.util.HashSet<>();
+    final GamePlayer player = getCurrentPlayer();
+    try (GameData.Unlocker ignored = getData().acquireReadLock()) {
+      final Map<GamePlayer, List<TargetAssignment>> all = new LinkedHashMap<>();
+      if (player != null) {
+        all.put(player, List.copyOf(staged));
+      }
+      allied.forEach((p, list) -> all.putIfAbsent(p, list));
+      all.forEach(
+          (p, list) -> {
+            for (final AirBases.Flight f : AirStage.flights(p, stage, list)) {
+              if (flying.add(f.plane())) {
+                byTarget.computeIfAbsent(f.over(), k -> new ArrayList<>()).add(f.plane());
+              }
+            }
+          });
+    }
+    ordered = byTarget;
+    ordersShown = true;
+    if (!overlayAdded) {
+      overlayAdded = true;
+      getMap().addOverlay(overlay);
+    }
+    getMap().setUnitsOffMap(flying);
+    getMap().repaint();
+  }
+
+  /** Request 44: once the stage is over the aircraft are where the game put them. */
+  private void clearOrders() {
+    ordersShown = false;
+    ordered = Map.of();
+    if (overlayAdded && !listening) {
+      overlayAdded = false;
+      getMap().removeOverlay(overlay);
+    }
+    getMap().setUnitsOffMap(List.of());
   }
 
   private void strikesChanged() {
@@ -1326,7 +1390,8 @@ public final class AirTargetPanel extends ActionPanel {
             ? ROW_HEIGHT
             : (items.getPreferredSize().height + newestFirst.size() - 1) / newestFirst.size();
     final int height = rows * rowHeight + 30;
-    scroll.setPreferredSize(new Dimension(300, height));
+    // request 44: no wider than the side panel gives it (the list follows its width)
+    scroll.setPreferredSize(new Dimension(200, height));
     scroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, height));
     scroll.setAlignmentX(LEFT_ALIGNMENT);
     return scroll;
@@ -1445,6 +1510,11 @@ public final class AirTargetPanel extends ActionPanel {
   /** For tests: the moves made, oldest first. */
   List<TargetAssignment> staged() {
     return List.copyOf(staged);
+  }
+
+  /** For tests (request 44): the aircraft with orders, by the territory they are drawn over. */
+  Map<Territory, List<Unit>> ordered() {
+    return ordered;
   }
 
   /** For tests: the target shown in the panel. */
@@ -1830,12 +1900,22 @@ public final class AirTargetPanel extends ActionPanel {
   // ---- the map overlay
 
   private void paintOverlay(final Graphics2D g, final GameData data) {
-    if (!listening) {
+    if (!listening && !ordersShown) {
       return;
     }
     final GamePlayer player = getCurrentPlayer();
     try (GameData.Unlocker ignored = data.acquireReadLock()) {
-      if (selectedZone != null) {
+      if (!listening && data.getSequence().getStep() != stageStep) {
+        // request 44: the stage is over (take-off); the aircraft are drawn where they are now
+        SwingUtilities.invokeLater(
+            () -> {
+              if (!listening) {
+                clearOrders();
+              }
+            });
+        return;
+      }
+      if (listening && selectedZone != null) {
         final Map<Territory, Boolean> legalPlaces = new HashMap<>();
         targets.forEach((t, legal) -> legalPlaces.merge(t.territory(), legal, Boolean::logicalOr));
         legalPlaces.forEach(
@@ -1848,68 +1928,54 @@ public final class AirTargetPanel extends ActionPanel {
         draw.outlineBox(g, selectedZone, AirDraw.ORIGIN_LINE, 5f);
       }
       // request 33: the target shown in the panel
-      if (selectedTarget != null) {
+      if (listening && selectedTarget != null) {
         draw.outlineBox(g, selectedTarget.territory(), Color.YELLOW, 4f);
       }
-      if (selectedZone != null && !selected.isEmpty() && mousePoint != null) {
+      if (listening && selectedZone != null && !selected.isEmpty() && mousePoint != null) {
         paintPreview(g, player);
       }
-      final Map<Territory, Integer> perTarget = new HashMap<>();
-      // the fighter stage shows every nation's bombers on their targets
-      if (coverMode) {
-        for (final Map.Entry<GamePlayer, List<TargetAssignment>> e : revealed.entrySet()) {
-          for (final TargetAssignment a : e.getValue()) {
-            final Point end = draw.middle(a.target().territory());
-            final int n = perTarget.merge(a.target().territory(), 1, Integer::sum) - 1;
-            final Point icon = new Point(end.x - 16 + n * 34, end.y + 18);
-            AirDraw.arrow(
-                g,
-                draw.center(a.zone()),
-                end,
-                AirCombat.atWar(player, e.getKey()) ? ENEMY_LINE : STRIKE_LINE,
-                2.5f,
-                false,
-                "",
-                6);
-            draw.iconAt(g, icon, e.getKey(), a.unitType(), a.count());
-          }
-        }
-      }
+      // in the fighter stage the bombers in the air are drawn over their targets by the air map;
+      // the fighters' orders go under them
+      final int h = frame.getUiContext().getUnitImageFactory().getUnitImageHeight();
+      final int below = coverMode ? h / 2 + 22 : 0;
       // request 38 section 12: the allies' choices so far, dashed
-      for (final Map.Entry<GamePlayer, List<TargetAssignment>> e : allied.entrySet()) {
-        for (final TargetAssignment a : e.getValue()) {
+      for (final List<TargetAssignment> list : allied.values()) {
+        for (final TargetAssignment a : list) {
           final Point end = draw.middle(a.target().territory());
-          final int n = perTarget.merge(a.target().territory(), 1, Integer::sum) - 1;
-          final Point icon = new Point(end.x - 16 + n * 34, end.y - 16);
-          AirDraw.arrow(g, draw.center(a.zone()), end, ALLY_LINE, 2.5f, true, "", 6);
-          draw.iconAt(g, icon, e.getKey(), a.unitType(), a.count());
+          AirDraw.arrow(
+              g, draw.center(a.zone()), new Point(end.x, end.y + below), ALLY_LINE, 2.5f, true, "", 6);
         }
       }
-      // request 30: each place with aircraft shows its side's counts against the caps
-      final java.util.Set<String> badged = new java.util.HashSet<>();
-      final List<TargetAssignment> withBadges = new ArrayList<>(staged);
-      allied.values().forEach(withBadges::addAll);
-      if (coverMode) {
-        revealed.values().forEach(withBadges::addAll);
-      }
-      for (final TargetAssignment a : withBadges) {
-        if (badged.add(a.target().territory().getName())) {
-          final Point end = draw.middle(a.target().territory());
-          AirDraw.tag(
-              g,
-              badge(player, a.zone(), a.target().territory()),
-              end.x,
-              end.y - 24,
-              new Color(255, 230, 120));
-        }
-      }
-      // own choices: arrow from the base to the target, with the aircraft and count there
+      // own choices: arrow from the base to the target
       for (final TargetAssignment a : staged) {
         final Point end = draw.middle(a.target().territory());
-        final int n = perTarget.merge(a.target().territory(), 1, Integer::sum) - 1;
-        final Point icon = new Point(end.x - 16 + n * 34, end.y - 16);
-        AirDraw.arrow(g, draw.center(a.zone()), end, STRIKE_LINE, 4f, false, "", 6);
-        draw.iconAt(g, icon, player, a.unitType(), a.count());
+        AirDraw.arrow(
+            g, draw.center(a.zone()), new Point(end.x, end.y + below), STRIKE_LINE, 4f, false, "", 6);
+      }
+      // request 44: the aircraft with orders, stacked over their target as the map stacks units
+      for (final Map.Entry<Territory, List<Unit>> e : ordered.entrySet()) {
+        final Point end = draw.middle(e.getKey());
+        draw.drawStacks(g, new Point(end.x, end.y + below), AirDraw.stacks(e.getValue()), 0.95f);
+      }
+      // request 30: each place with aircraft shows its side's counts against the caps
+      if (player != null) {
+        final java.util.Set<String> badged = new java.util.HashSet<>();
+        final List<TargetAssignment> withBadges = new ArrayList<>(staged);
+        allied.values().forEach(withBadges::addAll);
+        if (coverMode) {
+          revealed.values().forEach(withBadges::addAll);
+        }
+        for (final TargetAssignment a : withBadges) {
+          if (badged.add(a.target().territory().getName())) {
+            final Point end = draw.middle(a.target().territory());
+            AirDraw.tag(
+                g,
+                badge(player, a.zone(), a.target().territory()),
+                end.x,
+                coverMode ? end.y + below + h / 2 + 14 : end.y - h / 2 - 14,
+                new Color(255, 230, 120));
+          }
+        }
       }
     }
   }

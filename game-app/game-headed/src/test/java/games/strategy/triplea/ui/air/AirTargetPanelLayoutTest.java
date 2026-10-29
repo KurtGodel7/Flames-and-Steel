@@ -682,4 +682,202 @@ class AirTargetPanelLayoutTest {
     assertThat(panel.selectedCounts().totalValues(), is(1));
     assertThat(panel.unassigned(germans, t[0]).totalValues() >= 2, is(true));
   }
+
+  // ---- request 44: a moved aircraft only where it goes, stacked; Undo buttons in view
+
+  /** The last set of units the panel asked the map to leave off their territory. */
+  @SuppressWarnings("unchecked")
+  private java.util.Collection<games.strategy.engine.data.Unit> offMap() {
+    final org.mockito.ArgumentCaptor<java.util.Collection<games.strategy.engine.data.Unit>> sent =
+        org.mockito.ArgumentCaptor.forClass(java.util.Collection.class);
+    verify(map, org.mockito.Mockito.atLeastOnce()).setUnitsOffMap(sent.capture());
+    return sent.getAllValues().get(sent.getAllValues().size() - 1);
+  }
+
+  @Test
+  void aMovedDiveBomberIsDrawnOnlyWhereItGoesAndUndoPutsItBack() throws Exception {
+    final Territory[] t = cracowAndBialystok();
+    startPanel(false);
+    SwingUtilities.invokeAndWait(
+        () -> {
+          panel.click(dives(t[0]), t[0], click());
+          panel.click(List.of(), t[1], click());
+        });
+    flush();
+    // Cracow shows 1, Bialystok 1
+    assertThat(offMap().size(), is(1));
+    assertThat(dives(t[0]).containsAll(offMap()), is(true));
+    assertThat(panel.ordered().get(t[1]).size(), is(1));
+    SwingUtilities.invokeAndWait(() -> buttons("Undo").get(0).doClick());
+    flush();
+    // Cracow shows 2 again
+    assertThat(offMap().isEmpty(), is(true));
+    assertThat(panel.ordered().isEmpty(), is(true));
+  }
+
+  @Test
+  void twoDiveBombersSentInTwoMovesAreOneStackOfTwo() throws Exception {
+    final Territory[] t = cracowAndBialystok();
+    startPanel(false);
+    SwingUtilities.invokeAndWait(
+        () -> {
+          panel.click(dives(t[0]), t[0], click());
+          panel.click(List.of(), t[1], click());
+          panel.click(dives(t[0]), t[0], click());
+          panel.click(List.of(), t[1], click());
+        });
+    flush();
+    assertThat(panel.staged().size(), is(2));
+    // Cracow shows none, Bialystok one stack "2"
+    assertThat(offMap().size(), is(2));
+    final List<AirDraw.Stack> stacks = AirDraw.stacks(panel.ordered().get(t[1]));
+    assertThat(stacks.size(), is(1));
+    assertThat(stacks.get(0).units().size(), is(2));
+  }
+
+  @Test
+  void everyUndoButtonIsInsideThePanelAtItsNormalWidth() throws Exception {
+    final Territory[] t = cracowAndBialystok();
+    startPanel(false);
+    SwingUtilities.invokeAndWait(
+        () -> {
+          panel.click(dives(t[0]), t[0], click());
+          panel.click(List.of(), t[1], click());
+          panel.click(dives(t[0]), t[0], click());
+          panel.click(List.of(), t[1], click());
+        });
+    flush();
+    for (final int width : List.of(WIDTH, 300, 260)) {
+      final BufferedImage shot = render(panel, width, HEIGHT);
+      if (width == WIDTH) {
+        ImageIO.write(shot, "png", SHOTS.resolve("request44_bomber_stage_two_moves.png").toFile());
+      }
+      for (final String text : List.of("Show", "Undo")) {
+        final List<AbstractButton> found = buttons(text);
+        assertThat(text + " buttons", found.size(), is(2));
+        for (final AbstractButton b : found) {
+          final Rectangle r = SwingUtilities.convertRectangle(b.getParent(), b.getBounds(), panel);
+          assertThat(
+              text + " at width " + width + ": " + r, r.x >= 0 && r.x + r.width <= width, is(true));
+        }
+      }
+    }
+  }
+
+  /** Request 44 screenshots: the map around the places, drawn as the game draws it. */
+  private BufferedImage mapAround(
+      final games.strategy.triplea.ui.UiContext ui,
+      final java.util.Set<games.strategy.engine.data.Unit> offMap,
+      final List<games.strategy.triplea.ui.panels.map.MapOverlay> overlays,
+      final Territory... places) {
+    final var mapData = ui.getMapData();
+    Rectangle region = null;
+    for (final Territory t : places) {
+      final Rectangle r = mapData.getBoundingRect(t);
+      region = region == null ? new Rectangle(r) : region.union(r);
+    }
+    region.grow(60, 60);
+    final games.strategy.triplea.ui.screen.TileManager tiles =
+        new games.strategy.triplea.ui.screen.TileManager(ui);
+    tiles.setUnitsOffMap(offMap);
+    tiles.createTiles(new Rectangle(mapData.getMapDimensions()));
+    tiles.resetTiles(data, mapData);
+    // twice the size, to be read easily
+    final BufferedImage image =
+        new BufferedImage(region.width * 2, region.height * 2, BufferedImage.TYPE_INT_RGB);
+    final java.awt.Graphics2D g = image.createGraphics();
+    g.setRenderingHint(
+        java.awt.RenderingHints.KEY_INTERPOLATION,
+        java.awt.RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+    g.scale(2, 2);
+    g.translate(-region.x, -region.y);
+    for (final var tile : tiles.getTiles(new java.awt.geom.Rectangle2D.Double(
+        region.x, region.y, region.width, region.height))) {
+      tile.drawImage(data, mapData);
+      if (tile.getImage() != null) {
+        g.drawImage(tile.getImage(), tile.getBounds().x, tile.getBounds().y, null);
+      }
+    }
+    g.setRenderingHint(
+        java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+    for (final var overlay : overlays) {
+      overlay.paint(g, data);
+    }
+    g.dispose();
+    return image;
+  }
+
+  @Test
+  void request44ScreenshotsOfTheMap() throws Exception {
+    final Territory[] t = cracowAndBialystok();
+    startPanel(false);
+    SwingUtilities.invokeAndWait(
+        () -> {
+          panel.click(dives(t[0]), t[0], click());
+          panel.click(List.of(), t[1], click());
+        });
+    flush();
+    final org.mockito.ArgumentCaptor<games.strategy.triplea.ui.panels.map.MapOverlay> overlay =
+        org.mockito.ArgumentCaptor.forClass(games.strategy.triplea.ui.panels.map.MapOverlay.class);
+    verify(map, org.mockito.Mockito.atLeastOnce()).addOverlay(overlay.capture());
+    final games.strategy.triplea.ui.UiContext ui = TestUi.create(data);
+    // the bomber stage: one of Cracow's two dive bombers sent to Bialystok
+    ImageIO.write(
+        mapAround(
+            ui, java.util.Set.copyOf(offMap()), List.of(overlay.getValue()), t[0], t[1]),
+        "png",
+        SHOTS.resolve("request44_bomber_stage_map.png").toFile());
+    SwingUtilities.invokeAndWait(
+        () -> {
+          panel.click(dives(t[0]).stream().filter(u -> !offMap().contains(u)).toList(), t[0], click());
+          panel.click(List.of(), t[1], click());
+        });
+    flush();
+    ImageIO.write(
+        mapAround(
+            ui, java.util.Set.copyOf(offMap()), List.of(overlay.getValue()), t[0], t[1]),
+        "png",
+        SHOTS.resolve("request44_bomber_stage_map_both.png").toFile());
+    // later in the round: both in the air over Bialystok, a German fighter too, outside the air
+    // phase: one small marker
+    final Territory airborne = AirBases_airborne();
+    final List<games.strategy.engine.data.Unit> flying = new ArrayList<>(dives(t[0]));
+    flying.addAll(data.getUnitTypeList().getUnitTypeOrThrow("fighter").create(1, germans));
+    data.performChange(
+        games.strategy.engine.data.changefactory.ChangeFactory.removeUnits(t[0], dives(t[0])));
+    data.performChange(
+        games.strategy.engine.data.changefactory.ChangeFactory.addUnits(airborne, flying));
+    for (final games.strategy.engine.data.Unit u : flying) {
+      data.performChange(
+          games.strategy.engine.data.changefactory.ChangeFactory.unitPropertyChange(
+              u, t[1], games.strategy.engine.data.Unit.PropertyName.FLIGHT_OVER));
+      data.performChange(
+          games.strategy.engine.data.changefactory.ChangeFactory.unitPropertyChange(
+              u, 3, games.strategy.engine.data.Unit.PropertyName.FLIGHT_RANGE_LEFT));
+    }
+    final AirMapMode airMap = new AirMapMode(ui, null, data, text -> {});
+    ImageIO.write(
+        mapAround(ui, java.util.Set.of(), List.of(airMap), t[0], t[1]),
+        "png",
+        SHOTS.resolve("request44_turn_air_marker.png").toFile());
+    assertThat(airMap.airborneBoxes().size(), is(1));
+    assertThat(
+        AirMapMode.listAircraft(flying),
+        org.hamcrest.Matchers.containsString("2 dive bombers (3 steps of range left), 1 fighter"));
+    airMap.setShowingAirMarkers(false);
+    ImageIO.write(
+        mapAround(ui, java.util.Set.of(), List.of(airMap), t[0], t[1]),
+        "png",
+        SHOTS.resolve("request44_turn_air_hidden.png").toFile());
+    assertThat(airMap.airborneBoxes().isEmpty(), is(true));
+    airMap.toggle();
+    ImageIO.write(
+        mapAround(ui, java.util.Set.of(), List.of(airMap), t[0], t[1]),
+        "png",
+        SHOTS.resolve("request44_turn_air_map_mode.png").toFile());
+  }
+
+  private Territory AirBases_airborne() {
+    return games.strategy.triplea.delegate.air.AirBases.airborne(data).orElseThrow();
+  }
 }

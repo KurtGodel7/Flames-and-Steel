@@ -62,6 +62,12 @@ public class TechAttachment extends DefaultAttachment {
   // Flames and Steel (request 35): the nation's own interception bonus or penalty per unit type,
   // e.g. "-2:fighter"
   private @Nullable IntegerMap<UnitType> interceptionBonus = null;
+  // Flames and Steel (request 43): the nation's starting bonus die for a bomber type, used instead
+  // of the type's own value (sets and additions from techs then work as usual), e.g.
+  // "0:torpedoBomber" for the American torpedo bombers before the Mark 13 fix
+  private @Nullable IntegerMap<UnitType> landBonusBase = null;
+  private @Nullable IntegerMap<UnitType> navalBonusBase = null;
+  private @Nullable IntegerMap<UnitType> subBonusBase = null;
   // Flames and Steel (request 37): the nation's own attack and defense bonus or penalty per unit
   // type, e.g. "-1:diveBomber" (the Soviet Il-2)
   private @Nullable IntegerMap<UnitType> attackBonus = null;
@@ -447,6 +453,69 @@ public class TechAttachment extends DefaultAttachment {
     return getIntegerMapProperty(dogfightBonus);
   }
 
+  private void setLandBonusBase(final String value) throws GameParseException {
+    final String[] s = splitOnColon(value);
+    if (s.length != 2) {
+      throw new GameParseException(
+          "landBonusBase must be a number and a unit type, e.g. 0:torpedoBomber" + thisErrorMsg());
+    }
+    if (landBonusBase == null) {
+      landBonusBase = new IntegerMap<>();
+    }
+    landBonusBase.put(getUnitTypeOrThrow(s[1]), getInt(s[0]));
+  }
+
+  private void setLandBonusBase(final IntegerMap<UnitType> value) {
+    landBonusBase = value;
+  }
+
+  /** Request 43: the nation's starting bonus die, replacing the unit type's own (listed types). */
+  public IntegerMap<UnitType> getLandBonusBase() {
+    return getIntegerMapProperty(landBonusBase);
+  }
+
+  private void setNavalBonusBase(final String value) throws GameParseException {
+    final String[] s = splitOnColon(value);
+    if (s.length != 2) {
+      throw new GameParseException(
+          "navalBonusBase must be a number and a unit type, e.g. 0:torpedoBomber" + thisErrorMsg());
+    }
+    if (navalBonusBase == null) {
+      navalBonusBase = new IntegerMap<>();
+    }
+    navalBonusBase.put(getUnitTypeOrThrow(s[1]), getInt(s[0]));
+  }
+
+  private void setNavalBonusBase(final IntegerMap<UnitType> value) {
+    navalBonusBase = value;
+  }
+
+  /** Request 43: the nation's starting bonus die, replacing the unit type's own (listed types). */
+  public IntegerMap<UnitType> getNavalBonusBase() {
+    return getIntegerMapProperty(navalBonusBase);
+  }
+
+  private void setSubBonusBase(final String value) throws GameParseException {
+    final String[] s = splitOnColon(value);
+    if (s.length != 2) {
+      throw new GameParseException(
+          "subBonusBase must be a number and a unit type, e.g. 0:torpedoBomber" + thisErrorMsg());
+    }
+    if (subBonusBase == null) {
+      subBonusBase = new IntegerMap<>();
+    }
+    subBonusBase.put(getUnitTypeOrThrow(s[1]), getInt(s[0]));
+  }
+
+  private void setSubBonusBase(final IntegerMap<UnitType> value) {
+    subBonusBase = value;
+  }
+
+  /** Request 43: the nation's starting bonus die, replacing the unit type's own (listed types). */
+  public IntegerMap<UnitType> getSubBonusBase() {
+    return getIntegerMapProperty(subBonusBase);
+  }
+
   private void setInterceptionBonus(final String value) throws GameParseException {
     final String[] s = splitOnColon(value);
     if (s.length != 2) {
@@ -668,6 +737,27 @@ public class TechAttachment extends DefaultAttachment {
                   this::setDefenseBonus,
                   this::getDefenseBonus,
                   () -> defenseBonus = null));
+      case "landBonusBase" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setLandBonusBase,
+                  this::setLandBonusBase,
+                  this::getLandBonusBase,
+                  () -> landBonusBase = null));
+      case "navalBonusBase" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setNavalBonusBase,
+                  this::setNavalBonusBase,
+                  this::getNavalBonusBase,
+                  () -> navalBonusBase = null));
+      case "subBonusBase" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setSubBonusBase,
+                  this::setSubBonusBase,
+                  this::getSubBonusBase,
+                  () -> subBonusBase = null));
       case "interceptionBonus" ->
           Optional.of(
               MutableProperty.of(

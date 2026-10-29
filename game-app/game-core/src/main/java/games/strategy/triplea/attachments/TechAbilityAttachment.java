@@ -87,6 +87,15 @@ public class TechAbilityAttachment extends DefaultAttachment {
   private @Nullable IntegerMap<UnitType> navalBonus = null;
   private @Nullable IntegerMap<UnitType> landBonusSet = null;
   private @Nullable IntegerMap<UnitType> navalBonusSet = null;
+  // Flames and Steel (request 43, FIDO): the same against submarines, e.g. "1:torpedoBomber"
+  private @Nullable IntegerMap<UnitType> subBonus = null;
+  private @Nullable IntegerMap<UnitType> subBonusSet = null;
+  // Flames and Steel (request 43, Combat Air Patrol): the nation's carriers fire at enemy bombers
+  // in the interception step over their sea zone, instead of firing back after the strike
+  private boolean carrierInterception = false;
+  // Flames and Steel (request 43, VT Proximity Fuze): added to the value of the nation's ships
+  // whenever they fire at aircraft
+  private int antiAircraftBonus = 0;
   // Flames and Steel (request 27): extra interception dice, e.g. "1:fighter"
   private @Nullable IntegerMap<UnitType> interceptionRollsBonus = null;
   // Flames and Steel (request 31, Window): taken off the interception value of enemy fighters
@@ -242,6 +251,64 @@ public class TechAbilityAttachment extends DefaultAttachment {
   /** Multiplier for ships firing back at aircraft (Naval Wasserfall: 2); 0 if not set. */
   public int getAirFireBackMultiplier() {
     return airFireBackMultiplier;
+  }
+
+  private void setSubBonus(final String value) throws GameParseException {
+    if (subBonus == null) {
+      subBonus = new IntegerMap<>();
+    }
+    applyCheckedValue("subBonus", value, subBonus::add);
+  }
+
+  private void setSubBonus(final IntegerMap<UnitType> value) {
+    subBonus = value;
+  }
+
+  /** Flames and Steel (request 43): the bomber bonus die against submarines, by unit type. */
+  public IntegerMap<UnitType> getSubBonus() {
+    return getIntegerMapProperty(subBonus);
+  }
+
+  private void setSubBonusSet(final String value) throws GameParseException {
+    if (subBonusSet == null) {
+      subBonusSet = new IntegerMap<>();
+    }
+    applyCheckedValue("subBonusSet", value, subBonusSet::add);
+  }
+
+  private void setSubBonusSet(final IntegerMap<UnitType> value) {
+    subBonusSet = value;
+  }
+
+  /** Flames and Steel (request 43): the bomber bonus die against submarines, by unit type. */
+  public IntegerMap<UnitType> getSubBonusSet() {
+    return getIntegerMapProperty(subBonusSet);
+  }
+
+  private void setCarrierInterception(final String value) {
+    carrierInterception = getBool(value);
+  }
+
+  private void setCarrierInterception(final Boolean value) {
+    carrierInterception = value;
+  }
+
+  /** Flames and Steel (request 43, Combat Air Patrol). */
+  public boolean getCarrierInterception() {
+    return carrierInterception;
+  }
+
+  private void setAntiAircraftBonus(final String value) {
+    antiAircraftBonus = getInt(value);
+  }
+
+  private void setAntiAircraftBonus(final Integer value) {
+    antiAircraftBonus = value;
+  }
+
+  /** Flames and Steel (request 43, VT Proximity Fuze): added to ships firing at aircraft. */
+  public int getAntiAircraftBonus() {
+    return antiAircraftBonus;
   }
 
   private void setLandBonus(final String value) throws GameParseException {
@@ -1170,6 +1237,34 @@ public class TechAbilityAttachment extends DefaultAttachment {
                   this::setAirFireBackMultiplier,
                   this::getAirFireBackMultiplier,
                   () -> airFireBackMultiplier = 0));
+      case "subBonus" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setSubBonus,
+                  this::setSubBonus,
+                  this::getSubBonus,
+                  () -> subBonus = null));
+      case "subBonusSet" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setSubBonusSet,
+                  this::setSubBonusSet,
+                  this::getSubBonusSet,
+                  () -> subBonusSet = null));
+      case "carrierInterception" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setCarrierInterception,
+                  this::setCarrierInterception,
+                  this::getCarrierInterception,
+                  () -> carrierInterception = false));
+      case "antiAircraftBonus" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setAntiAircraftBonus,
+                  this::setAntiAircraftBonus,
+                  this::getAntiAircraftBonus,
+                  () -> antiAircraftBonus = 0));
       case "landBonus" ->
           Optional.of(
               MutableProperty.of(

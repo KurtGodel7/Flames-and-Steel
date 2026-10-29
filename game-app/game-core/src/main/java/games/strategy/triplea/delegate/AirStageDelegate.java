@@ -11,6 +11,7 @@ import games.strategy.engine.message.IRemote;
 import games.strategy.engine.player.Player;
 import games.strategy.triplea.delegate.air.AirBases;
 import games.strategy.triplea.delegate.air.AirBases.Flight;
+import games.strategy.triplea.delegate.air.AirCombat;
 import games.strategy.triplea.delegate.air.AirCombat.TargetAssignment;
 import games.strategy.triplea.delegate.air.AirCover;
 import games.strategy.triplea.delegate.air.AirHome;
@@ -110,14 +111,7 @@ public class AirStageDelegate extends BaseTripleADelegate implements IAirStageDe
 
   /** The nations in turn order (the order their own steps come in), each once. */
   private List<GamePlayer> turnOrder() {
-    final List<GamePlayer> order = new ArrayList<>();
-    for (final GameStep step : getData().getSequence().getSteps()) {
-      final GamePlayer p = step.getPlayerId();
-      if (p != null && !p.isNull() && !order.contains(p)) {
-        order.add(p);
-      }
-    }
-    return order;
+    return AirPriority.turnOrder(getData());
   }
 
   private Map<GamePlayer, Choice> choices(final Stage stage) {
@@ -323,32 +317,42 @@ public class AirStageDelegate extends BaseTripleADelegate implements IAirStageDe
   private void reopenLockedOut(
       final GamePlayer p, final Stage stage, final List<GamePlayer> order, final Choice choice) {
     final Set<Territory> mine = new HashSet<>();
+    final Set<AirCombat.Target> raids = new HashSet<>();
     choice.targets().forEach(a -> mine.add(a.target().territory()));
+    choice.targets().stream()
+        .filter(a -> a.target().kind() == AirCombat.TargetKind.STRATEGIC)
+        .forEach(a -> raids.add(a.target()));
     for (final Map.Entry<GamePlayer, Choice> e : new ArrayList<>(choices(stage).entrySet())) {
       final GamePlayer q = e.getKey();
-      if (q.equals(p) || !AirPriority.locks(p, q)) {
+      final boolean locked = AirPriority.locks(p, q);
+      // request 43 section 1: a raid keeps later allies' bombers off that factory
+      final boolean raidLocked = AirPriority.raidLocks(p, q);
+      if (q.equals(p) || (!locked && !raidLocked)) {
         continue;
       }
       final List<TargetAssignment> kept = new ArrayList<>();
-      final Set<Territory> lost = new java.util.LinkedHashSet<>();
+      final Set<String> why = new java.util.LinkedHashSet<>();
       for (final TargetAssignment a : e.getValue().targets()) {
-        if (mine.contains(a.target().territory())) {
-          lost.add(a.target().territory());
+        final Territory t = a.target().territory();
+        if (locked && mine.contains(t)) {
+          why.add(AirPriority.lockedText(t, p));
+        } else if (raidLocked && raids.contains(a.target())) {
+          why.add(AirPriority.raidText(t, p));
         } else {
           kept.add(a);
         }
       }
-      if (lost.isEmpty()) {
+      if (why.isEmpty()) {
         continue;
       }
       choices(stage).remove(q);
       choosing.add(q);
-      final String why =
-          String.join(" ", lost.stream().map(t -> AirPriority.lockedText(t, p)).toList())
-              + " Your aircraft for "
-              + (lost.size() == 1 ? "it" : "them")
-              + " are back on their bases: choose again.";
-      startAsk(q, stage, order, Choice.of(kept), why);
+      startAsk(
+          q,
+          stage,
+          order,
+          Choice.of(kept),
+          String.join(" ", why) + " Those aircraft are back on their bases: choose again.");
     }
   }
 

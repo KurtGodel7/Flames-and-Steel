@@ -13,6 +13,7 @@ import games.strategy.triplea.delegate.AirStageDelegate;
 import games.strategy.triplea.delegate.air.AirBases;
 import games.strategy.triplea.delegate.air.AirCombat;
 import games.strategy.triplea.image.UnitImageFactory;
+import games.strategy.triplea.image.UnitImageFactory.ImageKey;
 import games.strategy.triplea.ui.panels.map.MapPanel;
 import games.strategy.triplea.ui.UiContext;
 import games.strategy.triplea.ui.panels.map.MapOverlay;
@@ -64,6 +65,10 @@ public final class AirMapMode implements MapOverlay {
   // where airborne groups were drawn last, for pointing at them
   private final List<Drawn> drawn = new CopyOnWriteArrayList<>();
   private volatile @Nullable String banner;
+  // request 44: the View menu's switch for the markers of aircraft in the air
+  private volatile boolean showAirMarkers = true;
+  private static final int MARKER_WIDTH = 46;
+  private final Map<String, Point> corners = new java.util.concurrent.ConcurrentHashMap<>();
   private volatile @Nullable Territory flashZone;
   private volatile long flashUntil;
 
@@ -212,50 +217,243 @@ public final class AirMapMode implements MapOverlay {
   }
 
   /**
-   * Every nation's aircraft in the air, faded over the territory they are over: one icon per
-   * nation and type with its count, and "lands at round end" under them. In air map mode a
-   * territory where enemies meet is tagged "Air battle".
+   * Every nation's aircraft in the air over the territory they are over. During the air phase (and
+   * in the air map) they are drawn in full, stacked as the map stacks units, with "lands at round
+   * end" under them; in a territory where enemies meet the air map adds "Air battle". Request 44:
+   * the rest of the round each nation shows only a small faded marker in a corner of the
+   * territory (the View menu hides them), so they don't get in the way of the turn. Aircraft an
+   * air screen draws elsewhere (they have landing orders) are left out.
    */
   private void paintAirborne(final Graphics2D g, final Territory airborne, final List<Drawn> out) {
-    final Map<Territory, Map<String, List<Unit>>> byPlace = new LinkedHashMap<>();
+    final Set<Unit> elsewhere = mapPanel == null ? Set.of() : mapPanel.getUnitsOffMap();
+    final Map<Territory, List<Unit>> byPlace = new LinkedHashMap<>();
     for (final Unit u : airborne.getUnits()) {
-      if (u.getFlightOver() == null) {
+      if (u.getFlightOver() == null || elsewhere.contains(u)) {
         continue;
       }
-      byPlace
-          .computeIfAbsent(u.getFlightOver(), k -> new LinkedHashMap<>())
-          .computeIfAbsent(u.getOwner().getName() + "|" + u.getType().getName(), k -> new ArrayList<>())
-          .add(u);
+      byPlace.computeIfAbsent(u.getFlightOver(), k -> new ArrayList<>()).add(u);
     }
-    final UnitImageFactory images = uiContext.getUnitImageFactory();
-    final int w = images.getUnitImageWidth();
-    final int h = images.getUnitImageHeight();
-    for (final Map.Entry<Territory, Map<String, List<Unit>>> e : byPlace.entrySet()) {
+    final boolean compact = isCompact();
+    if (compact && !showAirMarkers) {
+      return;
+    }
+    final int h = uiContext.getUnitImageFactory().getUnitImageHeight();
+    for (final Map.Entry<Territory, List<Unit>> e : byPlace.entrySet()) {
       final Territory over = e.getKey();
-      final Point middle = draw.middle(over);
-      final int groups = e.getValue().size();
-      final int rowWidth = groups * (w + 18);
-      int x = middle.x - rowWidth / 2;
-      final int y = middle.y - h - 12;
-      final List<GamePlayer> owners = new ArrayList<>();
-      for (final List<Unit> units : e.getValue().values()) {
-        final Unit first = units.get(0);
-        if (!owners.contains(first.getOwner())) {
-          owners.add(first.getOwner());
-        }
-        final boolean faded = filter != null && !filter.equals(first.getOwner());
-        final Composite old = g.getComposite();
-        g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, faded ? 0.25f : 0.6f));
-        draw.iconAt(g, new Point(x, y), first.getOwner(), first.getType(), units.size());
-        g.setComposite(old);
-        out.add(new Drawn(new Rectangle(x - 2, y - 2, w + 4, h + 4), first.getOwner(), over, units));
-        x += w + 18;
+      if (compact) {
+        paintMarkers(g, over, e.getValue(), out);
+        continue;
       }
-      AirDraw.tag(g, "lands at round end", middle.x, y + h + 14, LANDS_TAG);
+      final Point middle = draw.middle(over);
+      final List<AirDraw.Stack> stacks = AirDraw.stacks(e.getValue());
+      final List<GamePlayer> owners = new ArrayList<>();
+      stacks.forEach(
+          stack -> {
+            if (!owners.contains(stack.owner())) {
+              owners.add(stack.owner());
+            }
+          });
+      final Point centre = new Point(middle.x, middle.y - h / 2 - 12);
+      final List<Rectangle> boxes = draw.drawStacks(g, centre, stacks, 0.6f);
+      for (int i = 0; i < stacks.size(); i++) {
+        final AirDraw.Stack stack = stacks.get(i);
+        if (filter != null && !filter.equals(stack.owner())) {
+          // the nation filter fades the others
+          g.setColor(new Color(0, 0, 0, 110));
+          g.fill(boxes.get(i));
+        }
+        out.add(new Drawn(boxes.get(i), stack.owner(), over, stack.units()));
+      }
+      AirDraw.tag(g, "lands at round end", middle.x, centre.y + h / 2 + 16, LANDS_TAG);
       if (enabled && hasBattle(owners)) {
-        AirDraw.tag(g, "Air battle", middle.x, y - 14, BATTLE_TAG);
+        AirDraw.tag(g, "Air battle", middle.x, centre.y - h / 2 - 14, BATTLE_TAG);
       }
     }
+  }
+
+  /** Request 44: outside the air phase, with the air map off, aircraft in the air are markers. */
+  private boolean isCompact() {
+    return !inAirPhase && !enabled;
+  }
+
+  public boolean isShowingAirMarkers() {
+    return showAirMarkers;
+  }
+
+  /** Request 44: the View menu's "Show Aircraft in the Air". */
+  public void setShowingAirMarkers(final boolean show) {
+    showAirMarkers = show;
+    repaint();
+  }
+
+  /**
+   * Request 44: one small faded marker per nation (its most common aircraft, small, and the
+   * total count) in the spot of the territory furthest from where its units are drawn.
+   */
+  private void paintMarkers(
+      final Graphics2D g, final Territory over, final List<Unit> units, final List<Drawn> out) {
+    final Map<GamePlayer, List<Unit>> byNation = new LinkedHashMap<>();
+    units.forEach(u -> byNation.computeIfAbsent(u.getOwner(), k -> new ArrayList<>()).add(u));
+    final UnitImageFactory images = uiContext.getUnitImageFactory();
+    final int iconW = Math.max(12, images.getUnitImageWidth() * 3 / 5);
+    final int iconH = Math.max(12, images.getUnitImageHeight() * 3 / 5);
+    final Point corner = markerCorner(over, MARKER_WIDTH, (iconH + 4) * byNation.size());
+    int y = corner.y;
+    final Composite old = g.getComposite();
+    for (final Map.Entry<GamePlayer, List<Unit>> e : byNation.entrySet()) {
+      final GamePlayer nation = e.getKey();
+      final boolean faded = filter != null && !filter.equals(nation);
+      g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, faded ? 0.3f : 0.75f));
+      final Rectangle box = new Rectangle(corner.x, y, MARKER_WIDTH, iconH + 2);
+      g.setColor(new Color(20, 20, 20, 200));
+      g.fillRoundRect(box.x, box.y, box.width, box.height, 10, 10);
+      g.setColor(uiContext.getMapData().getPlayerColor(nation.getName()));
+      g.setStroke(new BasicStroke(2f));
+      g.drawRoundRect(box.x, box.y, box.width, box.height, 10, 10);
+      g.drawImage(
+          images.getImage(ImageKey.builder().player(nation).type(mostCommon(e.getValue())).build()),
+          box.x + 3,
+          box.y + 1,
+          iconW,
+          iconH,
+          null);
+      g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
+      g.setColor(Color.WHITE);
+      final FontMetrics fm = g.getFontMetrics();
+      g.drawString(
+          String.valueOf(e.getValue().size()),
+          box.x + iconW + 6,
+          box.y + (box.height + fm.getAscent()) / 2 - 2);
+      g.setComposite(old);
+      out.add(new Drawn(box, nation, over, e.getValue()));
+      y += iconH + 4;
+    }
+  }
+
+  private static UnitType mostCommon(final List<Unit> units) {
+    final Map<UnitType, Integer> counts = new LinkedHashMap<>();
+    units.forEach(u -> counts.merge(u.getType(), 1, Integer::sum));
+    return counts.entrySet().stream().max(Map.Entry.comparingByValue()).orElseThrow().getKey();
+  }
+
+  /**
+   * Request 44: where a territory's markers go: a spot inside it that covers neither its name nor
+   * the units drawn there, as far as possible from its unit placement points and name.
+   */
+  private Point markerCorner(final Territory t, final int width, final int height) {
+    final int stacks =
+        games.strategy.triplea.util.UnitSeparator.getSortedUnitCategories(t, uiContext.getMapData())
+            .size();
+    return corners.computeIfAbsent(
+        t.getName() + "|" + height + "|" + stacks, k -> findCorner(t, width, height, stacks));
+  }
+
+  private static boolean mostlyInside(final List<java.awt.Polygon> polygons, final Rectangle r) {
+    for (final java.awt.Polygon p : polygons) {
+      if (!p.contains(r.getCenterX(), r.getCenterY())) {
+        continue;
+      }
+      int corners = 0;
+      for (final Point c :
+          List.of(
+              new Point(r.x, r.y),
+              new Point(r.x + r.width, r.y),
+              new Point(r.x, r.y + r.height),
+              new Point(r.x + r.width, r.y + r.height))) {
+        if (p.contains(c)) {
+          corners++;
+        }
+      }
+      if (corners >= 3) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Where the map writes the territory's name, with its PU and MP lines under it. */
+  private Rectangle nameBox(final Territory t) {
+    final var mapData = uiContext.getMapData();
+    final java.awt.image.BufferedImage scratch =
+        new java.awt.image.BufferedImage(1, 1, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+    final Graphics2D g = scratch.createGraphics();
+    g.setFont(games.strategy.triplea.image.MapImage.getPropertyMapFont());
+    final FontMetrics fm = g.getFontMetrics();
+    g.dispose();
+    final int nameWidth = fm.stringWidth(t.getName());
+    final int x;
+    final int y;
+    final var place = mapData.getNamePlacementPoint(t);
+    if (place.isPresent()) {
+      x = place.get().x;
+      y = place.get().y;
+    } else {
+      final Rectangle best =
+          games.strategy.triplea.ui.screen.drawable.TerritoryNameDrawable.getBestTerritoryNameRect(
+              mapData, t, fm);
+      x = best.x + best.width / 2 - nameWidth / 2;
+      y = best.y + best.height / 2 + fm.getAscent() / 2;
+    }
+    // the name, then the PU value and the MP line under it
+    return new Rectangle(x - 4, y - fm.getAscent() - 4, nameWidth + 8, fm.getHeight() * 3 + 8);
+  }
+
+  private Point findCorner(final Territory t, final int width, final int height, final int stacks) {
+    final var mapData = uiContext.getMapData();
+    final List<java.awt.Polygon> polygons = mapData.getPolygons(t);
+    final Rectangle bounds = mapData.getBoundingRect(t);
+    final UnitImageFactory images = uiContext.getUnitImageFactory();
+    final int unitW = images.getUnitImageWidth();
+    final int unitH = images.getUnitImageHeight();
+    // never on the name (with its PU and MP lines) or the unit stacks drawn now
+    final List<Rectangle> covered = new ArrayList<>();
+    final Rectangle nameBox = nameBox(t);
+    covered.add(nameBox);
+    final List<Point> avoid = new ArrayList<>();
+    avoid.add(new Point((int) nameBox.getCenterX(), (int) nameBox.getCenterY()));
+    int n = 0;
+    for (final Point p : mapData.getPlacementPoints(t)) {
+      if (n++ < stacks) {
+        covered.add(new Rectangle(p.x - 2, p.y - 2, unitW + 4, unitH + 12));
+      }
+      avoid.add(new Point(p.x + unitW / 2, p.y + unitH / 2));
+    }
+    // the spot that covers least (the name counts three times), then the furthest from all
+    Point best = null;
+    double bestCover = Double.MAX_VALUE;
+    double bestScore = -1;
+    final int step = 4;
+    for (int x = bounds.x - width / 2; x + width / 2 <= bounds.x + bounds.width; x += step) {
+      for (int y = bounds.y - height / 2; y + height / 2 <= bounds.y + bounds.height; y += step) {
+        final Rectangle r = new Rectangle(x, y, width, height);
+        // its middle and at least three corners in the territory (it may reach over the border
+        // a little)
+        if (!mostlyInside(polygons, r)) {
+          continue;
+        }
+        double cover = 0;
+        for (int i = 0; i < covered.size(); i++) {
+          final Rectangle overlap = r.intersection(covered.get(i));
+          if (!overlap.isEmpty()) {
+            cover += (i == 0 ? 3.0 : 1.0) * overlap.width * overlap.height;
+          }
+        }
+        double score = Double.MAX_VALUE;
+        for (final Point a : avoid) {
+          score = Math.min(score, a.distance(r.getCenterX(), r.getCenterY()));
+        }
+        if (cover < bestCover || (cover == bestCover && score > bestScore)) {
+          bestCover = cover;
+          bestScore = score;
+          best = new Point(x, y);
+        }
+      }
+    }
+    if (best != null) {
+      return best;
+    }
+    final Point middle = draw.middle(t);
+    return new Point(middle.x - width / 2, bounds.y + 2);
   }
 
   private static boolean hasBattle(final List<GamePlayer> owners) {
@@ -269,27 +467,47 @@ public final class AirMapMode implements MapOverlay {
     return false;
   }
 
-  /** Pointing at aircraft in the air says what they are and how far they can still fly. */
+  /**
+   * Pointing at aircraft in the air says what they are and how far they can still fly (request
+   * 44: a marker lists all of its nation's aircraft there).
+   */
   private void pointedAt(final Point mapPoint) {
     for (final Drawn d : drawn) {
       if (d.box().contains(mapPoint)) {
-        final Unit first = d.units().get(0);
-        final int least = d.units().stream().mapToInt(Unit::getFlightRangeLeft).min().orElse(0);
         status.accept(
-            d.units().size()
-                + " "
-                + typeName(first.getType(), d.units().size())
-                + " ("
-                + games.strategy.triplea.formatter.PlayerNames.display(d.owner())
-                + ") in the air over "
+            games.strategy.triplea.formatter.PlayerNames.display(d.owner())
+                + " aircraft in the air over "
                 + d.over().getName()
-                + ": land at round end, "
-                + least
-                + (least == 1 ? " step" : " steps")
-                + " of range left. In the air they can't be attacked and are no base.");
+                + ": "
+                + listAircraft(d.units())
+                + ". They land at round end; in the air they can't be attacked and are no base.");
         return;
       }
     }
+  }
+
+  /** "2 dive bombers (3 steps of range left), 1 fighter (2 steps of range left)". */
+  static String listAircraft(final List<Unit> units) {
+    final Map<String, List<Unit>> byType = new LinkedHashMap<>();
+    units.forEach(
+        u ->
+            byType
+                .computeIfAbsent(
+                    u.getType().getName() + "|" + u.getFlightRangeLeft(), k -> new ArrayList<>())
+                .add(u));
+    final List<String> parts = new ArrayList<>();
+    for (final List<Unit> same : byType.values()) {
+      final int left = same.get(0).getFlightRangeLeft();
+      parts.add(
+          same.size()
+              + " "
+              + typeName(same.get(0).getType(), same.size())
+              + " ("
+              + left
+              + (left == 1 ? " step" : " steps")
+              + " of range left)");
+    }
+    return String.join(", ", parts);
   }
 
   private static String typeName(final UnitType type, final int count) {

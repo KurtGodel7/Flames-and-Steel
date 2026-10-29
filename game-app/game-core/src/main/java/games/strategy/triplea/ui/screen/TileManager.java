@@ -67,9 +67,20 @@ public class TileManager {
   private final Map<String, Set<Tile>> territoryTiles = new HashMap<>();
   private final Collection<UnitsDrawer> allUnitDrawables = new ArrayList<>();
   private final UiContext uiContext;
+  // Flames and Steel (request 44): aircraft with orders, drawn where they go, not at their base
+  private volatile Set<Unit> unitsOffMap = Set.of();
 
   public TileManager(final UiContext uiContext) {
     this.uiContext = uiContext;
+  }
+
+  /** Request 44: these units are not drawn in their territory (the air screens draw them). */
+  public void setUnitsOffMap(final Set<Unit> units) {
+    unitsOffMap = Set.copyOf(units);
+  }
+
+  public Set<Unit> getUnitsOffMap() {
+    return unitsOffMap;
   }
 
   /**
@@ -341,7 +352,7 @@ public class TileManager {
     final var unitImageFactory = uiContext.getUnitImageFactory();
     Point lastPlace = null;
     UnitCategory previousCategory = null;
-    for (final UnitCategory category : UnitSeparator.getSortedUnitCategories(territory, mapData)) {
+    for (final UnitCategory category : UnitSeparator.getSortedUnitCategories(territory, mapData, unitsOffMap)) {
       final boolean overflow;
       if (placementPoints.hasNext()) {
         lastPlace = new Point(placementPoints.next());
@@ -357,7 +368,8 @@ public class TileManager {
         }
       }
       final UnitsDrawer drawable =
-          new UnitsDrawer(category, territory, lastPlace, overflow, uiContext);
+          new UnitsDrawer(category, territory, lastPlace, overflow, uiContext)
+              .leaveOut(unitsOffMap);
       drawing.add(drawable);
       allUnitDrawables.add(drawable);
       for (final Tile tile : getTiles(drawable.getDrawRectangle())) {

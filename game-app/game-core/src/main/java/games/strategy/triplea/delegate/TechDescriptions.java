@@ -73,6 +73,9 @@ public class TechDescriptions {
     final IntegerMap<UnitType> navalBonus = ability.getNavalBonus();
     final IntegerMap<UnitType> landBonusSet = ability.getLandBonusSet();
     final IntegerMap<UnitType> navalBonusSet = ability.getNavalBonusSet();
+    // request 43 (FIDO): bonus die against submarines
+    final IntegerMap<UnitType> subBonus = ability.getSubBonus();
+    final IntegerMap<UnitType> subBonusSet = ability.getSubBonusSet();
     final IntegerMap<UnitType> hitPoints = ability.getHitPointBonus();
     final Set<UnitType> types = new LinkedHashSet<>();
     for (final IntegerMap<UnitType> map :
@@ -93,6 +96,8 @@ public class TechDescriptions {
             navalBonus,
             landBonusSet,
             navalBonusSet,
+            subBonus,
+            subBonusSet,
             hitPoints)) {
       types.addAll(map.keySet());
     }
@@ -125,12 +130,24 @@ public class TechDescriptions {
       }
       strikeBonus(clauses, landBonus.getInt(type), landBonusSet.getInt(type), "land units", plural);
       strikeBonus(clauses, navalBonus.getInt(type), navalBonusSet.getInt(type), "ships", plural);
+      strikeBonus(clauses, subBonus.getInt(type), subBonusSet.getInt(type), "submarines", plural);
       if (hitPoints.getInt(type) != 0) {
         clauses.add(signed(hitPoints.getInt(type)) + " hit point for " + plural);
       }
       // request 27: interception (fighters) and air defense (bombers) are separate values
       airValue(clauses, interception.getInt(type), interceptionRolls.getInt(type), "interception", plural);
       airValue(clauses, airDefense.getInt(type), airDefenseRolls.getInt(type), "air defense", plural);
+    }
+    // request 43: Combat Air Patrol and VT Proximity Fuze
+    if (ability.getCarrierInterception()) {
+      clauses.add(
+          "your carriers fire at enemy bombers over their sea zone with the interceptors, at their"
+              + " defense, instead of firing back after the strike");
+    }
+    if (ability.getAntiAircraftBonus() != 0) {
+      clauses.add(
+          signed(ability.getAntiAircraftBonus())
+              + " to your ships' value whenever they fire at aircraft");
     }
     return clauses.isEmpty() ? "" : capitalize(String.join("; ", clauses)) + ".";
   }

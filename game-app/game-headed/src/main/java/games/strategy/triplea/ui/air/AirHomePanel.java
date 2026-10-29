@@ -64,6 +64,11 @@ public final class AirHomePanel extends ActionPanel {
   private Map<Territory, Integer> spots = Map.of();
   private boolean listening;
   private boolean finished;
+  // request 44: aircraft with landing orders, by landing spot, drawn there until the step ends
+  private volatile Map<Territory, List<Unit>> landed = Map.of();
+  private volatile boolean ordersShown;
+  private boolean overlayAdded;
+  private @Nullable games.strategy.engine.data.GameStep homeStep;
   private final MapOverlay overlay = this::paintOverlay;
   private final UnitSelectionListener unitListener =
       (units, territory, md) -> SwingUtilities.invokeLater(() -> clicked(units, territory, md));
@@ -135,14 +140,21 @@ public final class AirHomePanel extends ActionPanel {
           finished = false;
           staged.clear();
           staged.addAll(start);
+          try (GameData.Unlocker ignored = getData().acquireReadLock()) {
+            homeStep = getData().getSequence().getStep();
+          }
           selected = null;
           spots = Map.of();
           if (!listening) {
             listening = true;
             getMap().addUnitSelectionListener(unitListener);
             getMap().addMapSelectionListener(hoverListener);
-            getMap().addOverlay(overlay);
+            if (!overlayAdded) {
+              overlayAdded = true;
+              getMap().addOverlay(overlay);
+            }
           }
+          showLanded();
           rebuild(player);
           // request 40: nothing is selected for the player
           frame.setStatusMessage(
@@ -162,7 +174,11 @@ public final class AirHomePanel extends ActionPanel {
             listening = false;
             getMap().removeUnitSelectionListener(unitListener);
             getMap().removeMapSelectionListener(hoverListener);
-            getMap().removeOverlay(overlay);
+            // request 44: the landings stay drawn (and off their bases) until the step ends
+            if (!ordersShown && overlayAdded) {
+              overlayAdded = false;
+              getMap().removeOverlay(overlay);
+            }
             getMap().setRoute(null);
             getMap().setMouseShadowUnits(null);
           }
@@ -342,6 +358,7 @@ public final class AirHomePanel extends ActionPanel {
     }
     staged.clear();
     staged.addAll(AirHome.merge(trial));
+    showLanded();
     // request 40: after a landing nothing is selected and the map stays where it is
     selected = null;
     spots = Map.of();
@@ -393,6 +410,7 @@ public final class AirHomePanel extends ActionPanel {
     undoAll.addActionListener(
         e -> {
           staged.clear();
+          showLanded();
           rebuild(player);
           getMap().repaint();
         });
@@ -422,6 +440,7 @@ public final class AirHomePanel extends ActionPanel {
               },
               () -> {
                 staged.remove(l);
+                showLanded();
                 rebuild(player);
                 getMap().repaint();
               }));
@@ -515,14 +534,58 @@ public final class AirHomePanel extends ActionPanel {
 
   // ---- the map
 
+  /**
+   * Request 44: as in a stock move, aircraft with a landing order are drawn only at their landing
+   * spot (not in the air or on their old base); undo puts them back.
+   */
+  private void showLanded() {
+    final Map<Territory, List<Unit>> byPlace = new java.util.LinkedHashMap<>();
+    final java.util.Set<Unit> moved = new java.util.HashSet<>();
+    final GamePlayer player = getCurrentPlayer();
+    if (player != null) {
+      try (GameData.Unlocker ignored = getData().acquireReadLock()) {
+        AirHome.unitsFor(player, staged)
+            .forEach(
+                (l, units) -> {
+                  if (l.airborne() || !l.from().equals(l.to())) {
+                    moved.addAll(units);
+                    byPlace.computeIfAbsent(l.to(), k -> new ArrayList<>()).addAll(units);
+                  }
+                });
+      }
+    }
+    landed = byPlace;
+    ordersShown = !moved.isEmpty();
+    getMap().setUnitsOffMap(moved);
+  }
+
+  private void clearLanded() {
+    ordersShown = false;
+    landed = Map.of();
+    if (overlayAdded && !listening) {
+      overlayAdded = false;
+      getMap().removeOverlay(overlay);
+    }
+    getMap().setUnitsOffMap(List.of());
+  }
+
   private void paintOverlay(final Graphics2D g, final GameData data) {
-    if (!listening) {
+    if (!listening && !ordersShown) {
       return;
     }
-    final GamePlayer player = getCurrentPlayer();
     try (GameData.Unlocker ignored = data.acquireReadLock()) {
+      if (!listening && data.getSequence().getStep() != homeStep) {
+        // request 44: the landings are done; the aircraft are drawn where they are now
+        SwingUtilities.invokeLater(
+            () -> {
+              if (!listening) {
+                clearLanded();
+              }
+            });
+        return;
+      }
       final Group sel = selected;
-      if (sel != null) {
+      if (listening && sel != null) {
         for (final Territory t : spots.keySet()) {
           g.setColor(SPOT_FILL);
           for (final Polygon p : draw.mapData().getPolygons(t)) {
@@ -533,9 +596,12 @@ public final class AirHomePanel extends ActionPanel {
         draw.outlineBox(g, sel.from(), AirDraw.ORIGIN_LINE, 5f);
       }
       for (final Landing l : staged) {
-        final Point to = draw.middle(l.to());
-        AirDraw.arrow(g, draw.middle(l.from()), to, AirDraw.LEGAL_LINE, 3f, false, "", 6);
-        draw.iconAt(g, new Point(to.x - 16, to.y - 16), player, l.unitType(), l.count());
+        AirDraw.arrow(
+            g, draw.middle(l.from()), draw.middle(l.to()), AirDraw.LEGAL_LINE, 3f, false, "", 6);
+      }
+      // the landed aircraft, stacked at their spot as the map stacks units
+      for (final Map.Entry<Territory, List<Unit>> e : landed.entrySet()) {
+        draw.drawStacks(g, draw.middle(e.getKey()), AirDraw.stacks(e.getValue()), 0.95f);
       }
     }
   }

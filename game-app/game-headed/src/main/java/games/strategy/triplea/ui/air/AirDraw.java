@@ -3,7 +3,9 @@ package games.strategy.triplea.ui.air;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.UnitType;
+import games.strategy.engine.data.Unit;
 import games.strategy.triplea.image.HitPointBar;
+import games.strategy.triplea.image.MapImage;
 import games.strategy.triplea.image.UnitImageFactory;
 import games.strategy.triplea.image.UnitImageFactory.ImageKey;
 import games.strategy.triplea.ui.UiContext;
@@ -81,6 +83,67 @@ final class AirDraw {
         topLeft.y,
         null);
     countLabel(g, String.valueOf(count), topLeft.x + w + 2, topLeft.y + h + 2);
+  }
+
+  /** Request 44: aircraft of one owner, type and state (damaged or not) at one place. */
+  record Stack(GamePlayer owner, UnitType type, boolean damaged, List<Unit> units) {}
+
+  /** Request 44: the units as the map would stack them (owner, type, damaged), in order. */
+  static List<Stack> stacks(final java.util.Collection<Unit> units) {
+    final java.util.Map<String, Stack> result = new java.util.LinkedHashMap<>();
+    for (final Unit u : units) {
+      final boolean damaged = u.getHits() > 0;
+      result
+          .computeIfAbsent(
+              u.getOwner().getName() + "|" + u.getType().getName() + "|" + damaged,
+              k -> new Stack(u.getOwner(), u.getType(), damaged, new java.util.ArrayList<>()))
+          .units()
+          .add(u);
+    }
+    return List.copyOf(result.values());
+  }
+
+  /**
+   * Request 44: a row of stacks centred on the point, each drawn as the map draws units (the
+   * image, the count when not 1, the hit-point bar), on a light backing so aircraft away from
+   * their base stand out. Returns each stack's box.
+   */
+  List<Rectangle> drawStacks(
+      final Graphics2D g, final Point centre, final List<Stack> stacks, final float alpha) {
+    final UnitImageFactory images = uiContext.getUnitImageFactory();
+    final int w = images.getUnitImageWidth();
+    final int h = images.getUnitImageHeight();
+    final int gap = 6;
+    int x = centre.x - (stacks.size() * (w + gap) - gap) / 2;
+    final int y = centre.y - h / 2;
+    final List<Rectangle> boxes = new java.util.ArrayList<>();
+    final Composite old = g.getComposite();
+    for (final Stack s : stacks) {
+      g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha));
+      g.setColor(new Color(255, 255, 255, 110));
+      g.fillRoundRect(x - 2, y - 2, w + 4, h + 4, 8, 8);
+      g.drawImage(
+          images.getImage(
+              ImageKey.builder().player(s.owner()).type(s.type()).damaged(s.damaged()).build()),
+          x,
+          y,
+          null);
+      if (s.units().size() != 1) {
+        // the count as the map writes it (same place, colours and outline)
+        games.strategy.triplea.ui.screen.UnitsDrawer.drawOutlinedText(
+            g,
+            String.valueOf(s.units().size()),
+            x + images.getUnitCounterOffsetWidth(),
+            y + images.getUnitCounterOffsetHeight(),
+            MapImage.getPropertyUnitCountColor(),
+            MapImage.getPropertyUnitCountOutline());
+      }
+      hitBar(g, s.units(), x, y + h, w, images.getScaleFactor());
+      g.setComposite(old);
+      boxes.add(new Rectangle(x - 2, y - 2, w + 4, h + 4));
+      x += w + gap;
+    }
+    return boxes;
   }
 
   /** The hit-point bar of a stack, as on the map, just under the icon. Nothing for 1-HP units. */

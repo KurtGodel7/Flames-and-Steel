@@ -177,8 +177,16 @@ public class AirCombatDelegate extends BaseTripleADelegate {
       }
     }
     final List<String> lines = new ArrayList<>();
-    if (!sideB.isEmpty() && hasAirFight(sideA, sideB)) {
-      fightAirBattle(place, sideA, sideB, lines);
+    // request 43 (Combat Air Patrol): carriers below fire at enemy bombers in the interception,
+    // even with no fighters of their own in the air there
+    final List<Unit> patrolsA = AirCombat.patrolCarriers(place.territory(), bombers(zone, sideB))
+        .stream().filter(c -> AirCover.sameSide(first, c.getOwner())).toList();
+    final List<Unit> patrolsB = AirCombat.patrolCarriers(place.territory(), bombers(zone, sideA))
+        .stream().filter(c -> !AirCover.sameSide(first, c.getOwner())).toList();
+    if ((!sideB.isEmpty() && hasAirFight(sideA, sideB))
+        || !patrolsA.isEmpty()
+        || !patrolsB.isEmpty()) {
+      fightAirBattle(place, sideA, sideB, patrolsA, patrolsB, lines);
     }
     fireAa(place, strikes, lines);
     for (final Strike strike : strikes) {
@@ -266,10 +274,14 @@ public class AirCombatDelegate extends BaseTripleADelegate {
       final Place place,
       final List<Unit> sideA,
       final List<Unit> sideB,
+      final List<Unit> patrolsA,
+      final List<Unit> patrolsB,
       final List<String> lines) {
     final Territory zone = place.zone();
     final GamePlayer playerA = AirCombat.chooser(sideA);
-    final GamePlayer playerB = AirCombat.chooser(sideB);
+    // request 43: with no aircraft of its own there, the side is its patrolling carriers
+    final GamePlayer playerB =
+        AirCombat.chooser(sideB.isEmpty() ? patrolsB : sideB);
     final int rounds = AirCombat.dogfightRounds(getData());
     final boolean dogfight =
         rounds > 0 && !fighters(zone, sideA).isEmpty() && !fighters(zone, sideB).isEmpty();
@@ -327,7 +339,7 @@ public class AirCombatDelegate extends BaseTripleADelegate {
           bridge, view, casualtyStep(playerA, round), zone, aliveA, aliveB, rollB, diceB, text);
     }
     // 2. interception: every surviving fighter-type, damaged or not
-    intercept(zone, place.territory(), view, playerA, playerB, sideA, sideB);
+    intercept(zone, place.territory(), view, playerA, playerB, sideA, sideB, patrolsA, patrolsB);
     // 3. aborts: every damaged bomber
     final List<Unit> nowAborted = new ArrayList<>();
     for (final Unit bomber : alive(zone, everyone)) {
@@ -388,9 +400,17 @@ public class AirCombatDelegate extends BaseTripleADelegate {
       final GamePlayer playerA,
       final GamePlayer playerB,
       final List<Unit> sideA,
-      final List<Unit> sideB) {
+      final List<Unit> sideB,
+      final List<Unit> patrolsA,
+      final List<Unit> patrolsB) {
     final List<Unit> fightersA = fighters(zone, sideA);
     final List<Unit> fightersB = fighters(zone, sideB);
+    // request 43 (Combat Air Patrol): the carriers fire with the interceptors, at their defense
+    // (plus VT Proximity Fuze); the bombers' air defense fires only at the fighters
+    final List<Unit> interceptorsA = new ArrayList<>(fightersA);
+    interceptorsA.addAll(patrolsA);
+    final List<Unit> interceptorsB = new ArrayList<>(fightersB);
+    interceptorsB.addAll(patrolsB);
     final List<Unit> bombersA = bombers(zone, sideA);
     final List<Unit> bombersB = bombers(zone, sideB);
     final String text = "Interception over " + over.getName();
@@ -401,12 +421,15 @@ public class AirCombatDelegate extends BaseTripleADelegate {
     final Shot interceptA =
         shoot(
             view,
-            fightersA,
+            interceptorsA,
             bombersB,
-            u -> AirCombat.interceptionPower(u, penaltyB),
+            u ->
+                AirCombat.patrols(u)
+                    ? AirCombat.shipFireBackPower(u)
+                    : AirCombat.interceptionPower(u, penaltyB),
             interceptStep(playerA),
             text,
-            " fighters intercept");
+            patrolsA.isEmpty() ? " fighters intercept" : " fighters and carriers intercept");
     final Shot backB =
         shoot(
             view,
@@ -419,12 +442,15 @@ public class AirCombatDelegate extends BaseTripleADelegate {
     final Shot interceptB =
         shoot(
             view,
-            fightersB,
+            interceptorsB,
             bombersA,
-            u -> AirCombat.interceptionPower(u, penaltyA),
+            u ->
+                AirCombat.patrols(u)
+                    ? AirCombat.shipFireBackPower(u)
+                    : AirCombat.interceptionPower(u, penaltyA),
             interceptStep(playerB),
             text,
-            " fighters intercept");
+            patrolsB.isEmpty() ? " fighters intercept" : " fighters and carriers intercept");
     final Shot backA =
         shoot(
             view,
@@ -787,19 +813,21 @@ public class AirCombatDelegate extends BaseTripleADelegate {
         final List<Unit> fired = new ArrayList<>(firing);
         abortedByShips.stream().filter(u -> !fired.contains(u)).forEach(fired::add);
         final List<Unit> exposed = alive(strike.zone(), fired);
-        if (!hit.all().isEmpty() && !exposed.isEmpty()) {
+        // request 43 (Combat Air Patrol): carriers that fired in the interception don't fire back
+        final List<Unit> firingBack = hit.all().stream().filter(u -> !AirCombat.patrols(u)).toList();
+        if (!firingBack.isEmpty() && !exposed.isEmpty()) {
           final String backText =
               "Ships in " + t.getName() + " fire back" + (rounds > 1 ? ", round " + round : "");
-          final Roll back = fire(hit.all(), AirCombat::shipFireBackPower, backText);
+          final Roll back = fire(firingBack, AirCombat::shipFireBackPower, backText);
           final DiceRoll backDice =
-              view.showDice(back, AirCombat.chooser(hit.all()), fireBack, "Ships");
+              view.showDice(back, AirCombat.chooser(firingBack), fireBack, "Ships");
           AirCombat.takeHits(
               bridge,
               view,
               fireBackCasualties,
               strike.zone(),
               exposed,
-              hit.all(),
+              firingBack,
               back,
               backDice,
               backText);

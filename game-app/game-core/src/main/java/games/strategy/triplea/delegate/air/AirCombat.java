@@ -335,12 +335,14 @@ public class AirCombat {
                     + type.getData().getTechTracker().getBombingBonus(owner, type));
     final int land = strikeBonus(type, owner, TargetKind.LAND);
     final int naval = strikeBonus(type, owner, TargetKind.SURFACE);
+    final int sub = strikeBonus(type, owner, TargetKind.SUBS);
     return "Bomber-type: air defense "
         + airDefenseValue(type, owner)
         + ", attack "
         + ua.getAttack(owner)
         + (land > 0 ? ", against land " + ua.getAttack(owner) + " + " + land : "")
         + (naval > 0 ? ", against ships " + ua.getAttack(owner) + " + " + naval : "")
+        + (sub > 0 ? ", against submarines " + ua.getAttack(owner) + " + " + sub : "")
         + (bombing > 0 ? ", strategic bombing " + bombing : "");
   }
 
@@ -350,10 +352,17 @@ public class AirCombat {
    * strategic bombing.
    */
   public static int strikeBonus(final UnitType type, final GamePlayer owner, final TargetKind kind) {
-    if (kind != TargetKind.LAND && kind != TargetKind.SURFACE) {
-      return 0;
-    }
-    return type.getData().getTechTracker().getStrikeBonus(owner, type, kind == TargetKind.SURFACE);
+    final var bonusKind =
+        switch (kind) {
+          case LAND -> games.strategy.triplea.delegate.TechTracker.StrikeBonusKind.LAND;
+          case SURFACE -> games.strategy.triplea.delegate.TechTracker.StrikeBonusKind.NAVAL;
+          // request 43 (FIDO): a separate bonus die against submarines
+          case SUBS -> games.strategy.triplea.delegate.TechTracker.StrikeBonusKind.SUB;
+          default -> null;
+        };
+    return bonusKind == null
+        ? 0
+        : type.getData().getTechTracker().getStrikeBonus(owner, type, bonusKind);
   }
 
   /** Request 39: the strike as dice, "3 + 1" (base attack and bonus die), or "3". */
@@ -379,7 +388,10 @@ public class AirCombat {
     return base + strikeBonus(unit.getType(), unit.getOwner(), kind);
   }
 
-  /** Firing power of a ship firing back at aircraft (its defense). */
+  /**
+   * Firing power of a ship firing back at aircraft (its defense; request 43: plus the owner's
+   * anti-aircraft bonus, VT Proximity Fuze, on each die).
+   */
   public static int shipFireBackPower(final Unit ship) {
     final var ua = ship.getUnitAttachment();
     int multiplier = 1;
@@ -392,7 +404,32 @@ public class AirCombat {
         multiplier = Math.max(multiplier, ability.getAirFireBackMultiplier());
       }
     }
-    return multiplier * ua.getDefense(ship.getOwner()) * ua.getDefenseRolls(ship.getOwner());
+    final int value =
+        ua.getDefense(ship.getOwner())
+            + ship.getData().getTechTracker().getAntiAircraftBonus(ship.getOwner());
+    return multiplier * value * ua.getDefenseRolls(ship.getOwner());
+  }
+
+  /**
+   * Request 43 (Combat Air Patrol): the nation's carriers in the sea zone that fire at these enemy
+   * bombers in the interception step (owner has the tech, at war with a bomber's owner). They
+   * then never fire back after a strike.
+   */
+  public static List<Unit> patrolCarriers(final Territory seaZone, final Collection<Unit> bombers) {
+    if (!seaZone.isWater() || bombers.isEmpty()) {
+      return List.of();
+    }
+    return seaZone.getUnitCollection().stream()
+        .filter(Matches.unitIsCarrier())
+        .filter(AirCombat::patrols)
+        .filter(c -> bombers.stream().anyMatch(b -> atWar(c.getOwner(), b.getOwner())))
+        .toList();
+  }
+
+  /** Request 43: whether the carrier's owner has Combat Air Patrol. */
+  public static boolean patrols(final Unit carrier) {
+    return Matches.unitIsCarrier().test(carrier)
+        && carrier.getData().getTechTracker().hasCarrierInterception(carrier.getOwner());
   }
 
   /** Firing power of an anti-aircraft gun at aircraft. */

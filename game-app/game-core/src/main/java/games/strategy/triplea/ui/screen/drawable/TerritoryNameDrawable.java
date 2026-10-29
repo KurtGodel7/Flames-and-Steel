@@ -185,7 +185,8 @@ public class TerritoryNameDrawable extends AbstractDrawable {
    * location. If there isn't any rectangles that can fit the name then default back to the bounding
    * rectangle.
    */
-  private static Rectangle getBestTerritoryNameRect(
+  /** Where the name of a territory without a name placement point goes (public for the air map). */
+  public static Rectangle getBestTerritoryNameRect(
       final MapData mapData, final Territory territory, final FontMetrics fontMetrics) {
 
     // Find bounding rectangle and parameters for creating a grid (20 x 20) across the territory

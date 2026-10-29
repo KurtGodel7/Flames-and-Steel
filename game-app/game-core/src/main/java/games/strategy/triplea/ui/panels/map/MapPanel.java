@@ -608,6 +608,32 @@ public class MapPanel extends ImageScrollerLargeView {
                 newUnits.getSecond(), currentUnits.getSecond()));
   }
 
+  /**
+   * Flames and Steel (request 44): units the map leaves out of their territory, as a stock move
+   * shows units only where they went. The air screens set the aircraft that have orders.
+   */
+  public void setUnitsOffMap(final Collection<Unit> units) {
+    final Set<Unit> before = tileManager.getUnitsOffMap();
+    final Set<Unit> now = Set.copyOf(units);
+    if (before.equals(now)) {
+      return;
+    }
+    final Set<Territory> places = new HashSet<>();
+    try (GameData.Unlocker ignored = gameData.acquireReadLock()) {
+      for (final Territory t : gameData.getMap().getTerritories()) {
+        if (t.getUnitCollection().stream().anyMatch(u -> before.contains(u) || now.contains(u))) {
+          places.add(t);
+        }
+      }
+    }
+    tileManager.setUnitsOffMap(now);
+    updateCountries(places);
+  }
+
+  public Set<Unit> getUnitsOffMap() {
+    return tileManager.getUnitsOffMap();
+  }
+
   public void updateCountries(Collection<Territory> countries) {
     // When there are multiple updateCountries() notifications in a row, for example from going far
     // back in history, no need to do this repeatedly. Instead, a single update is possible if the

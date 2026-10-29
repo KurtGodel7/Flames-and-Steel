@@ -51,6 +51,8 @@ public class AirUnitAttachment extends DefaultAttachment {
   // ships (0 = none); techs may add to it or set it (TechAbilityAttachment landBonus...)
   @Getter private int landBonus = 0;
   @Getter private int navalBonus = 0;
+  // request 43 (FIDO): the same against submarines (the naval bonus never applies to them)
+  @Getter private int subBonus = 0;
   // aircraft: may attack submarines (torpedo and medium bombers)
   @Getter private boolean canAttackSubs = false;
 
@@ -213,6 +215,14 @@ public class AirUnitAttachment extends DefaultAttachment {
     navalBonus = value;
   }
 
+  private void setSubBonus(final String value) {
+    subBonus = getInt(value);
+  }
+
+  private void setSubBonus(final Integer value) {
+    subBonus = value;
+  }
+
   private void setDoubleVsLand(final String value) {
     doubleVsLand = getBool(value);
   }
@@ -332,6 +342,13 @@ public class AirUnitAttachment extends DefaultAttachment {
                   this::setLandBonus,
                   this::getLandBonus,
                   () -> landBonus = 0));
+      case "subBonus" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setSubBonus,
+                  this::setSubBonus,
+                  this::getSubBonus,
+                  () -> subBonus = 0));
       case "navalBonus" ->
           Optional.of(
               MutableProperty.of(

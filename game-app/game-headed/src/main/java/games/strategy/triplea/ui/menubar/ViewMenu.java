@@ -61,6 +61,7 @@ final class ViewMenu {
         .addMenuItem(getLockMap())
         .addMenuItem(getShowUnitsMenu(frame))
         .addMenuItem(getShowUnitsInStatusBarMenu(frame))
+        .addMenuItemIf(frame.getAirMapMode() != null, () -> getShowAircraftInAir(frame))
         .addMenuItem(getFlagDisplayModeMenu(frame))
         .addMenuItemIf(mapData.useTerritoryEffectMarkers(), () -> getShowTerritoryEffects(frame))
         .addMenuItemIf(
@@ -258,6 +259,18 @@ final class ViewMenu {
           frame.getMapPanel().resetMap();
         });
     return showUnitsBox;
+  }
+
+  /**
+   * Flames and Steel (request 44): the small markers for aircraft in the air outside the air
+   * phase can be hidden altogether (the air map still shows them in full).
+   */
+  private static JCheckBoxMenuItem getShowAircraftInAir(final TripleAFrame frame) {
+    return new JMenuItemCheckBoxBuilder("Show Aircraft in the Air", KeyCode.A)
+        .accelerator(KeyCode.J)
+        .selected(frame.getAirMapMode().isShowingAirMarkers())
+        .actionListener(on -> frame.getAirMapMode().setShowingAirMarkers(on))
+        .build();
   }
 
   private static JCheckBoxMenuItem getShowUnitsInStatusBarMenu(final TripleAFrame frame) {

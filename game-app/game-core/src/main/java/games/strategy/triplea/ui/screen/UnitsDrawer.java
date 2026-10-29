@@ -339,6 +339,8 @@ public class UnitsDrawer extends AbstractDrawable {
     }
   }
 
+  private java.util.Set<Unit> leaveOut = java.util.Set.of();
+
   List<Unit> getUnits() {
     // note - it may be the case where the territory is being changed as a result to a mouse click,
     // and the map units haven't updated yet, so the unit count from the territory won't match the
@@ -358,7 +360,15 @@ public class UnitsDrawer extends AbstractDrawable {
                 unitCategory.getBombingDamage() > 0
                     ? Matches.unitHasTakenSomeBombingUnitDamage()
                     : Matches.unitHasNotTakenAnyBombingUnitDamage());
-    return territory.getMatches(selectedUnits);
+    final List<Unit> units = territory.getMatches(selectedUnits);
+    // request 44: aircraft with orders are not here on the map
+    return leaveOut.isEmpty() ? units : units.stream().filter(u -> !leaveOut.contains(u)).toList();
+  }
+
+  /** Flames and Steel (request 44): units of the category drawn elsewhere (the air screens). */
+  UnitsDrawer leaveOut(final java.util.Set<Unit> units) {
+    leaveOut = units;
+    return this;
   }
 
   @Override

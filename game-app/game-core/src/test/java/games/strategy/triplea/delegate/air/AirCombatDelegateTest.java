@@ -483,6 +483,85 @@ class AirCombatDelegateTest {
     verify(bridge, atLeastOnce()).getRandom(anyInt(), any(), any(), contains("fire back, round 2"));
   }
 
+  // ---- request 43: Combat Air Patrol and VT Proximity Fuze
+
+  @Test
+  void patrollingCarriersFireInTheInterceptionAndNotBackAfterTheStrike() {
+    britishTech("carrierInterception", "true");
+    addTo(naval, bomber.create(3, germans));
+    addTo(seaZone, carrier().create(1, british));
+    final IDelegateBridge bridge = bridge(germans);
+
+    targets(germans, new TargetAssignment(naval, bomber, 3, new Target(seaZone, TargetKind.SURFACE)));
+    runStep("airStrikes", bridge);
+
+    // the carrier (3, the remainder die hits) shoots one bomber down in the interception; the
+    // other two (8) sink it, and it never fires back
+    assertThat(count(naval, germans), is(2));
+    assertThat(count(seaZone, british), is(0));
+    verify(bridge, atLeastOnce()).getRandom(anyInt(), any(), any(), contains("Interception over"));
+    verify(bridge, never()).getRandom(anyInt(), any(), any(), contains("fire back"));
+  }
+
+  @Test
+  void withoutCombatAirPatrolCarriersOnlyFireBack() {
+    addTo(naval, bomber.create(3, germans));
+    addTo(seaZone, carrier().create(1, british));
+    final IDelegateBridge bridge = bridge(germans);
+
+    targets(germans, new TargetAssignment(naval, bomber, 3, new Target(seaZone, TargetKind.SURFACE)));
+    runStep("airStrikes", bridge);
+
+    // no interception; the three bombers (12) sink the carrier, which fires back (3) and shoots
+    // one down
+    assertThat(count(seaZone, british), is(0));
+    assertThat(count(naval, germans), is(2));
+    verify(bridge, never()).getRandom(anyInt(), any(), any(), contains("Interception over"));
+    verify(bridge, atLeastOnce()).getRandom(anyInt(), any(), any(), contains("fire back"));
+  }
+
+  @Test
+  void fourPatrollingCarriersFireEightAndTwelveWithTheFuze() {
+    set(carrier().getUnitAttachment(), "defense", "2");
+    britishTech("carrierInterception", "true");
+    final List<Unit> carriers = carrier().create(4, british);
+    addTo(seaZone, carriers);
+    final List<Unit> raid = bomber.create(1, germans);
+    assertThat(AirCombat.patrolCarriers(seaZone, raid).size(), is(4));
+    assertThat(carriers.stream().mapToInt(AirCombat::shipFireBackPower).sum(), is(8));
+    britishTech("antiAircraftBonus", "1");
+    assertThat(carriers.stream().mapToInt(AirCombat::shipFireBackPower).sum(), is(12));
+    // the carriers fire only at enemies' bombers
+    assertThat(AirCombat.patrolCarriers(seaZone, bomber.create(1, british)), is(empty()));
+  }
+
+  private UnitType carrier() {
+    return gameData.getUnitTypeList().getUnitTypeOrThrow("carrier");
+  }
+
+  /** Gives the British a tech with this tech ability option (a tech they don't have yet). */
+  private void britishTech(final String option, final String value) {
+    final java.util.Collection<games.strategy.triplea.delegate.TechAdvance> owned =
+        games.strategy.triplea.delegate.TechTracker.getCurrentTechAdvances(
+            british, gameData.getTechnologyFrontier());
+    final games.strategy.triplea.delegate.TechAdvance tech =
+        gameData.getTechnologyFrontier().getTechs().stream()
+            .filter(t -> !owned.contains(t))
+            .findFirst()
+            .orElseThrow();
+    games.strategy.triplea.attachments.TechAbilityAttachment ability =
+        games.strategy.triplea.attachments.TechAbilityAttachment.get(tech);
+    if (ability == null) {
+      ability =
+          new games.strategy.triplea.attachments.TechAbilityAttachment(
+              Constants.TECH_ABILITY_ATTACHMENT_NAME, tech, gameData);
+      tech.addAttachment(Constants.TECH_ABILITY_ATTACHMENT_NAME, ability);
+    }
+    set(ability, option, value);
+    games.strategy.triplea.delegate.TechTracker.addAdvance(british, newDelegateBridge(british), tech);
+    gameData.getTechTracker().clearCache();
+  }
+
   private UnitType destroyer() {
     return gameData.getUnitTypeList().getUnitTypeOrThrow("destroyer");
   }

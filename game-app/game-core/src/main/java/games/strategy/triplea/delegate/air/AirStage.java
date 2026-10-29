@@ -305,6 +305,11 @@ public class AirStage {
       if (locker.isPresent()) {
         return Optional.of(AirPriority.lockedText(a.target().territory(), locker.get()));
       }
+      // request 43 section 1: one nation's bombers per factory
+      final Optional<GamePlayer> raider = AirPriority.raidTakenBy(player, a.target(), others);
+      if (raider.isPresent()) {
+        return Optional.of(AirPriority.raidText(a.target().territory(), raider.get()));
+      }
       used.add(key, a.count());
       final long available =
           aircraftAt(player, a.zone(), stage).stream()

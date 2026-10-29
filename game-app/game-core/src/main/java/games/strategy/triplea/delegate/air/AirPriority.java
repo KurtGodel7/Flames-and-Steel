@@ -123,4 +123,65 @@ public class AirPriority {
   public static String lockedText(final Territory t, final GamePlayer locker) {
     return t.getName() + " is a " + AirCombat.adjective(locker) + " air battle this round.";
   }
+
+  // ---- request 43 section 1: one nation's bombers per factory per round
+
+  /** Game property: only one nation's bombers may strategically bomb a factory in a round. */
+  public static final String ONE_NATION_PER_RAID = "FS One Nation Per Raid";
+
+  public static boolean oneNationPerRaid(final GameState data) {
+    return data.getProperties().get(ONE_NATION_PER_RAID, false);
+  }
+
+  /** The nations in turn order (the order their own steps come in), each once. */
+  public static List<GamePlayer> turnOrder(final GameState data) {
+    final List<GamePlayer> order = new ArrayList<>();
+    for (final games.strategy.engine.data.GameStep step : data.getSequence().getSteps()) {
+      final GamePlayer p = step.getPlayerId();
+      if (p != null && !p.isNull() && !order.contains(p)) {
+        order.add(p);
+      }
+    }
+    return order;
+  }
+
+  /**
+   * Whether the first nation's raid on a factory keeps the second nation's bombers off it: both on
+   * one side, the first earlier in turn order (with the property on).
+   */
+  public static boolean raidLocks(final GamePlayer earlier, final GamePlayer later) {
+    if (earlier.equals(later) || !oneNationPerRaid(later.getData()) || !AirCover.sameSide(earlier, later)) {
+      return false;
+    }
+    final List<GamePlayer> order = turnOrder(later.getData());
+    final int a = order.indexOf(earlier);
+    final int b = order.indexOf(later);
+    return a >= 0 && b >= 0 && a < b;
+  }
+
+  /**
+   * The nation whose raid keeps this nation off the strategic bombing target, if any: an ally
+   * earlier in turn order that sends bombers to bomb the same territory's factory this round (in
+   * these choices, finished or still being made). Tactical strikes are never affected.
+   */
+  public static Optional<GamePlayer> raidTakenBy(
+      final GamePlayer player,
+      final AirCombat.Target target,
+      final Map<GamePlayer, ? extends Collection<TargetAssignment>> choices) {
+    if (target.kind() != AirCombat.TargetKind.STRATEGIC) {
+      return Optional.empty();
+    }
+    for (final Map.Entry<GamePlayer, ? extends Collection<TargetAssignment>> e : choices.entrySet()) {
+      if (raidLocks(e.getKey(), player)
+          && e.getValue().stream().anyMatch(a -> a.target().equals(target))) {
+        return Optional.of(e.getKey());
+      }
+    }
+    return Optional.empty();
+  }
+
+  /** "Hamburg's factory is a British raid this round." */
+  public static String raidText(final Territory t, final GamePlayer raider) {
+    return t.getName() + "'s factory is a " + AirCombat.adjective(raider) + " raid this round.";
+  }
 }
