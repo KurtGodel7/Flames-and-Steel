@@ -175,6 +175,67 @@ class ApcsTest {
   }
 
   @Test
+  void freeUnitsComeEveryTurnWithoutTheTurnsOption() {
+    final IDelegateBridge bridge = newDelegateBridge(germans);
+    final int apcs = Apcs.getOwnApcs(germans, gameData.getMap()).size();
+    techOption("rocket", "apcFreeUnits", "1:" + armour(gameData).getName());
+
+    assertThat(freeArmourPerTurn(bridge, 3), contains(apcs, apcs, apcs));
+    assertThat(Apcs.freeUnitsStatus(germanApc, germans).isEmpty(), is(true));
+  }
+
+  @Test
+  void freeUnitsComeEveryOtherTurnAtEachApc() {
+    final IDelegateBridge bridge = newDelegateBridge(germans);
+    final int apcs = Apcs.getOwnApcs(germans, gameData.getMap()).size();
+    techOption("rocket", "apcFreeUnits", "1:" + armour(gameData).getName());
+    set(TechAbilityAttachment.get(tech("rocket")), "apcFreeUnitsTurns", "2");
+
+    assertThat(Apcs.freeUnitsStatus(germanApc, germans), contains("free armour this turn"));
+    assertThat(freeArmourPerTurn(bridge, 1), contains(apcs));
+    assertThat(Apcs.freeUnitsStatus(germanApc, germans), contains("free armour in 1 turn"));
+    assertThat(freeArmourPerTurn(bridge, 3), contains(0, apcs, 0));
+  }
+
+  @Test
+  void aNewApcStartsItsOwnFreeUnitCount() {
+    final IDelegateBridge bridge = newDelegateBridge(germans);
+    final int apcs = Apcs.getOwnApcs(germans, gameData.getMap()).size();
+    techOption("rocket", "apcFreeUnits", "1:" + armour(gameData).getName());
+    set(TechAbilityAttachment.get(tech("rocket")), "apcFreeUnitsTurns", "2");
+    assertThat(freeArmourPerTurn(bridge, 1), contains(apcs));
+
+    final Territory easternEurope = territory("Eastern Europe", gameData);
+    final java.util.List<Unit> newApc = apcType.create(1, germans);
+    gameData.performChange(ChangeFactory.addUnits(easternEurope, newApc));
+    gameData.performChange(OriginalOwnerTracker.addOriginalOwnerChange(newApc, germans));
+
+    // the older SPCs wait this turn while the new one gives its first; then they swap
+    assertThat(freeArmourPerTurn(bridge, 3), contains(1, apcs, 1));
+  }
+
+  /** Free armour Germany gains in each of the next turns of SPC production. */
+  private java.util.List<Integer> freeArmourPerTurn(final IDelegateBridge bridge, final int turns) {
+    final java.util.List<Integer> gained = new java.util.ArrayList<>();
+    for (int i = 0; i < turns; i++) {
+      final int before = germanArmour();
+      Apcs.produce(bridge, germans);
+      gained.add(germanArmour() - before);
+    }
+    return gained;
+  }
+
+  private int germanArmour() {
+    return gameData.getMap().getTerritories().stream()
+        .mapToInt(
+            t ->
+                t.getUnitCollection()
+                    .countMatches(
+                        Matches.unitIsOfType(armour(gameData)).and(Matches.unitIsOwnedBy(germans))))
+        .sum();
+  }
+
+  @Test
   void unitsNeedTheirTech() {
     assertThat(Apcs.getBuildableTypes(germans), contains(armour(gameData)));
     assertThat(

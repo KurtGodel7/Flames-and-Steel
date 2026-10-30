@@ -78,7 +78,14 @@ public final class ApcProductionDialog {
       for (final Unit apc : Apcs.getOwnApcs(player, data.getMap())) {
         c.gridy++;
         c.gridx = 0;
-        panel.add(new JLabel("SPC in " + territoryName(apc, data)), c);
+        // request 50: when this SPC next gets its free units, e.g. "free Panther in 1 turn"
+        final List<String> free = Apcs.freeUnitsStatus(apc, player);
+        panel.add(
+            new JLabel(
+                "SPC in "
+                    + territoryName(apc, data)
+                    + (free.isEmpty() ? "" : " (" + String.join(", ", free) + ")")),
+            c);
         final JComboBox<Object> box = new JComboBox<>(options.toArray());
         box.setRenderer(
             new DefaultListCellRenderer() {

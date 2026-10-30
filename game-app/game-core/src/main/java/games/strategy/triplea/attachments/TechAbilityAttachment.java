@@ -123,6 +123,8 @@ public class TechAbilityAttachment extends DefaultAttachment {
   private int apcIncome = 0;
   // Flames and Steel: free units each APC of the nation's own produces each turn
   private @Nullable IntegerMap<UnitType> apcFreeUnits = null;
+  // Flames and Steel (request 50): each APC produces those free units once every this many turns
+  private int apcFreeUnitsTurns = 1;
 
   public TechAbilityAttachment(
       final String name, final Attachable attachable, final GameData gameData) {
@@ -1240,10 +1242,7 @@ public class TechAbilityAttachment extends DefaultAttachment {
       case "subBonus" ->
           Optional.of(
               MutableProperty.of(
-                  this::setSubBonus,
-                  this::setSubBonus,
-                  this::getSubBonus,
-                  () -> subBonus = null));
+                  this::setSubBonus, this::setSubBonus, this::getSubBonus, () -> subBonus = null));
       case "subBonusSet" ->
           Optional.of(
               MutableProperty.of(
@@ -1535,6 +1534,13 @@ public class TechAbilityAttachment extends DefaultAttachment {
                   this::setApcFreeUnits,
                   this::getApcFreeUnits,
                   () -> apcFreeUnits = null));
+      case "apcFreeUnitsTurns" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setApcFreeUnitsTurns,
+                  this::setApcFreeUnitsTurns,
+                  this::getApcFreeUnitsTurns,
+                  () -> apcFreeUnitsTurns = 1));
       case "apcLimitBonus" ->
           Optional.of(
               MutableProperty.of(
@@ -1593,6 +1599,23 @@ public class TechAbilityAttachment extends DefaultAttachment {
   /** Free units each APC of the nation's own produces each turn. */
   public IntegerMap<UnitType> getApcFreeUnits() {
     return getIntegerMapProperty(apcFreeUnits);
+  }
+
+  private void setApcFreeUnitsTurns(final String value) throws GameParseException {
+    final int turns = getInt(value);
+    if (turns < 1) {
+      throw new GameParseException("apcFreeUnitsTurns must be at least 1" + thisErrorMsg());
+    }
+    apcFreeUnitsTurns = turns;
+  }
+
+  private void setApcFreeUnitsTurns(final Integer value) {
+    apcFreeUnitsTurns = value;
+  }
+
+  /** Each APC produces this tech's free units once every this many turns (1: every turn). */
+  public int getApcFreeUnitsTurns() {
+    return apcFreeUnitsTurns;
   }
 
   private void setApcLimitBonus(final String value) {

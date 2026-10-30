@@ -334,13 +334,15 @@ public class Apcs {
       return;
     }
     int incomePerApc = 0;
-    final IntegerMap<UnitType> freePerApc = new IntegerMap<>();
+    final List<TechAdvance> freeUnitTechs = new ArrayList<>();
     for (final TechAdvance tech :
         TechTracker.getCurrentTechAdvances(player, player.getData().getTechnologyFrontier())) {
       final TechAbilityAttachment ability = TechAbilityAttachment.get(tech);
       if (ability != null) {
         incomePerApc += ability.getApcIncome();
-        freePerApc.add(ability.getApcFreeUnits());
+        if (!ability.getApcFreeUnits().isEmpty()) {
+          freeUnitTechs.add(tech);
+        }
       }
     }
     final CompositeChange change = new CompositeChange();
@@ -367,27 +369,110 @@ public class Apcs {
               + " SPC(s)"
               + (income != full ? " (mobilization " + percent + "% of " + full + ")" : ""));
     }
-    for (final UnitType type : freePerApc.keySet()) {
-      final Optional<String> tech =
-          ApcAttachment.get(type).flatMap(ApcAttachment::getApcRequiredTech);
-      if (tech.isPresent() && !hasTech(player, tech.get())) {
+    // request 50: a tech's free units come once every apcFreeUnitsTurns turns, counted per APC
+    final PlayerAttachment attachment = PlayerAttachment.get(player);
+    final IntegerMap<String> wait =
+        new IntegerMap<>(
+            attachment == null ? new IntegerMap<>() : attachment.getApcFreeUnitsWait());
+    for (final TechAdvance tech : freeUnitTechs) {
+      final IntegerMap<UnitType> freePerApc = unlockedFreeUnits(tech, player);
+      if (freePerApc.isEmpty()) {
         continue;
       }
+      final int turns = TechAbilityAttachment.get(tech).getApcFreeUnitsTurns();
       for (final Unit apc : apcs) {
-        final Optional<Territory> placeAt =
-            territoryOf(apc, map).flatMap(t -> placeFor(type, t, player, map));
-        if (placeAt.isPresent()) {
-          final List<Unit> free = type.create(freePerApc.getInt(type), player);
-          change.add(ChangeFactory.addUnits(placeAt.get(), free));
-          lines.add("Free " + MyFormatter.unitsToText(free) + " in " + placeAt.get().getName());
+        final String key = freeUnitsKey(apc, tech);
+        final Optional<Territory> territory = territoryOf(apc, map);
+        if (wait.getInt(key) > 0) {
+          wait.add(key, -1);
+          lines.add(
+              "SPC in "
+                  + territory.map(Territory::getName).orElse("?")
+                  + ": "
+                  + freeUnitsStatus(freePerApc, wait.getInt(key) + 1));
+          continue;
+        }
+        if (turns > 1) {
+          wait.put(key, turns - 1);
+        } else {
+          wait.removeKey(key);
+        }
+        for (final UnitType type : freePerApc.keySet()) {
+          final Optional<Territory> placeAt =
+              territory.flatMap(t -> placeFor(type, t, player, map));
+          if (placeAt.isPresent()) {
+            final List<Unit> free = type.create(freePerApc.getInt(type), player);
+            change.add(ChangeFactory.addUnits(placeAt.get(), free));
+            lines.add("Free " + MyFormatter.unitsToText(free) + " in " + placeAt.get().getName());
+          }
         }
       }
+    }
+    if (attachment != null && !wait.equals(attachment.getApcFreeUnitsWait())) {
+      change.add(ChangeFactory.attachmentPropertyChange(attachment, wait, "apcFreeUnitsWait"));
     }
     if (!lines.isEmpty()) {
       bridge.getHistoryWriter().startEvent(player.getName() + " SPC bonuses");
       lines.forEach(line -> bridge.getHistoryWriter().addChildToEvent(line));
+    }
+    if (!change.isEmpty()) {
       bridge.addChange(change);
     }
+  }
+
+  /** The tech's free units this nation can have now (each needs its unit's tech, if any). */
+  private static IntegerMap<UnitType> unlockedFreeUnits(
+      final TechAdvance tech, final GamePlayer player) {
+    final IntegerMap<UnitType> free = new IntegerMap<>();
+    for (final UnitType type : TechAbilityAttachment.get(tech).getApcFreeUnits().keySet()) {
+      final Optional<String> required =
+          ApcAttachment.get(type).flatMap(ApcAttachment::getApcRequiredTech);
+      if (required.isEmpty() || hasTech(player, required.get())) {
+        free.put(type, TechAbilityAttachment.get(tech).getApcFreeUnits().getInt(type));
+      }
+    }
+    return free;
+  }
+
+  private static String freeUnitsKey(final Unit apc, final TechAdvance tech) {
+    return apc.getId() + ":" + tech.getName();
+  }
+
+  /** "free Panther this turn" or "free Panther in 1 turn". */
+  private static String freeUnitsStatus(final IntegerMap<UnitType> free, final int turns) {
+    final String units =
+        free.keySet().stream()
+            .map(t -> (free.getInt(t) == 1 ? "" : free.getInt(t) + " ") + UnitNames.of(t))
+            .sorted()
+            .collect(java.util.stream.Collectors.joining(", "));
+    return "free "
+        + units
+        + (turns == 0 ? " this turn" : " in " + turns + MyFormatter.pluralize(" turn", turns));
+  }
+
+  /**
+   * When each tech with free units next gives them at this APC, e.g. "free Panther in 1 turn". Only
+   * for techs whose free units come less often than every turn.
+   */
+  public static List<String> freeUnitsStatus(final Unit apc, final GamePlayer player) {
+    final PlayerAttachment attachment = PlayerAttachment.get(player);
+    final List<String> status = new ArrayList<>();
+    for (final TechAdvance tech :
+        TechTracker.getCurrentTechAdvances(player, player.getData().getTechnologyFrontier())) {
+      final TechAbilityAttachment ability = TechAbilityAttachment.get(tech);
+      if (ability == null || ability.getApcFreeUnitsTurns() <= 1) {
+        continue;
+      }
+      final IntegerMap<UnitType> free = unlockedFreeUnits(tech, player);
+      if (!free.isEmpty()) {
+        final int turns =
+            attachment == null
+                ? 0
+                : attachment.getApcFreeUnitsWait().getInt(freeUnitsKey(apc, tech));
+        status.add(freeUnitsStatus(free, turns));
+      }
+    }
+    return status;
   }
 
   /**

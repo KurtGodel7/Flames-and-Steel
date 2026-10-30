@@ -65,6 +65,8 @@ public class PlayerAttachment extends DefaultAttachment {
   // what each APC builds (APC unit id -> unit type name), and turns of progress towards it
   private @Nullable Map<String, String> apcProduction = null;
   private @Nullable IntegerMap<String> apcProgress = null;
+  // request 50: turns each APC still waits for a tech's free units ("<APC unit id>:<tech name>")
+  private @Nullable IntegerMap<String> apcFreeUnitsWait = null;
   // Flames and Steel: units still unplaced from the nation's last turn (unit type name -> count),
   // recorded when its purchase step starts
   private @Nullable IntegerMap<String> carriedOverUnits = null;
@@ -495,6 +497,19 @@ public class PlayerAttachment extends DefaultAttachment {
     return getIntegerMapProperty(apcProgress);
   }
 
+  private void setApcFreeUnitsWait(final String value) throws GameParseException {
+    throw new GameParseException("apcFreeUnitsWait is set during the game, not in the XML");
+  }
+
+  private void setApcFreeUnitsWait(final IntegerMap<String> value) {
+    apcFreeUnitsWait = value;
+  }
+
+  /** Turns each APC still waits for a tech's free units, by "APC unit id:tech name". */
+  public IntegerMap<String> getApcFreeUnitsWait() {
+    return getIntegerMapProperty(apcFreeUnitsWait);
+  }
+
   private void setCarriedOverUnits(final String value) throws GameParseException {
     throw new GameParseException("carriedOverUnits is set during the game, not in the XML");
   }
@@ -618,6 +633,13 @@ public class PlayerAttachment extends DefaultAttachment {
                   this::setApcProgress,
                   this::getApcProgress,
                   () -> apcProgress = null));
+      case "apcFreeUnitsWait" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setApcFreeUnitsWait,
+                  this::setApcFreeUnitsWait,
+                  this::getApcFreeUnitsWait,
+                  () -> apcFreeUnitsWait = null));
       case "carriedOverUnits" ->
           Optional.of(
               MutableProperty.of(

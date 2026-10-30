@@ -7,7 +7,6 @@ import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.ProductionRule;
 import games.strategy.engine.data.UnitType;
-import games.strategy.engine.data.gameparser.GameParser;
 import games.strategy.triplea.delegate.apc.Apcs;
 import games.strategy.triplea.util.TuvCostsCalculator;
 import java.nio.file.Files;
@@ -78,11 +77,22 @@ class Draft77Test {
 
   @Test
   void spcRates() {
-    assertThat(Apcs.describeRate(type("typeXXI")), is("1 per turn"));
-    assertThat(Apcs.describeRate(type("fleetCarrier")), is("1 every 2 turns"));
-    assertThat(Apcs.describeRate(type("superfortress")), is("1 every 2 turns"));
-    // later draft 77: the flying wing comes one per turn
-    assertThat(Apcs.describeRate(type("flyingWing")), is("1 per turn"));
+    // draft 90 (request 50): every SPC unit comes one every 2 turns, the Superfortress every 4
+    for (final String unit :
+        java.util.List.of(
+            "heavyTank",
+            "churchillTank",
+            "pershingTank",
+            "panther",
+            "kingTiger",
+            "earlyJet",
+            "jet",
+            "fleetCarrier",
+            "typeXXI",
+            "flyingWing")) {
+      assertThat(unit, Apcs.describeRate(type(unit)), is("1 every 2 turns"));
+    }
+    assertThat(Apcs.describeRate(type("superfortress")), is("1 every 4 turns"));
   }
 
   @Test
@@ -93,8 +103,7 @@ class Draft77Test {
       final games.strategy.triplea.delegate.TechAdvance tech =
           data.getTechnologyFrontier().getAdvanceByName(expected.getKey());
       assertThat(
-          games.strategy.triplea.delegate.research.ResearchCenters.getStarsRequired(
-              russians, tech),
+          games.strategy.triplea.delegate.research.ResearchCenters.getStarsRequired(russians, tech),
           is(expected.getValue()));
     }
   }
