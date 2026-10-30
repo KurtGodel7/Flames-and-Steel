@@ -116,6 +116,11 @@ public class MarkCasualties implements BattleStep {
             new ArrayList<>(fireRoundState.getCasualties().getKilled()),
             new ArrayList<>(fireRoundState.getCasualties().getDamaged()),
             dependentUnits);
+    NavalBombardment.showCapCaption(
+        bridge,
+        battleState,
+        firingGroup,
+        getPossibleOldNameForNotifyingBattleDisplay(battleState, firingGroup, side, getName()));
 
     // Allow players to confirm if the casualties were auto calculated
     // Always confirm casualties for AI to give them a chance to pause.

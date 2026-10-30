@@ -74,6 +74,13 @@ public class UnitPowerStrengthAndRolls {
         strengthAndRolls.getStrength(), strengthAndRolls.getRolls().add(-1 * rollsToSubtract));
   }
 
+  /** Flames and Steel (request 51): a bombarding ship cut short by the dice cap. */
+  UnitPowerStrengthAndRolls withStrengthAndRolls(final int newStrength, final int newRolls) {
+    return update(
+        strengthAndRolls.getStrength().toValue(newStrength),
+        strengthAndRolls.getRolls().toValue(newRolls));
+  }
+
   UnitPowerStrengthAndRolls updateRolls(final int newRolls) {
     return update(strengthAndRolls.getStrength(), strengthAndRolls.getRolls().toValue(newRolls));
   }

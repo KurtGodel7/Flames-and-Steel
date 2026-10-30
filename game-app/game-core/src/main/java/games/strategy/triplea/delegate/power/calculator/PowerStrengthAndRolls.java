@@ -118,6 +118,39 @@ public class PowerStrengthAndRolls implements TotalPowerAndTotalRolls {
                 unitSupportRollsMap
                     .computeIfAbsent(supporter, (newSupport) -> new IntegerMap<>())
                     .add(supportedUnits));
+    if (calculator instanceof BombardmentCombatValue bombard && bombard.getDiceCap() != null) {
+      capBombardDice(bombard.getDiceCap(), bombard.getReducedDieValue());
+    }
+  }
+
+  /**
+   * Flames and Steel (request 51): whole ships fire first, best value first; the last ship used, if
+   * cut short, fires the dice it keeps at the reduced die value (or its own, if higher); later
+   * ships do not fire. Never adds dice.
+   */
+  private void capBombardDice(final int cap, final int reducedDieValue) {
+    final List<UnitPowerStrengthAndRolls> byValue = new ArrayList<>(sortedStrengthAndRolls);
+    byValue.sort(
+        java.util.Comparator.comparingInt(UnitPowerStrengthAndRolls::getStrength).reversed());
+    int left = cap;
+    for (final UnitPowerStrengthAndRolls data : byValue) {
+      final int rolls = data.getRolls();
+      if (rolls == 0) {
+        continue;
+      }
+      final UnitPowerStrengthAndRolls capped;
+      if (rolls <= left) {
+        left -= rolls;
+        continue;
+      } else if (left > 0) {
+        capped = data.withStrengthAndRolls(Math.max(data.getStrength(), reducedDieValue), left);
+        left = 0;
+      } else {
+        capped = data.toZero();
+      }
+      totalStrengthAndTotalRollsByUnit.put(data.getUnit(), capped);
+      sortedStrengthAndRolls.set(sortedStrengthAndRolls.indexOf(data), capped);
+    }
   }
 
   @Override

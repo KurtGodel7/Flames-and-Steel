@@ -125,6 +125,8 @@ public class TechAbilityAttachment extends DefaultAttachment {
   private @Nullable IntegerMap<UnitType> apcFreeUnits = null;
   // Flames and Steel (request 50): each APC produces those free units once every this many turns
   private int apcFreeUnitsTurns = 1;
+  // Flames and Steel (request 51): bombardment dice per land unit unloaded from sea (0: default 1)
+  private int bombardDicePerUnloadedUnit = 0;
 
   public TechAbilityAttachment(
       final String name, final Attachable attachable, final GameData gameData) {
@@ -1534,6 +1536,13 @@ public class TechAbilityAttachment extends DefaultAttachment {
                   this::setApcFreeUnits,
                   this::getApcFreeUnits,
                   () -> apcFreeUnits = null));
+      case "bombardDicePerUnloadedUnit" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setBombardDicePerUnloadedUnit,
+                  this::setBombardDicePerUnloadedUnit,
+                  this::getBombardDicePerUnloadedUnit,
+                  () -> bombardDicePerUnloadedUnit = 0));
       case "apcFreeUnitsTurns" ->
           Optional.of(
               MutableProperty.of(
@@ -1616,6 +1625,24 @@ public class TechAbilityAttachment extends DefaultAttachment {
   /** Each APC produces this tech's free units once every this many turns (1: every turn). */
   public int getApcFreeUnitsTurns() {
     return apcFreeUnitsTurns;
+  }
+
+  private void setBombardDicePerUnloadedUnit(final String value) throws GameParseException {
+    final int dice = getInt(value);
+    if (dice < 1) {
+      throw new GameParseException(
+          "bombardDicePerUnloadedUnit must be at least 1" + thisErrorMsg());
+    }
+    bombardDicePerUnloadedUnit = dice;
+  }
+
+  private void setBombardDicePerUnloadedUnit(final Integer value) {
+    bombardDicePerUnloadedUnit = value;
+  }
+
+  /** Bombardment dice each land unit unloaded from sea allows, while owned (0: not set). */
+  public int getBombardDicePerUnloadedUnit() {
+    return bombardDicePerUnloadedUnit;
   }
 
   private void setApcLimitBonus(final String value) {

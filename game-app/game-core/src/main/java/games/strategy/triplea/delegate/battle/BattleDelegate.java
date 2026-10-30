@@ -305,9 +305,9 @@ public class BattleDelegate extends BaseTripleADelegate implements IBattleDelega
           for (final Unit u : listedBombardUnits) {
             final IBattle battle = selectBombardingBattle(u, t, battles);
             if (battle != null) {
+              // request 51: up to (units unloaded x N) ships; the dice cap trims what they fire
               if (Properties.getShoreBombardPerGroundUnitRestricted(getData().getProperties())
-                  && battle.getAttackingUnits().stream().filter(Matches.unitWasAmphibious()).count()
-                      <= battle.getBombardingUnits().size()) {
+                  && maxBombardingShips(battle, attacker) <= battle.getBombardingUnits().size()) {
                 battles.remove(battle);
                 break;
               }
@@ -317,6 +317,10 @@ public class BattleDelegate extends BaseTripleADelegate implements IBattleDelega
         }
       }
     }
+  }
+
+  private static int maxBombardingShips(final IBattle battle, final GamePlayer attacker) {
+    return BombardCap.diceCap(battle.getAttackingUnits(), attacker);
   }
 
   /** Sort the specified units in preferred movement or unload order. */
@@ -378,7 +382,7 @@ public class BattleDelegate extends BaseTripleADelegate implements IBattleDelega
       // bombard
       if (!Properties.getShoreBombardPerGroundUnitRestricted(getData().getProperties())
           || (battle.getBombardingUnits().size()
-              < battle.getAttackingUnits().stream().filter(Matches.unitWasAmphibious()).count())) {
+              < maxBombardingShips(battle, bridge.getGamePlayer()))) {
         territories.add(battle.getTerritory());
       }
       battleTerritories.put(battle.getTerritory(), battle);

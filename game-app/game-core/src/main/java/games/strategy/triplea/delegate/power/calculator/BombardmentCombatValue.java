@@ -9,6 +9,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -46,6 +47,16 @@ public class BombardmentCombatValue implements CombatValue {
   @Nonnull
   @Builder.Default
   Collection<Unit> enemyUnits = List.of();
+
+  // Flames and Steel (request 51): most dice the bombardment may roll (null: no cap), and the value
+  // a ship cut short by the cap fires its remaining dice at (if better than its own)
+  @Getter(AccessLevel.PUBLIC)
+  @Nullable
+  Integer diceCap;
+
+  @Getter(AccessLevel.PUBLIC)
+  @Builder.Default
+  int reducedDieValue = 5;
 
   @Override
   public RollCalculator getRoll() {

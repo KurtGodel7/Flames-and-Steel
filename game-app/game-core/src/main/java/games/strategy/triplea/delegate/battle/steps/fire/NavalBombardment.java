@@ -13,16 +13,20 @@ import games.strategy.triplea.delegate.ExecutionStack;
 import games.strategy.triplea.delegate.battle.BattleActions;
 import games.strategy.triplea.delegate.battle.BattleState;
 import games.strategy.triplea.delegate.battle.BattleStepStrings;
+import games.strategy.triplea.delegate.battle.BombardCap;
 import games.strategy.triplea.delegate.battle.MustFightBattle;
 import games.strategy.triplea.delegate.battle.casualty.CasualtySelector;
 import games.strategy.triplea.delegate.battle.steps.BattleStep;
 import games.strategy.triplea.delegate.data.CasualtyDetails;
 import games.strategy.triplea.delegate.dice.RollDiceFactory;
+import games.strategy.triplea.delegate.power.calculator.CombatValue;
 import games.strategy.triplea.delegate.power.calculator.CombatValueBuilder;
+import games.strategy.triplea.delegate.power.calculator.PowerStrengthAndRolls;
 import java.io.Serializable;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 import lombok.AllArgsConstructor;
@@ -122,27 +126,82 @@ public class NavalBombardment implements BattleStep {
 
     @Override
     public DiceRoll apply(final IDelegateBridge bridge, final RollDiceStep step) {
-      return RollDiceFactory.rollBattleDice(
-          step.getFiringGroup().getFiringUnits(),
-          step.getBattleState().getPlayer(step.getSide()),
-          bridge,
+      final BattleState battleState = step.getBattleState();
+      final String annotation =
           DiceRoll.getAnnotation(
               step.getFiringGroup().getFiringUnits(),
-              step.getBattleState().getPlayer(step.getSide()),
-              step.getBattleState().getBattleSite(),
-              step.getBattleState().getStatus().getRound()),
-          CombatValueBuilder.navalBombardmentCombatValue()
-              .enemyUnits(step.getBattleState().filterUnits(ALIVE, step.getSide().getOpposite()))
-              .friendlyUnits(step.getBattleState().filterUnits(ALIVE, step.getSide()))
-              .supportAttachments(
-                  step.getBattleState().getGameData().getUnitTypeList().getSupportRules())
-              .lhtrHeavyBombers(
-                  Properties.getLhtrHeavyBombers(
-                      step.getBattleState().getGameData().getProperties()))
-              .gameDiceSides(step.getBattleState().getGameData().getDiceSides())
-              .territoryEffects(step.getBattleState().getTerritoryEffects())
-              .build());
+              battleState.getPlayer(step.getSide()),
+              battleState.getBattleSite(),
+              battleState.getStatus().getRound());
+      // request 51: the battle log says how the dice were capped
+      return RollDiceFactory.rollBattleDice(
+          step.getFiringGroup().getFiringUnits(),
+          battleState.getPlayer(step.getSide()),
+          bridge,
+          capCaption(battleState, step.getFiringGroup().getFiringUnits())
+              .map(caption -> annotation + " (" + caption + ")")
+              .orElse(annotation),
+          combatValue(battleState, step.getSide()));
     }
+  }
+
+  /** The bombarding side's dice values, capped by units unloaded (request 51). */
+  static CombatValue combatValue(final BattleState battleState, final BattleState.Side side) {
+    final var properties = battleState.getGameData().getProperties();
+    final Collection<Unit> friendly = battleState.filterUnits(ALIVE, side);
+    return CombatValueBuilder.navalBombardmentCombatValue()
+        .enemyUnits(battleState.filterUnits(ALIVE, side.getOpposite()))
+        .friendlyUnits(friendly)
+        .supportAttachments(battleState.getGameData().getUnitTypeList().getSupportRules())
+        .lhtrHeavyBombers(Properties.getLhtrHeavyBombers(properties))
+        .gameDiceSides(battleState.getGameData().getDiceSides())
+        .territoryEffects(battleState.getTerritoryEffects())
+        .diceCap(
+            BombardCap.applies(properties)
+                ? BombardCap.diceCap(friendly, battleState.getPlayer(side))
+                : null)
+        .reducedDieValue(BombardCap.reducedDieValue(properties))
+        .build();
+  }
+
+  /** Shows the cap caption above a bombardment firing group's dice in the battle window. */
+  static void showCapCaption(
+      final IDelegateBridge bridge,
+      final BattleState battleState,
+      final FiringGroup firingGroup,
+      final String stepName) {
+    if (battleState.getStatus().isHeadless()
+        || firingGroup.getFiringUnits().isEmpty()
+        || !battleState.getBombardingUnits().containsAll(firingGroup.getFiringUnits())) {
+      return;
+    }
+    capCaption(battleState, firingGroup.getFiringUnits())
+        .ifPresent(
+            caption ->
+                bridge
+                    .getDisplayChannelBroadcaster()
+                    .battleStepText(
+                        battleState.getBattleId(), stepName, List.of(caption), true, ""));
+  }
+
+  /**
+   * "Bombardment: 2 dice (2 units unloaded)" when the bombardment is capped by units unloaded
+   * (request 51).
+   */
+  public static Optional<String> capCaption(
+      final BattleState battleState, final Collection<Unit> firingUnits) {
+    if (!BombardCap.applies(battleState.getGameData().getProperties())) {
+      return Optional.empty();
+    }
+    final Collection<Unit> friendly = battleState.filterUnits(ALIVE, OFFENSE);
+    final int dice =
+        PowerStrengthAndRolls.build(firingUnits, combatValue(battleState, OFFENSE))
+            .calculateTotalRolls();
+    return Optional.of(
+        BombardCap.caption(
+            dice,
+            BombardCap.unloadedUnits(friendly),
+            BombardCap.dicePerUnloadedUnit(battleState.getPlayer(OFFENSE))));
   }
 
   public static class BombardmentCasualtySelector

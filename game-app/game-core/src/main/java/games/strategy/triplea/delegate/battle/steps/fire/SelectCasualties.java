@@ -67,6 +67,8 @@ public class SelectCasualties implements BattleStep {
     } else {
       bridge.getDisplayChannelBroadcaster().notifyDice(diceRoll, stepName);
     }
+    // request 51: "Bombardment: 2 dice (2 units unloaded)" above the bombardment's dice
+    NavalBombardment.showCapCaption(bridge, battleState, firingGroup, stepName);
 
     final CasualtyDetails details = selectCasualties.apply(bridge, this);
     fireRoundState.setCasualties(details);

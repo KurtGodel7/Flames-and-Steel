@@ -121,7 +121,9 @@ public class CombatValueBuilder {
       final Collection<UnitSupportAttachment> supportAttachments,
       final boolean lhtrHeavyBombers,
       final int gameDiceSides,
-      final Collection<TerritoryEffect> territoryEffects) {
+      final Collection<TerritoryEffect> territoryEffects,
+      final Integer diceCap,
+      final Integer reducedDieValue) {
 
     // Get all friendly supports
     final AvailableSupports supportFromFriends =
@@ -144,6 +146,8 @@ public class CombatValueBuilder {
         .friendUnits(friendlyUnits)
         .enemyUnits(enemyUnits)
         .territoryEffects(territoryEffects)
+        .diceCap(diceCap)
+        .reducedDieValue(reducedDieValue == null ? 5 : reducedDieValue)
         .build();
   }
 
