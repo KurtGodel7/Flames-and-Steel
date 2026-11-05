@@ -1,5 +1,6 @@
 package games.strategy.triplea.delegate;
 
+import games.strategy.engine.GameOverException;
 import games.strategy.engine.data.CompositeChange;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.GameState;
@@ -27,7 +28,9 @@ import java.io.Serial;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -74,6 +77,8 @@ public class AirStageDelegate extends BaseTripleADelegate implements IAirStageDe
   private final transient Set<GamePlayer> choosing = new HashSet<>();
   private transient @Nullable Stage open;
   private transient int asking = 0;
+  // request 52: set once a remote player says the game is over; nobody is asked or told again
+  private transient volatile boolean gameOver = false;
   private transient Map<GamePlayer, Player> remotes = new LinkedHashMap<>();
   private final transient Object lock = new Object();
 
@@ -173,6 +178,7 @@ public class AirStageDelegate extends BaseTripleADelegate implements IAirStageDe
     }
     synchronized (lock) {
       remotes = found;
+      gameOver = false;
       open = stage;
       drafts.clear();
       choosing.clear();
@@ -225,6 +231,9 @@ public class AirStageDelegate extends BaseTripleADelegate implements IAirStageDe
             () -> {
               try {
                 ask(p, remote, stage, order, start, problem);
+              } catch (final GameOverException e) {
+                // request 52: the game was left or ended; this thread just stops, as stock does
+                gameOver = true;
               } finally {
                 synchronized (lock) {
                   asking--;
@@ -248,12 +257,18 @@ public class AirStageDelegate extends BaseTripleADelegate implements IAirStageDe
     Choice start = first;
     String problem = firstProblem;
     for (int attempt = 0; attempt < ATTEMPTS; attempt++) {
+      if (gameOver) {
+        return;
+      }
       Choice choice;
       try {
         choice =
             remote == null
                 ? Choice.none()
                 : remote.selectAirStage(stage, order, start, bombers, problem);
+      } catch (final GameOverException e) {
+        // request 52: never "could not be asked": the game is over, stop at once
+        throw e;
       } catch (final RuntimeException e) {
         log.warn("Air stage: " + p.getName() + " could not be asked", e);
         choice = Choice.none();
@@ -400,7 +415,7 @@ public class AirStageDelegate extends BaseTripleADelegate implements IAirStageDe
     final Map<GamePlayer, Map<GamePlayer, List<TargetAssignment>>> toSend = new LinkedHashMap<>();
     final Map<GamePlayer, Player> targets;
     synchronized (lock) {
-      if (open == null || open == Stage.HOME) {
+      if (gameOver || open == null || open == Stage.HOME) {
         return;
       }
       targets = new LinkedHashMap<>(remotes);
@@ -416,6 +431,8 @@ public class AirStageDelegate extends BaseTripleADelegate implements IAirStageDe
               () -> {
                 try {
                   remote.airStageAllied(p, toSend.get(p));
+                } catch (final GameOverException ex) {
+                  gameOver = true; // request 52: quietly
                 } catch (final RuntimeException ex) {
                   // only a progress note
                 }
@@ -431,8 +448,19 @@ public class AirStageDelegate extends BaseTripleADelegate implements IAirStageDe
     final List<String> names;
     final Collection<Player> targets;
     synchronized (lock) {
+      if (gameOver) {
+        return;
+      }
       names = choosing.stream().map(PlayerNames::display).toList();
-      targets = new ArrayList<>(new java.util.LinkedHashSet<>(remotes.values()));
+      // request 52: one note per player even when one player plays several nations, told apart by
+      // identity: hashing or comparing a remote player throws GameOverException once the game ends
+      final Set<Player> unique = Collections.newSetFromMap(new IdentityHashMap<>());
+      targets = new ArrayList<>();
+      for (final Player remote : remotes.values()) {
+        if (unique.add(remote)) {
+          targets.add(remote);
+        }
+      }
     }
     for (final Player remote : targets) {
       final Thread t =
@@ -440,6 +468,8 @@ public class AirStageDelegate extends BaseTripleADelegate implements IAirStageDe
               () -> {
                 try {
                   remote.airStageWaiting(names);
+                } catch (final GameOverException e) {
+                  gameOver = true; // request 52: quietly
                 } catch (final RuntimeException e) {
                   // only a progress note
                 }
