@@ -297,8 +297,9 @@ class EditPanel extends ActionPanel {
             if (player != null) {
               // open production panel for adding new units
               final IntegerMap<ProductionRule> production =
+                  // request 53: only units that nation can have and that fit the territory
                   EditProductionPanel.getProduction(
-                      player, frame, getData(), getMap().getUiContext());
+                      player, territory, frame, getData(), getMap().getUiContext());
               final Collection<Unit> units = new ArrayList<>();
               for (final ProductionRule productionRule : production.keySet()) {
                 final int quantity = production.getInt(productionRule);

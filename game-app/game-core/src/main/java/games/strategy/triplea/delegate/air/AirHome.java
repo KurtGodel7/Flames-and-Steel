@@ -311,6 +311,35 @@ public class AirHome {
     return merge(result);
   }
 
+  /**
+   * Request 53: the landings Done would add to the player's own: {@link #withDefaults} less the
+   * chosen ones, merged. A landing whose destination is where the aircraft already are (land they
+   * may use, or own carriers with room) lands them where they are.
+   */
+  public static List<Landing> defaultLandings(final GamePlayer player, final List<Landing> chosen) {
+    final Map<String, Integer> mine = new LinkedHashMap<>();
+    for (final Landing l : merge(chosen)) {
+      mine.merge(key(l), l.count(), Integer::sum);
+    }
+    final List<Landing> result = new ArrayList<>();
+    for (final Landing l : withDefaults(player, chosen)) {
+      final int extra = l.count() - mine.getOrDefault(key(l), 0);
+      if (extra > 0) {
+        result.add(new Landing(l.from(), l.airborne(), l.unitType(), extra, l.to()));
+      }
+    }
+    return result;
+  }
+
+  private static String key(final Landing l) {
+    return l.from().getName() + "|" + l.airborne() + "|" + l.unitType().getName() + "|" + l.to().getName();
+  }
+
+  /** Request 53: whether the landing lands the aircraft where they already are. */
+  public static boolean landsInPlace(final Landing l) {
+    return l.airborne() && l.from().equals(l.to());
+  }
+
   /** Landings merged by place, type and destination. */
   public static List<Landing> merge(final List<Landing> landings) {
     final Map<String, Landing> result = new LinkedHashMap<>();

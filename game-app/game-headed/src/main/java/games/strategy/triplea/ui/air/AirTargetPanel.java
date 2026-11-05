@@ -772,6 +772,7 @@ public final class AirTargetPanel extends ActionPanel {
     if (selectedZone == null || territory.equals(selectedZone)) {
       if (selectedZone == null) {
         selectedPoint = md.getMapPoint();
+        selectedPointZone = territory;
       }
       selectUnits(player, territory, units, md);
       return;
@@ -1138,12 +1139,18 @@ public final class AirTargetPanel extends ActionPanel {
     selected.clear();
     targets = Map.of();
     routeTo = null;
+    selectedPoint = null;
+    selectedPointZone = null;
     getMap().setRoute(null);
     getMap().setMouseShadowUnits(null);
   }
 
-  // request 42: where the stock route arrow starts (the click that selected) and where it points
+  // request 42: where the stock route arrow starts (the click that selected) and where it points;
+  // request 53: and the territory that click was in. A selection made any other way (the unit
+  // scroller, the list window, a Show) starts the arrow at the aircraft's own territory, never at
+  // an earlier click somewhere else.
   private @Nullable Point selectedPoint;
+  private @Nullable Territory selectedPointZone;
   private @Nullable Territory routeTo;
 
   /**
@@ -1170,9 +1177,19 @@ public final class AirTargetPanel extends ActionPanel {
     getMap()
         .setRoute(
             new games.strategy.engine.data.Route(path),
-            selectedPoint != null ? selectedPoint : draw.center(selectedZone),
+            routeStart(),
             mousePoint,
             null);
+  }
+
+  /**
+   * Request 53: where the route arrow starts: the click that selected the aircraft if it was in
+   * their territory, else the territory's centre.
+   */
+  Point routeStart() {
+    return selectedPoint != null && selectedZone != null && selectedZone.equals(selectedPointZone)
+        ? selectedPoint
+        : draw.center(selectedZone);
   }
 
   /** The selected aircraft as units (for the stock mouse shadow), undamaged first. */
@@ -1550,7 +1567,13 @@ public final class AirTargetPanel extends ActionPanel {
           selectionChanged();
           strikesChanged();
         });
-    final JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+    // request 53: Undo last beside Undo All; the row wraps rather than widening the panel
+    final JButton undoLastButton = new JButton("Undo last");
+    undoLastButton.setEnabled(!staged.isEmpty());
+    undoLastButton.setToolTipText("Undoes the newest move (Ctrl+Z).");
+    undoLastButton.addActionListener(e -> undoLast());
+    final JPanel buttons = new JPanel(new org.triplea.swing.WrapLayout(FlowLayout.LEFT, 4, 2));
+    buttons.add(undoLastButton);
     buttons.add(undoAll);
     buttons.add(createDoneButton());
     // request 30: the same choices as last time, where they are still possible
@@ -1562,7 +1585,8 @@ public final class AirTargetPanel extends ActionPanel {
       repeat.addActionListener(e -> repeatLastRound(player, last));
       buttons.add(repeat);
     }
-    layout.top().add(leftAligned(buttons));
+    buttons.setAlignmentX(LEFT_ALIGNMENT);
+    layout.top().add(buttons);
     // 2. status line, in plain words; request 48: the one control that goes to them is the unit
     // scroller's bar at the bottom of the side panel (and '.' / ',')
     final int idle = aircraftWithoutOrders(player);

@@ -77,7 +77,9 @@ public abstract class AbstractUndoableMovesPanel extends JPanel {
   }
 
   private JScrollPane createScrollPane() {
-    final JPanel items = new JPanel();
+    // Flames and Steel (request 53): the list is as wide as the panel, never wider, so it never
+    // scrolls sideways; long lines are cut, with the whole of them in their tooltip
+    final JPanel items = new WidthTrackingPanel();
     items.setLayout(new BoxLayout(items, BoxLayout.Y_AXIS));
 
     int scrollIncrement = 10;
@@ -107,6 +109,7 @@ public abstract class AbstractUndoableMovesPanel extends JPanel {
           }
         };
     scroll.setBorder(null);
+    scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
     scroll.getVerticalScrollBar().setUnitIncrement(scrollIncrementFinal);
     // Flames and Steel (request 24): inside a step panel's scrolling list, the wheel scrolls that
     // list
@@ -121,7 +124,10 @@ public abstract class AbstractUndoableMovesPanel extends JPanel {
   private JComponent newComponentForMove(final AbstractUndoableMove move) {
     final Box unitsBox = new Box(BoxLayout.X_AXIS);
     unitsBox.add(new JLabel((move.getIndex() + 1) + ") "));
-    final Dimension buttonSize = new Dimension(80, 22);
+    // request 53: Undo and Show first on the line, then the units, so the buttons are always in
+    // sight; the units may be cut at the right edge instead
+    final Dimension buttonSize = new Dimension(64, 22);
+    final int buttonsAt = unitsBox.getComponentCount();
     final List<UnitCategory> unitCategories =
         UnitSeparator.getSortedUnitCategories(
             move.getUnits(), movePanel.getData(), movePanel.getMap().getUiContext().getMapData());
@@ -140,6 +146,8 @@ public abstract class AbstractUndoableMovesPanel extends JPanel {
     }
     unitsBox.add(Box.createHorizontalGlue());
     final JLabel text = new JLabel(move.getMoveLabel());
+    text.setToolTipText(move.getMoveLabel());
+    text.setMinimumSize(new Dimension(0, text.getPreferredSize().height));
     final Box textBox = new Box(BoxLayout.X_AXIS);
     textBox.add(text);
     textBox.add(Box.createHorizontalGlue());
@@ -162,14 +170,49 @@ public abstract class AbstractUndoableMovesPanel extends JPanel {
     setSize(buttonSize, undoButton);
     final JButton viewButton = new JButton(new ViewAction(move));
     setSize(buttonSize, viewButton);
-    // request 34: Show and Undo on the units line, so each move takes two lines, not three
-    unitsBox.add(viewButton);
-    unitsBox.add(undoButton);
+    // request 34: Show and Undo on the units line, so each move takes two lines, not three;
+    // request 53: at its start
+    undoButton.setToolTipText("Undo move " + (moveIndex + 1) + ": " + move.getMoveLabel());
+    unitsBox.add(undoButton, buttonsAt);
+    unitsBox.add(viewButton, buttonsAt + 1);
+    unitsBox.add(Box.createHorizontalStrut(4), buttonsAt + 2);
     final Box containerBox = new Box(BoxLayout.Y_AXIS);
     containerBox.add(unitsBox);
     containerBox.add(textBox);
     containerBox.setBorder(BorderFactory.createEmptyBorder(2, 0, 2, 0));
     return containerBox;
+  }
+
+  /** Request 53: laid out at the scroll pane's width (as a text area that wraps). */
+  private static final class WidthTrackingPanel extends JPanel implements javax.swing.Scrollable {
+    private static final long serialVersionUID = 1L;
+
+    @Override
+    public Dimension getPreferredScrollableViewportSize() {
+      return getPreferredSize();
+    }
+
+    @Override
+    public int getScrollableUnitIncrement(
+        final Rectangle visibleRect, final int orientation, final int direction) {
+      return 16;
+    }
+
+    @Override
+    public int getScrollableBlockIncrement(
+        final Rectangle visibleRect, final int orientation, final int direction) {
+      return Math.max(16, visibleRect.height - 16);
+    }
+
+    @Override
+    public boolean getScrollableTracksViewportWidth() {
+      return true;
+    }
+
+    @Override
+    public boolean getScrollableTracksViewportHeight() {
+      return false;
+    }
   }
 
   public boolean movesMade() {

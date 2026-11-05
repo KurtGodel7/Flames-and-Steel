@@ -47,6 +47,9 @@ public abstract class AbstractMovePanel extends ActionPanel {
   private final PinnedLayout pinned = new PinnedLayout();
   private final JButton undoAllButton =
       new JButtonBuilder().title("Undo All").actionListener(this::undoAll).build();
+  // Flames and Steel (request 53): undo the newest move without scrolling the list
+  private final JButton undoLastButton =
+      new JButtonBuilder().title("Undo last").actionListener(this::undoLast).build();
 
   protected AbstractMovePanel(final TripleAFrame frame) {
     super(frame);
@@ -122,7 +125,15 @@ public abstract class AbstractMovePanel extends ActionPanel {
     undoableMoves = getMoveDelegate().getMovesMade();
     this.undoableMovesPanel.setMoves(new ArrayList<>(undoableMoves));
     undoAllButton.setEnabled(!undoableMoves.isEmpty());
+    undoLastButton.setEnabled(!undoableMoves.isEmpty());
     movesUpdated();
+  }
+
+  private void undoLast() {
+    final int moveCount = getUndoableMoves().size();
+    if (moveCount > 0) {
+      undoMove(moveCount - 1);
+    }
   }
 
   /** Called after the list of moves made this step changed (a move, an undo). */
@@ -279,11 +290,14 @@ public abstract class AbstractMovePanel extends ActionPanel {
     this.actionLabel.setText(gamePlayer.getName() + actionLabel);
     pinned.top().add(SwingComponents.leftBox(this.actionLabel));
 
-    final JPanel buttonsPanel = new JPanel();
+    // request 53: the row wraps rather than widening the panel
+    final JPanel buttonsPanel =
+        new JPanel(new org.triplea.swing.WrapLayout(java.awt.FlowLayout.CENTER, 5, 5));
     if (setCancelButton()) {
       buttonsPanel.add(cancelMoveButton);
     }
     buttonsPanel.add(doneButton);
+    buttonsPanel.add(undoLastButton);
     buttonsPanel.add(undoAllButton);
     pinned.top().add(buttonsPanel);
 

@@ -352,21 +352,41 @@ public class TileManager {
     final var unitImageFactory = uiContext.getUnitImageFactory();
     Point lastPlace = null;
     UnitCategory previousCategory = null;
+    // request 53: the pictures already drawn here; a stack never goes on top of one of them
+    final List<Rectangle> taken = new ArrayList<>();
     for (final UnitCategory category : UnitSeparator.getSortedUnitCategories(territory, mapData, unitsOffMap)) {
+      final Image image = unitImageFactory.getImage(ImageKey.of(category));
+      final int w = Math.max(unitImageFactory.getUnitImageWidth(), image.getWidth(null));
+      final int h = Math.max(unitImageFactory.getUnitImageHeight(), image.getHeight(null));
+      // the next placement point clear of every stack drawn so far (place.txt points closer than a
+      // unit picture are skipped)
+      Point free = null;
+      while (free == null && placementPoints.hasNext()) {
+        final Point p = placementPoints.next();
+        if (!overlaps(taken, p, w, h)) {
+          free = new Point(p);
+        }
+      }
       final boolean overflow;
-      if (placementPoints.hasNext()) {
-        lastPlace = new Point(placementPoints.next());
+      if (free != null) {
+        lastPlace = free;
         overflow = false;
       } else {
         if (lastPlace == null) return; // should not occur, but better safe than sorry
         lastPlace = new Point(lastPlace);
         overflow = true;
-        if (mapData.getPlacementOverflowToLeft(territory)) {
-          lastPlace.x -= unitImageFactory.getImage(ImageKey.of(category)).getWidth(null);
-        } else {
-          lastPlace.x += unitImageFactory.getImage(ImageKey.of(previousCategory)).getWidth(null);
+        final boolean toLeft = mapData.getPlacementOverflowToLeft(territory);
+        final int step =
+            toLeft
+                ? image.getWidth(null)
+                : unitImageFactory.getImage(ImageKey.of(previousCategory)).getWidth(null);
+        lastPlace.x += toLeft ? -step : step;
+        // as stock overflow, one picture further along; further still while that is taken
+        for (int i = 0; i < 50 && overlaps(taken, lastPlace, w, h); i++) {
+          lastPlace.x += toLeft ? -w : w;
         }
       }
+      taken.add(new Rectangle(lastPlace.x, lastPlace.y, w, h));
       final UnitsDrawer drawable =
           new UnitsDrawer(category, territory, lastPlace, overflow, uiContext)
               .leaveOut(unitsOffMap);
@@ -378,6 +398,16 @@ public class TileManager {
       }
       previousCategory = category;
     }
+  }
+
+  /**
+   * Request 53: whether a unit picture at this point would cover part of one already drawn. A
+   * pixel of touching is allowed (map makers place stacks edge to edge); more is an overlap that
+   * would run two count labels together ("1" and "2" reading as "12").
+   */
+  static boolean overlaps(final List<Rectangle> taken, final Point p, final int w, final int h) {
+    final Rectangle r = new Rectangle(p.x + 1, p.y + 1, Math.max(1, w - 2), Math.max(1, h - 2));
+    return taken.stream().anyMatch(r::intersects);
   }
 
   public Image newTerritoryImage(final Territory t, final GameData data, final MapData mapData) {

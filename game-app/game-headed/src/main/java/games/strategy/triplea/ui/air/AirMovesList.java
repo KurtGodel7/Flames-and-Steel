@@ -53,6 +53,45 @@ final class AirMovesList {
     return items;
   }
 
+  /**
+   * Request 53: the list in a titled box that never asks for more width than the panel has (long
+   * lines are cut, with their tooltips) and never scrolls sideways; past {@code MAX_ROWS} moves it
+   * scrolls down inside itself.
+   */
+  static JComponent boxed(final JComponent list, final String title) {
+    final javax.swing.JScrollPane scroll =
+        new javax.swing.JScrollPane(list) {
+          private static final long serialVersionUID = 1L;
+
+          @Override
+          public Dimension getPreferredSize() {
+            int h = 0;
+            final java.awt.Component[] rows = list.getComponents();
+            if (list instanceof JLabel || rows.length == 0) {
+              h = list.getPreferredSize().height;
+            } else {
+              for (int i = 0; i < Math.min(rows.length, MAX_ROWS); i++) {
+                h += rows[i].getPreferredSize().height;
+              }
+            }
+            final java.awt.Insets in = getInsets();
+            return new Dimension(200, h + in.top + in.bottom + 4);
+          }
+
+          @Override
+          public Dimension getMaximumSize() {
+            return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
+          }
+        };
+    scroll.setBorder(BorderFactory.createTitledBorder(title));
+    scroll.getVerticalScrollBar().setUnitIncrement(16);
+    scroll.setHorizontalScrollBarPolicy(javax.swing.JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+    scroll.setAlignmentX(JComponent.LEFT_ALIGNMENT);
+    return scroll;
+  }
+
+  private static final int MAX_ROWS = 10;
+
   /** In a scroll pane, laid out at the pane's width (as a text area that wraps). */
   private static final class WidthTrackingPanel extends JPanel implements Scrollable {
     private static final long serialVersionUID = 1L;
@@ -105,18 +144,18 @@ final class AirMovesList {
           undo.setEnabled(false);
           e.undo().run();
         });
-    final JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 2, 0));
-    buttons.setOpaque(false);
-    buttons.add(compact(show));
-    buttons.add(compact(undo));
-    // the buttons sit at the right of the unit picture; request 47: under it when the panel is too
-    // narrow for both, never past its edge
-    final JPanel top = new JPanel(new BesideOrBelow());
+    // request 53: Undo and Show come first on the line, so they are in sight at any panel width
+    // (even when something else makes the side panel scroll sideways); the picture follows
+    final JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
     top.setOpaque(false);
+    top.add(compact(undo));
+    top.add(compact(show));
     top.add(unitsBox);
-    top.add(buttons);
+    // a long route is cut short at the panel's edge; the tooltip has all of it
     final JLabel route = new JLabel(e.label());
+    route.setBorder(BorderFactory.createEmptyBorder(0, 4, 0, 0));
     route.setToolTipText(e.label());
+    undo.setToolTipText("Undo move " + e.number() + ": " + e.label());
     route.setMinimumSize(new Dimension(0, route.getPreferredSize().height));
     final JPanel text = new JPanel(new BorderLayout());
     text.setOpaque(false);
@@ -137,90 +176,6 @@ final class AirMovesList {
     containerBox.setBorder(BorderFactory.createEmptyBorder(2, 0, 2, 0));
     containerBox.setAlignmentX(JComponent.LEFT_ALIGNMENT);
     return containerBox;
-  }
-
-  /**
-   * Request 47: two components, the first at the left and the second at the right of one line;
-   * when the width is too small for both, the second goes on a line of its own under the first,
-   * at the right.
-   */
-  static final class BesideOrBelow implements java.awt.LayoutManager {
-    private static final String BESIDE = "fsBesideOrBelow";
-
-    /** Lays out again everything up to the panel holding the moves box (a scroll pane stops it). */
-    private static void relayout(final JComponent row) {
-      final java.awt.Container box =
-          javax.swing.SwingUtilities.getAncestorOfClass(javax.swing.JScrollPane.class, row);
-      final java.awt.Container outer = box == null ? null : box.getParent();
-      row.revalidate();
-      if (outer instanceof JComponent c) {
-        c.revalidate();
-        c.repaint();
-      }
-    }
-
-    @Override
-    public void addLayoutComponent(final String name, final java.awt.Component comp) {}
-
-    @Override
-    public void removeLayoutComponent(final java.awt.Component comp) {}
-
-    private static boolean fits(final java.awt.Container parent, final int width) {
-      final java.awt.Component first = parent.getComponent(0);
-      final java.awt.Component second = parent.getComponent(1);
-      return width <= 0
-          || first.getPreferredSize().width + second.getPreferredSize().width <= width;
-    }
-
-    @Override
-    public Dimension preferredLayoutSize(final java.awt.Container parent) {
-      final java.awt.Insets in = parent.getInsets();
-      final Dimension a = parent.getComponent(0).getPreferredSize();
-      final Dimension b = parent.getComponent(1).getPreferredSize();
-      final int width = parent.getWidth() - in.left - in.right;
-      return fits(parent, width)
-          ? new Dimension(
-              a.width + b.width + in.left + in.right,
-              Math.max(a.height, b.height) + in.top + in.bottom)
-          : new Dimension(
-              Math.max(a.width, b.width) + in.left + in.right,
-              a.height + b.height + in.top + in.bottom);
-    }
-
-    @Override
-    public Dimension minimumLayoutSize(final java.awt.Container parent) {
-      final Dimension b = parent.getComponent(1).getPreferredSize();
-      final java.awt.Insets in = parent.getInsets();
-      return new Dimension(b.width + in.left + in.right, b.height + in.top + in.bottom);
-    }
-
-    @Override
-    public void layoutContainer(final java.awt.Container parent) {
-      final java.awt.Insets in = parent.getInsets();
-      final int width = parent.getWidth() - in.left - in.right;
-      final java.awt.Component first = parent.getComponent(0);
-      final java.awt.Component second = parent.getComponent(1);
-      final Dimension a = first.getPreferredSize();
-      final Dimension b = second.getPreferredSize();
-      final boolean beside = fits(parent, width);
-      if (parent instanceof JComponent row) {
-        // the row's height changed: the list and the box around it are laid out again
-        final Object was = row.getClientProperty(BESIDE);
-        if (!Boolean.valueOf(beside).equals(was == null ? Boolean.TRUE : was)) {
-          javax.swing.SwingUtilities.invokeLater(() -> relayout(row));
-        }
-        row.putClientProperty(BESIDE, beside);
-      }
-      if (beside) {
-        final int h = Math.max(a.height, b.height);
-        first.setBounds(in.left, in.top + (h - a.height) / 2, width - b.width, a.height);
-        second.setBounds(in.left + width - b.width, in.top + (h - b.height) / 2, b.width, b.height);
-      } else {
-        first.setBounds(in.left, in.top, width, a.height);
-        second.setBounds(
-            in.left + Math.max(0, width - b.width), in.top + a.height, Math.min(width, b.width), b.height);
-      }
-    }
   }
 
   /** A small button: just its text, as stock's moves list buttons are. */

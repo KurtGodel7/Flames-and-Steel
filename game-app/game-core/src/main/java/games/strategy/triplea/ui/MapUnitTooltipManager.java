@@ -171,8 +171,14 @@ public final class MapUnitTooltipManager implements ActionListener {
     // Flames and Steel (request 27): the aircraft's air phase values
     final String air =
         games.strategy.triplea.delegate.air.AirCombat.airValuesText(unitType, player);
+    // request 53: what each value means, and the bonuses and penalties behind it
+    final String why =
+        player == null
+            ? ""
+            : games.strategy.triplea.delegate.air.AirValues.explanationHtml(unitType, player);
     return firstLine
         + (air.isEmpty() ? "" : air + "<br />")
+        + (why.isEmpty() ? "" : why + "<br />")
         + uiContext.getTooltipProperties().getTooltip(unitType, player);
   }
 

@@ -159,19 +159,49 @@ public final class AirHomePanel extends ActionPanel {
           + " nowhere to land are lost. '.' and ',' (or the unit scroller's arrows) go to the next"
           + " and previous aircraft still to land.";
 
-  /** Request 47: the airborne groups still to land, one per place and type. */
+  /**
+   * Request 47: the airborne groups still to land, one per place and type. Request 53: aircraft
+   * that can land where they are (own land, or own carriers with room) count as landed.
+   */
   private List<Group> stillToLand(final GamePlayer player) {
+    final Map<String, Integer> inPlace = inPlace(player);
     final Map<String, Group> result = new LinkedHashMap<>();
     for (final Group g : groups(player, true)) {
-      if (left(g) > 0) {
-        result.putIfAbsent(g.from().getName() + "|" + g.type().getName(), g);
+      if (toLand(g, inPlace) > 0) {
+        result.putIfAbsent(groupKey(g), g);
       }
     }
     return new ArrayList<>(result.values());
   }
 
   private int countToLand(final GamePlayer player) {
-    return stillToLand(player).stream().mapToInt(this::left).sum();
+    final Map<String, Integer> inPlace = inPlace(player);
+    return stillToLand(player).stream().mapToInt(g -> toLand(g, inPlace)).sum();
+  }
+
+  private static String groupKey(final Group g) {
+    return g.from().getName() + "|" + g.type().getName();
+  }
+
+  /** How many of the group still need a landing: those left less those landing where they are. */
+  private int toLand(final Group g, final Map<String, Integer> inPlace) {
+    return Math.max(0, left(g) - inPlace.getOrDefault(groupKey(g), 0));
+  }
+
+  /**
+   * Request 53: by place and type, how many airborne aircraft Done would land right where they are
+   * (the zero-step spot is the first a default landing tries).
+   */
+  private Map<String, Integer> inPlace(final GamePlayer player) {
+    final Map<String, Integer> result = new LinkedHashMap<>();
+    try (GameData.Unlocker ignored = getData().acquireReadLock()) {
+      for (final Landing l : AirHome.defaultLandings(player, staged)) {
+        if (AirHome.landsInPlace(l)) {
+          result.merge(l.from().getName() + "|" + l.unitType().getName(), l.count(), Integer::sum);
+        }
+      }
+    }
+    return result;
   }
 
   /** Request 47: "Germans: <b>2</b> aircraft must land", or "Germans: all aircraft have landed". */
@@ -281,33 +311,19 @@ public final class AirHomePanel extends ActionPanel {
 
   @Override
   public void performDone() {
-    final GamePlayer player = getCurrentPlayer();
-    final List<Landing> all;
-    final List<Unit> lost;
-    final int defaulted;
+    final List<String> lines;
     try (GameData.Unlocker ignored = getData().acquireReadLock()) {
-      all = AirHome.withDefaults(player, staged);
-      lost = AirHome.leftInTheAir(player, all);
-      defaulted =
-          all.stream().filter(Landing::airborne).mapToInt(Landing::count).sum()
-              - staged.stream().filter(Landing::airborne).mapToInt(Landing::count).sum();
+      lines = doneWarnings(getCurrentPlayer());
     }
-    final List<String> lines = new ArrayList<>();
-    if (defaulted > 0) {
-      lines.add(defaulted + " aircraft still in the air will land at the nearest spot.");
-    }
-    if (!lost.isEmpty()) {
-      lines.add(
-          lost.size()
-              + " aircraft have nowhere to land and will be lost: "
-              + games.strategy.triplea.formatter.MyFormatter.unitsToTextNoOwner(lost)
-              + ".");
-    }
+    // request 53: asked only when aircraft will land somewhere other than where they are, or be
+    // lost; each line says which, and where they will land
     if (!lines.isEmpty()) {
       final int answer =
           JOptionPane.showConfirmDialog(
               JOptionPane.getFrameForComponent(this),
-              String.join("\n", lines) + "\nEnd anyway?",
+              "Aircraft without a landing order:\n"
+                  + String.join("\n", lines)
+                  + "\nEnd anyway?",
               "Planes go home",
               JOptionPane.YES_NO_OPTION);
       if (answer != JOptionPane.YES_OPTION) {
@@ -315,6 +331,69 @@ public final class AirHomePanel extends ActionPanel {
       }
     }
     release();
+  }
+
+  /**
+   * Request 53: Done's warning, one line per kind of aircraft that will not land where it is: "2
+   * dive bombers over Hanchung → Sian", "1 fighter over Sea Zone 40 is lost (no carrier room)".
+   * Aircraft landing where they are, and those with landing orders, are not listed. Call under the
+   * read lock.
+   */
+  List<String> doneWarnings(final GamePlayer player) {
+    final List<String> lines = new ArrayList<>();
+    for (final Landing l : AirHome.defaultLandings(player, staged)) {
+      if (!l.airborne() || AirHome.landsInPlace(l) || l.count() <= 0) {
+        continue;
+      }
+      lines.add(
+          l.count()
+              + " "
+              + plural(l.unitType(), l.count())
+              + " over "
+              + l.from().getName()
+              + " → "
+              + l.to().getName());
+    }
+    final List<Landing> all = AirHome.withDefaults(player, staged);
+    final Map<String, Integer> lost = new LinkedHashMap<>();
+    for (final Unit u : AirHome.leftInTheAir(player, all)) {
+      final Territory over = u.getFlightOver();
+      final boolean nowhere =
+          over == null
+              || AirHome.spots(
+                      player,
+                      new Group(over, true, u.getType(), u.getFlightRangeLeft(), List.of(u)))
+                  .isEmpty();
+      final String where = over == null ? "in the air" : "over " + over.getName();
+      lost.merge(
+          u.getType().getName()
+              + "|"
+              + where
+              + "|"
+              + (nowhere ? "nowhere to land in reach" : "no carrier room in reach"),
+          1,
+          Integer::sum);
+    }
+    lost.forEach(
+        (key, n) -> {
+          final String[] p = key.split("\\|", 3);
+          lines.add(
+              n
+                  + " "
+                  + plural(getData().getUnitTypeList().getUnitTypeOrThrow(p[0]), n)
+                  + " "
+                  + p[1]
+                  + (n == 1 ? " is" : " are")
+                  + " lost ("
+                  + p[2]
+                  + ")");
+        });
+    return lines;
+  }
+
+  private static String plural(final UnitType type, final int n) {
+    return games.strategy.triplea.formatter.MyFormatter.pluralize(
+        AirStage.typeName(type).toLowerCase(java.util.Locale.ROOT), n);
   }
 
   // ---- groups
@@ -502,10 +581,25 @@ public final class AirHomePanel extends ActionPanel {
           rebuild(player);
           getMap().repaint();
         });
-    final JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+    // request 53: Undo last beside Undo All; the row wraps rather than widening the panel
+    final JButton undoLast = new JButton("Undo last");
+    undoLast.setEnabled(!staged.isEmpty());
+    undoLast.setToolTipText("Undoes the newest landing.");
+    undoLast.addActionListener(
+        e -> {
+          if (!staged.isEmpty()) {
+            staged.remove(staged.size() - 1);
+            showLanded();
+            rebuild(player);
+            getMap().repaint();
+          }
+        });
+    final JPanel buttons = new JPanel(new org.triplea.swing.WrapLayout(FlowLayout.LEFT, 4, 2));
+    buttons.add(undoLast);
     buttons.add(undoAll);
     buttons.add(createDoneButton());
-    layout.top().add(leftAligned(buttons));
+    buttons.setAlignmentX(LEFT_ALIGNMENT);
+    layout.top().add(buttons);
     // request 47: what still has to land; request 48: the unit scroller's bar at the bottom of the
     // side panel (and '.' / ',') goes to them
     final int n = toLand;
@@ -560,14 +654,13 @@ public final class AirHomePanel extends ActionPanel {
                 getMap().repaint();
               }));
     }
-    final JPanel made = new JPanel(new BorderLayout());
-    made.setBorder(BorderFactory.createTitledBorder("Landings made (" + staged.size() + ")"));
-    made.add(
-        entries.isEmpty()
-            ? new JLabel("No landings yet.")
-            : AirMovesList.build(frame.getUiContext(), entries),
-        BorderLayout.CENTER);
-    made.setAlignmentX(LEFT_ALIGNMENT);
+    // request 53: no wider than the panel (a long line is cut, with a tooltip), never scrolls sideways
+    final javax.swing.JComponent made =
+        AirMovesList.boxed(
+            entries.isEmpty()
+                ? new JLabel("No landings yet.")
+                : AirMovesList.build(frame.getUiContext(), entries),
+            "Landings made (" + staged.size() + ")");
     layout.top().add(made);
     // the groups
     addGroups(player, true, "In the air: land them");
@@ -583,15 +676,21 @@ public final class AirHomePanel extends ActionPanel {
     box.setAlignmentX(LEFT_ALIGNMENT);
     final Map<String, Group> shown = new LinkedHashMap<>();
     for (final Group g : groups(player, false)) {
-      if (g.airborne() == airborne) {
+      // request 53: never a line for 0 aircraft (all of them have orders)
+      if (g.airborne() == airborne && left(g) > 0) {
         shown.putIfAbsent(g.from().getName() + "|" + g.type().getName(), g);
       }
     }
     if (shown.isEmpty()) {
-      box.add(leftAligned(new JLabel(airborne ? "None in the air." : "None on bases.")));
+      box.add(
+          leftAligned(
+              new JLabel(
+                  airborne ? "None in the air without orders." : "None on bases to rebase.")));
     }
+    final Map<String, Integer> inPlace = airborne ? inPlace(player) : Map.of();
     for (final Group g : shown.values()) {
       final int left = left(g);
+      final int here = Math.min(left, inPlace.getOrDefault(groupKey(g), 0));
       final Map<Territory, Integer> reach;
       try (GameData.Unlocker ignored = getData().acquireReadLock()) {
         reach = AirHome.spots(player, g);
@@ -604,9 +703,16 @@ public final class AirHomePanel extends ActionPanel {
                   + AirStage.typeName(g.type()).toLowerCase(java.util.Locale.ROOT)
                   + (airborne ? " over " : " at ")
                   + g.from().getName()
-                  + (airborne ? " (" + g.range() + " left)" : ""),
+                  + (airborne ? " (" + g.range() + " left)" : "")
+                  // request 53: they can stay where they are; Done lands them there
+                  + (here <= 0 ? "" : here == left ? " — land here" : " — " + here + " land here"),
               icon(player, g),
               JLabel.LEFT);
+      if (here > 0) {
+        label.setToolTipText(
+            "They can land where they are (your land, or your carriers with room): Done lands them"
+                + " here. You may still send them elsewhere.");
+      }
       if (airborne && left > 0 && reach.isEmpty()) {
         label.setForeground(LOST);
         label.setToolTipText("Nowhere to land in reach: lost at Done.");

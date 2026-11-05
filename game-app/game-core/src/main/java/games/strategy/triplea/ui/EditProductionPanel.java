@@ -6,21 +6,39 @@ import games.strategy.engine.data.NamedAttachable;
 import games.strategy.engine.data.ProductionRule;
 import games.strategy.engine.data.Resource;
 import games.strategy.engine.data.Territory;
-import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.UnitType;
-import games.strategy.triplea.Constants;
+import games.strategy.triplea.delegate.NationUnits;
 import games.strategy.triplea.image.UnitImageFactory;
-import java.util.HashSet;
-import java.util.Map.Entry;
-import java.util.Set;
+import java.awt.GridBagConstraints;
+import java.awt.Insets;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Optional;
+import javax.annotation.Nullable;
+import javax.swing.JCheckBox;
 import javax.swing.JFrame;
 import org.triplea.java.collections.IntegerMap;
 
+/**
+ * Edit mode's "Add Units" window. Flames and Steel (request 53 item 1): it offers only units that
+ * make sense there: units the owning nation can have (see {@link NationUnits}), land units and
+ * aircraft on land, ships and carrier aircraft at sea, each at the nation's real price or with no
+ * price at all. A "Show all units" box, off by default, offers every unit with art, for repairs.
+ */
 class EditProductionPanel extends ProductionPanel {
   private static final long serialVersionUID = 5826523459539469173L;
 
-  private EditProductionPanel(final UiContext uiContext) {
+  private final @Nullable Territory territory;
+  private final JCheckBox showAll = new JCheckBox("Show all units");
+
+  private EditProductionPanel(final UiContext uiContext, final @Nullable Territory territory) {
     super(uiContext);
+    this.territory = territory;
+    showAll.setToolTipText(
+        "Also lists other nations' units and units that can't be in this territory, for rare"
+            + " repairs.");
+    showAll.addActionListener(e -> rebuildRules());
   }
 
   static IntegerMap<ProductionRule> getProduction(
@@ -28,7 +46,16 @@ class EditProductionPanel extends ProductionPanel {
       final JFrame parent,
       final GameData data,
       final UiContext uiContext) {
-    return new EditProductionPanel(uiContext)
+    return getProduction(gamePlayer, null, parent, data, uiContext);
+  }
+
+  static IntegerMap<ProductionRule> getProduction(
+      final GamePlayer gamePlayer,
+      final @Nullable Territory territory,
+      final JFrame parent,
+      final GameData data,
+      final UiContext uiContext) {
+    return new EditProductionPanel(uiContext, territory)
         .show(gamePlayer, parent, data, false, new IntegerMap<>());
   }
 
@@ -40,71 +67,88 @@ class EditProductionPanel extends ProductionPanel {
   }
 
   @Override
+  protected void initLayout() {
+    super.initLayout();
+    add(
+        showAll,
+        new GridBagConstraints(
+            0,
+            4,
+            30,
+            1,
+            1,
+            1,
+            GridBagConstraints.WEST,
+            GridBagConstraints.NONE,
+            new Insets(0, 8, 8, 0),
+            0,
+            0));
+  }
+
+  /** "Show all units" changed: list again, keeping the counts already typed. */
+  private void rebuildRules() {
+    final Map<UnitType, Integer> counts = new HashMap<>();
+    for (final Rule r : getRules()) {
+      if (r.getQuantity() > 0 && r.getProductionRule().getAnyResultKey() instanceof UnitType t) {
+        counts.merge(t, r.getQuantity(), Integer::sum);
+      }
+    }
+    rules.clear();
+    initRules(gamePlayer, new IntegerMap<>());
+    for (final Rule r : getRules()) {
+      if (r.getProductionRule().getAnyResultKey() instanceof UnitType t) {
+        r.setQuantity(counts.getOrDefault(t, 0));
+      }
+    }
+    initLayout();
+    calculateLimits();
+    revalidate();
+    if (dialog != null) {
+      dialog.pack();
+      dialog.setLocationRelativeTo(dialog.getParent());
+    }
+  }
+
+  @Override
   protected void initRules(
       final GamePlayer player, final IntegerMap<ProductionRule> initialPurchase) {
     try (GameData.Unlocker ignored = this.data.acquireReadLock()) {
       gamePlayer = player;
-      final Set<UnitType> unitsAllowed = new HashSet<>();
-      if (player.getProductionFrontier() != null) {
-        for (final ProductionRule productionRule : player.getProductionFrontier()) {
-          final Rule rule = new Rule(productionRule, player);
-          for (final Entry<NamedAttachable, Integer> entry :
-              productionRule.getResults().entrySet()) {
-            if (UnitType.class.isAssignableFrom(entry.getKey().getClass())) {
-              unitsAllowed.add((UnitType) entry.getKey());
-            }
-          }
-          final int initialQuantity = initialPurchase.getInt(productionRule);
-          rule.setQuantity(initialQuantity);
-          rules.add(rule);
-        }
-      }
-      // this next part is purely to allow people to "add" neutral (null player) units to
-      // territories.
-      // This is because the null player does not have a production frontier, and we also do not
-      // know what units we have
-      // art for, so only use the units on a map.
-      for (final Territory t : data.getMap()) {
-        for (final Unit u : t.getUnitCollection()) {
-          if (u.isOwnedBy(player)) {
-            final UnitType ut = u.getType();
-            if (!unitsAllowed.contains(ut)) {
-              unitsAllowed.add(ut);
-              final IntegerMap<NamedAttachable> result = new IntegerMap<>();
-              result.add(ut, 1);
-              final IntegerMap<Resource> cost = new IntegerMap<>();
-              cost.add(data.getResourceList().getResourceOrThrow(Constants.PUS), 1);
-              final ProductionRule newRule = new ProductionRule(ut.getName(), data, result, cost);
-              final Rule rule = new Rule(newRule, player);
-              rule.setQuantity(0);
-              rules.add(rule);
-            }
+      final Map<UnitType, Optional<ProductionRule>> offered =
+          new LinkedHashMap<>(NationUnits.of(player));
+      if (!showAll.isSelected()) {
+        offered.keySet().removeIf(t -> territory != null && !NationUnits.fits(t, territory));
+      } else {
+        // every unit we have art for, for rare repairs
+        for (final UnitType ut : data.getUnitTypeList().getAllUnitTypes()) {
+          if (!offered.containsKey(ut) && hasArt(player, ut)) {
+            offered.put(ut, Optional.empty());
           }
         }
       }
-      // now check if we have the art for anything that is left
-      for (final UnitType ut : data.getUnitTypeList().getAllUnitTypes()) {
-        if (!unitsAllowed.contains(ut)) {
-          try {
-            final UnitImageFactory imageFactory = uiContext.getUnitImageFactory();
-            if (imageFactory != null) {
-              if (imageFactory.hasImage(
-                  UnitImageFactory.ImageKey.builder().player(player).type(ut).build())) {
-                unitsAllowed.add(ut);
-                final IntegerMap<NamedAttachable> result = new IntegerMap<>();
-                result.add(ut, 1);
-                final IntegerMap<Resource> cost = new IntegerMap<>();
-                cost.add(data.getResourceList().getResourceOrThrow(Constants.PUS), 1);
-                final ProductionRule newRule = new ProductionRule(ut.getName(), data, result, cost);
-                final Rule rule = new Rule(newRule, player);
-                rule.setQuantity(0);
-                rules.add(rule);
-              }
-            }
-          } catch (final Exception e) { // ignore
-          }
-        }
-      }
+      offered.forEach(
+          (type, rule) -> {
+            final Rule r = new Rule(rule.orElseGet(() -> freeRule(type)), player);
+            r.setQuantity(initialPurchase.getInt(r.getProductionRule()));
+            rules.add(r);
+          });
     }
+  }
+
+  private boolean hasArt(final GamePlayer player, final UnitType ut) {
+    try {
+      final UnitImageFactory imageFactory = uiContext.getUnitImageFactory();
+      return imageFactory != null
+          && imageFactory.hasImage(UnitImageFactory.ImageKey.builder().player(player).type(ut).build());
+    } catch (final Exception e) {
+      return false;
+    }
+  }
+
+  /** A rule for a unit never bought: no price shown (a placeholder price would mislead). */
+  private ProductionRule freeRule(final UnitType ut) {
+    final IntegerMap<NamedAttachable> result = new IntegerMap<>();
+    result.add(ut, 1);
+    return new ProductionRule(ut.getName(), data, result, new IntegerMap<Resource>());
   }
 }

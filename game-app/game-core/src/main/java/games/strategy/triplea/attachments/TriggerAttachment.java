@@ -1700,6 +1700,23 @@ public class TriggerAttachment extends AbstractTriggerAttachment {
     return getListProperty(productionRule);
   }
 
+  /**
+   * Flames and Steel (request 53): read-only views for Edit mode's unit list: the "frontier:rule"
+   * entries this trigger adds or removes ("-rule"), the frontier it switches its players to, and
+   * those players.
+   */
+  public List<String> productionRuleChanges() {
+    return getProductionRule();
+  }
+
+  public Optional<ProductionFrontier> frontierChange() {
+    return getFrontier();
+  }
+
+  public List<GamePlayer> triggerPlayers() {
+    return getPlayers();
+  }
+
   private void setProductionRule(final String prop) throws GameParseException {
     final String[] s = splitOnColon(prop);
     if (s.length != 2) {

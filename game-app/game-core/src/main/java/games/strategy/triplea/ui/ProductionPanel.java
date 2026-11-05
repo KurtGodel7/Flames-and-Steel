@@ -161,7 +161,12 @@ class ProductionPanel extends JPanel {
   protected void initLayout() {
     this.removeAll();
     this.setLayout(new GridBagLayout());
-    final JLabel legendLabel = new JLabel("Attack | Defense | Movement | Hits");
+    // request 53: aircraft show their own air-stage values, named on their line
+    final JLabel legendLabel =
+        new JLabel(
+            rules.stream().anyMatch(ProductionPanel::isAircraftRule)
+                ? "Attack | Defense | Movement | Hits   (aircraft: their air-stage values, named)"
+                : "Attack | Defense | Movement | Hits");
     this.add(
         legendLabel,
         new GridBagConstraints(
@@ -249,6 +254,14 @@ class ProductionPanel extends JPanel {
             0,
             0));
     this.setMaximumSize(new Dimension(availWidth, availHeight));
+  }
+
+  private static boolean isAircraftRule(final Rule rule) {
+    return rule.getProductionRule().getResults().keySet().stream()
+        .anyMatch(
+            r ->
+                r instanceof UnitType t
+                    && games.strategy.triplea.delegate.air.AirValues.applies(t));
   }
 
   private JPanel createUnitsPanel() {
@@ -367,11 +380,19 @@ class ProductionPanel extends JPanel {
           final int hits =
               attach.getHitPoints()
                   + type.getData().getTechTracker().getHitPointBonus(player, type);
-          info.setText(attack + " | " + defense + " | " + movement + " | " + hits);
-          tooltip
-              .append(UnitNames.of(type))
-              .append(": ")
-              .append(uiContext.getTooltipProperties().getTooltip(type, player));
+          // request 53: aircraft show the values they use in the air stage, for this nation now
+          final boolean airStage = games.strategy.triplea.delegate.air.AirValues.applies(type);
+          info.setText(
+              airStage
+                  ? games.strategy.triplea.delegate.air.AirValues.statLineHtml(type, player)
+                  : attack + " | " + defense + " | " + movement + " | " + hits);
+          tooltip.append(UnitNames.of(type)).append(": ");
+          if (airStage) {
+            tooltip
+                .append(games.strategy.triplea.delegate.air.AirValues.explanationHtml(type, player))
+                .append("<br>");
+          }
+          tooltip.append(uiContext.getTooltipProperties().getTooltip(type, player));
           name.setText(UnitNames.of(type));
           // Flames and Steel: an SPC that would build nothing says so (request 11 item 3)
           final Optional<String> spcWarning =
