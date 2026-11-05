@@ -61,4 +61,34 @@ class AirStageTurnstileTest {
     assertThat(turnstile.isBusy(), is(true));
     turnstile.finish(germans);
   }
+
+  /** Request 52: Leave Game while a nation waits for its turn: it stops waiting, no screen. */
+  @Test
+  void leavingTheGameReleasesWaitingNations() throws Exception {
+    final GameData data = new GameData();
+    final GamePlayer germans = new GamePlayer("Germans", data);
+    final GamePlayer british = new GamePlayer("British", data);
+    final List<GamePlayer> order = List.of(germans, british);
+    final AirStageTurnstile turnstile = new AirStageTurnstile();
+    // the Germans' screen is open
+    turnstile.await("BOMBERS round 4", order, germans, p -> true);
+    final CountDownLatch released = new CountDownLatch(1);
+    final Thread britishWait =
+        new Thread(
+            () -> {
+              try {
+                turnstile.await("BOMBERS round 4", order, british, p -> true);
+                released.countDown();
+              } catch (final InterruptedException e) {
+                Thread.currentThread().interrupt();
+              }
+            });
+    britishWait.start();
+    turnstile.close();
+    assertThat(released.await(2, java.util.concurrent.TimeUnit.SECONDS), is(true));
+    assertThat(turnstile.isClosed(), is(true));
+    // the Germans' screen closing afterwards opens nothing for the British
+    turnstile.finish(germans);
+    assertThat(turnstile.isBusy(), is(false));
+  }
 }

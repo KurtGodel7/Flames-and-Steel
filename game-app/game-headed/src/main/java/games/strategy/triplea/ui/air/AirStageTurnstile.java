@@ -17,6 +17,19 @@ public final class AirStageTurnstile {
   private final Set<GamePlayer> finished = new HashSet<>();
   private @Nullable String stage;
   private @Nullable GamePlayer active;
+  // request 52: the game was left; nobody waits for a turn any more
+  private boolean closed;
+
+  /** Request 52: the game was left: every nation still waiting stops waiting, and none opens. */
+  public synchronized void close() {
+    closed = true;
+    notifyAll();
+  }
+
+  /** Whether the game was left. */
+  public synchronized boolean isClosed() {
+    return closed;
+  }
 
   /**
    * Waits for the nation's turn in this stage.
@@ -36,10 +49,12 @@ public final class AirStageTurnstile {
       finished.clear();
       active = null;
     }
-    while (active != null || earlierWaiting(order, nation, local)) {
+    while (!closed && (active != null || earlierWaiting(order, nation, local))) {
       wait();
     }
-    active = nation;
+    if (!closed) {
+      active = nation;
+    }
   }
 
   private boolean earlierWaiting(

@@ -653,6 +653,9 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
 
   /** Stops the game and closes this frame window. */
   public void stopGame() {
+    // request 52: nations still waiting for their air stage screen give up quietly, with no
+    // "pass to the next player" message after the game has gone
+    airStageTurnstile.close();
     if (researchScreen != null) {
       researchScreen.shutDown();
     }
@@ -1779,6 +1782,10 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
       Thread.currentThread().interrupt();
       return games.strategy.triplea.delegate.air.AirStage.Choice.none();
     }
+    if (airStageTurnstile.isClosed()) {
+      // request 52: the game was left while this nation waited for its turn
+      return games.strategy.triplea.delegate.air.AirStage.Choice.none();
+    }
     try {
       messageAndDialogThreadPool.waitForAll();
       final boolean home = stage == games.strategy.triplea.delegate.air.AirStage.Stage.HOME;
@@ -1898,7 +1905,10 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
         getLocalPlayers().getLocalPlayers().stream().filter(p -> !p.isAi()).count();
     final GamePlayer previous = lastAirAllocator;
     lastAirAllocator = gamePlayer;
-    if (localHumans <= 1 || previous == null || previous.equals(gamePlayer)) {
+    if (airStageTurnstile.isClosed()
+        || localHumans <= 1
+        || previous == null
+        || previous.equals(gamePlayer)) {
       return;
     }
     final boolean enemies;

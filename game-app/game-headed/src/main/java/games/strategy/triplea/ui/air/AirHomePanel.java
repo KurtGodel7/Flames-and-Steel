@@ -695,40 +695,73 @@ public final class AirHomePanel extends ActionPanel {
       try (GameData.Unlocker ignored = getData().acquireReadLock()) {
         reach = AirHome.spots(player, g);
       }
-      final JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-      final JLabel label =
-          new JLabel(
-              left
-                  + " "
-                  + AirStage.typeName(g.type()).toLowerCase(java.util.Locale.ROOT)
-                  + (airborne ? " over " : " at ")
-                  + g.from().getName()
-                  + (airborne ? " (" + g.range() + " left)" : "")
-                  // request 53: they can stay where they are; Done lands them there
-                  + (here <= 0 ? "" : here == left ? " — land here" : " — " + here + " land here"),
-              icon(player, g),
-              JLabel.LEFT);
+      // request 53: two short lines ("7 torpedo bombers — land here" / "over Sea Zone 225 ...
+      // (3 left)"), cut at the panel's edge with the whole text in the tooltip; the button stays
+      // in sight at the right and the list never scrolls sideways
+      final String what =
+          left
+              + " "
+              + plural(g.type(), left)
+              + (here <= 0 ? "" : here == left ? " — land here" : " — " + here + " land here");
+      final String where =
+          (airborne ? "over " : "at ")
+              + g.from().getName()
+              + (airborne ? " (" + g.range() + " left)" : "");
+      final JLabel line1 = new JLabel(what);
+      final JLabel line2 = new JLabel(where);
+      final JPanel text = new JPanel(new java.awt.GridLayout(2, 1));
+      text.setOpaque(false);
+      text.add(line1);
+      text.add(line2);
+      String tip = what + " " + where;
       if (here > 0) {
-        label.setToolTipText(
-            "They can land where they are (your land, or your carriers with room): Done lands them"
-                + " here. You may still send them elsewhere.");
+        tip +=
+            ". They can land where they are (your land, or your carriers with room): Done lands"
+                + " them here. You may still send them elsewhere.";
       }
       if (airborne && left > 0 && reach.isEmpty()) {
-        label.setForeground(LOST);
-        label.setToolTipText("Nowhere to land in reach: lost at Done.");
+        line1.setForeground(LOST);
+        line2.setForeground(LOST);
+        tip += ". Nowhere to land in reach: lost at Done.";
       }
-      row.add(label);
+      for (final JLabel l : List.of(line1, line2)) {
+        l.setToolTipText(tip);
+        l.setMinimumSize(new java.awt.Dimension(0, l.getPreferredSize().height));
+      }
+      final JPanel row =
+          new JPanel(new BorderLayout(4, 0)) {
+            private static final long serialVersionUID = 1L;
+
+            @Override
+            public java.awt.Dimension getPreferredSize() {
+              // never asks for more width than a narrow side panel has; the text is cut instead
+              final java.awt.Dimension d = super.getPreferredSize();
+              return new java.awt.Dimension(Math.min(d.width, 220), d.height);
+            }
+
+            @Override
+            public java.awt.Dimension getMaximumSize() {
+              return new java.awt.Dimension(Integer.MAX_VALUE, getPreferredSize().height);
+            }
+          };
+      row.setBorder(BorderFactory.createEmptyBorder(2, 2, 2, 2));
+      row.add(new JLabel(icon(player, g)), BorderLayout.WEST);
+      row.add(text, BorderLayout.CENTER);
       if (left > 0 && !reach.isEmpty()) {
         if (g.equals(selected)) {
-          row.add(new JLabel("selected: " + count));
+          row.add(new JLabel("selected: " + count), BorderLayout.EAST);
         } else {
           final JButton pick = smallButton("Select all");
           pick.setToolTipText("Selects all of them, as Shift+click on the map does.");
           pick.addActionListener(e -> choose(player, g));
-          row.add(pick);
+          final JPanel east = new JPanel(new java.awt.GridBagLayout());
+          east.setOpaque(false);
+          east.add(pick);
+          row.add(east, BorderLayout.EAST);
         }
       }
-      box.add(leftAligned(row));
+      row.setAlignmentX(LEFT_ALIGNMENT);
+      box.add(row);
     }
     layout.body().add(box);
   }
