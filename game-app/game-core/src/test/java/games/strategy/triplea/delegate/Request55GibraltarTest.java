@@ -100,7 +100,7 @@ class Request55GibraltarTest extends games.strategy.triplea.settings.AbstractCli
             });
     when(bridge.getRemotePlayer().selectShoreBombard(any())).thenReturn(true);
     givenFirstUnitsChosenAsCasualties(bridge);
-    // first round ("round 2" in the dice text): the British hit with their first die, the
+    // first round: the British hit with their first die, the
     // bombardment's low-luck die misses; second round: the Italians hit with everything
     whenGetRandom(bridge)
         .thenAnswer(
@@ -111,9 +111,9 @@ class Request55GibraltarTest extends games.strategy.triplea.settings.AbstractCli
               rolls.add(player.getName() + " " + count + ": " + annotation);
               final int[] values = new int[count];
               Arrays.fill(values, 5);
-              if (annotation.contains(", round 3") && player == italians) {
+              if (annotation.contains(", round 2") && player == italians) {
                 Arrays.fill(values, 0);
-              } else if (annotation.contains(", round 2")
+              } else if (annotation.contains(", round 1")
                   && !annotation.contains("Bombardment")
                   && count > 0) {
                 values[0] = 0;
@@ -133,9 +133,8 @@ class Request55GibraltarTest extends games.strategy.triplea.settings.AbstractCli
             + System.lineSeparator()
             + String.join(System.lineSeparator(), rolls));
 
-    // The dice lines say "round 2" for the first combat round (stock TripleA's numbering).
-    final String first = ", round 2";
-    final String second = ", round 3";
+    final String first = ", round 1";
+    final String second = ", round 2";
     // round 1: the ships bombard, the British fire, the landed infantry hold fire
     assertThat(log, hasItem(startsWith("    " + AmphibiousLanding.logLine(landing.size()))));
     assertThat(anyLine("Italians roll dice for", "battleship", first), is(true));

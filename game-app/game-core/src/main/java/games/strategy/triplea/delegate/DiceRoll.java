@@ -103,7 +103,9 @@ public class DiceRoll implements Externalizable {
         + " in "
         + territory.getName()
         + ", round "
-        + (battleRound + 1);
+        // Flames and Steel: battle rounds count from 1, so the first round reads "round 1" (stock
+        // added 1 and labelled it "round 2")
+        + battleRound;
   }
 
   /**
