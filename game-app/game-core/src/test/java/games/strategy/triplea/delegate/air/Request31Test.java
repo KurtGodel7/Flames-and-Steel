@@ -125,8 +125,10 @@ class Request31Test {
     final Unit fortress = unit("strategicBomber", americans);
     grant(americans, "NordenBombsight", "B17FlyingFortress", "CombatBox", "H2XRadar");
     assertThat(AirCombat.bombingDamage(fortress), is(4));
-    assertThat(Unit.maxHitPoints(fortress), is(3));
-    assertThat(AirCombat.airDefenseValue(fortress), is(3));
+    // draft 102: B17FlyingFortress gives +2 hit points
+    assertThat(Unit.maxHitPoints(fortress), is(4));
+    // draft 102: only Combat Box adds air defense (1 + 1)
+    assertThat(AirCombat.airDefenseValue(fortress), is(2));
   }
 
   @Test
@@ -137,7 +139,8 @@ class Request31Test {
     final Unit greif = unit("strategicBomber", germans);
     assertThat(List.of(AirCombat.bombingDamage(renzan), Unit.maxHitPoints(renzan)), is(List.of(3, 3)));
     assertThat(AirCombat.airDefenseValue(renzan), is(2));
-    assertThat(List.of(AirCombat.bombingDamage(greif), Unit.maxHitPoints(greif)), is(List.of(3, 3)));
+    // draft 102: He177Greif gives +1 bombing only, no extra hit point
+    assertThat(List.of(AirCombat.bombingDamage(greif), Unit.maxHitPoints(greif)), is(List.of(3, 2)));
     assertThat(AirCombat.airDefenseValue(greif), is(1));
   }
 

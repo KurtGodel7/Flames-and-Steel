@@ -172,7 +172,8 @@ class Request46Test {
   /**
    * Request 47, the round in James's screenshot: German fighters over Hamburg shoot down the
    * British strategic bomber striking it, one fighter damaged by its return fire; another British
-   * bomber strikes neutral Ireland; German dive bombers strike Kiev.
+   * bomber strikes neutral Ireland; German dive bombers strike Lwow (draft 102: Kiev is now 2 from
+   * Cracow, out of a dive bomber's range there and back).
    */
   private AirBattleReport screenshotRound() {
     add(london, british, "strategicBomber", 2);
@@ -185,7 +186,7 @@ class Request46Test {
                 british,
                 a(london, "strategicBomber", 1, TargetKind.LAND, "Hamburg"),
                 a(london, "strategicBomber", 1, TargetKind.LAND, "Ireland"))
-            .bombers(germans, a(cracow, "diveBomber", 2, TargetKind.LAND, "Kiev"))
+            .bombers(germans, a(cracow, "diveBomber", 2, TargetKind.LAND, "Lwow"))
             .cover(
                 germans, new TargetAssignment(hamburg, type("fighter"), 4, AirCover.over(hamburg))));
   }
@@ -211,7 +212,7 @@ class Request46Test {
     final List<String> enemy =
         sections.get(AirBattleSummaryPanel.ENEMY_LOSSES).stream().map(Row::place).toList();
     assertThat(enemy.get(0), is("Hamburg"));
-    assertThat(enemy, hasItem("Kiev"));
+    assertThat(enemy, hasItem("Lwow"));
     assertThat(german.badges().get("Hamburg"), is("1 of yours damaged"));
     assertThat(
         sections.get(AirBattleSummaryPanel.NEUTRAL_LOSSES).stream().map(Row::place).toList(),

@@ -50,40 +50,41 @@ class AirBasesTest {
 
   @Test
   void rangeEightTargetFiveLandingThreeIsLegal() {
-    final Territory lwow = t(data, "Lwow");
+    // draft 102: Kiev is 5 from Hamburg (Lwow is now 4), Cracow 3
+    final Territory kiev = t(data, "Kiev");
     final Territory hamburg = t(data, "Hamburg");
-    lwow.setOwner(germans);
-    t(data, "Silesia").setOwner(germans);
-    final Unit medium = add(data, lwow, germans, "mediumBomber", 1).get(0);
+    kiev.setOwner(germans);
+    t(data, "Cracow").setOwner(germans);
+    final Unit medium = add(data, kiev, germans, "mediumBomber", 1).get(0);
     assertThat(AirRange.range(medium.getType(), germans), is(8));
-    assertThat(AirBases.distance(germans, lwow, hamburg, 20), is(OptionalInt.of(5)));
-    assertThat(AirBases.distance(germans, hamburg, t(data, "Silesia"), 20), is(OptionalInt.of(3)));
-    assertThat(AirBases.flightProblem(medium, lwow, hamburg), is(Optional.empty()));
+    assertThat(AirBases.distance(germans, kiev, hamburg, 20), is(OptionalInt.of(5)));
+    assertThat(AirBases.distance(germans, hamburg, t(data, "Cracow"), 20), is(OptionalInt.of(3)));
+    assertThat(AirBases.flightProblem(medium, kiev, hamburg), is(Optional.empty()));
     assertThat(
-        AirBases.landingNote(new Flight(medium, hamburg, 3)), is("lands at Silesia, 0 left"));
+        AirBases.landingNote(new Flight(medium, hamburg, 3)), is("lands at Cracow, 0 left"));
   }
 
   @Test
   void rangeEightTargetFiveLandingFourIsRefusedWithTheReason() {
-    final Territory lwow = t(data, "Lwow");
+    final Territory kiev = t(data, "Kiev");
     final Territory hamburg = t(data, "Hamburg");
-    lwow.setOwner(germans);
-    t(data, "Warsaw").setOwner(germans);
-    final Unit medium = add(data, lwow, germans, "mediumBomber", 1).get(0);
-    assertThat(AirBases.distance(germans, hamburg, t(data, "Warsaw"), 20), is(OptionalInt.of(4)));
-    final String problem = AirBases.flightProblem(medium, lwow, hamburg).orElseThrow();
+    kiev.setOwner(germans);
+    t(data, "Radom").setOwner(germans);
+    final Unit medium = add(data, kiev, germans, "mediumBomber", 1).get(0);
+    assertThat(AirBases.distance(germans, hamburg, t(data, "Radom"), 20), is(OptionalInt.of(4)));
+    final String problem = AirBases.flightProblem(medium, kiev, hamburg).orElseThrow();
     assertThat(problem, containsString("Nowhere to land within 3 steps of Hamburg"));
-    assertThat(problem, containsString("nearest: Warsaw, 4 steps"));
+    assertThat(problem, containsString("nearest: Radom, 4 steps"));
   }
 
   @Test
   void targetBeyondTheRangeIsRefused() {
-    final Territory lwow = t(data, "Lwow");
-    lwow.setOwner(germans);
-    final Unit fighter = add(data, lwow, germans, "fighter", 1).get(0);
+    final Territory kiev = t(data, "Kiev");
+    kiev.setOwner(germans);
+    final Unit fighter = add(data, kiev, germans, "fighter", 1).get(0);
     final String problem =
-        AirBases.flightProblem(fighter, lwow, t(data, "Hamburg")).orElseThrow();
-    assertThat(problem, is("Hamburg is 5 steps from Lwow; fighters fly 3."));
+        AirBases.flightProblem(fighter, kiev, t(data, "Hamburg")).orElseThrow();
+    assertThat(problem, is("Hamburg is 5 steps from Kiev; fighters fly 3."));
   }
 
   /** Request 38 test 2: range 4, target 3 away, a carrier that can move 2 toward it. */

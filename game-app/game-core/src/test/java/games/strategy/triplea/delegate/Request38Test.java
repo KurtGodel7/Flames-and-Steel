@@ -448,24 +448,25 @@ class Request38Test {
   @Test
   void aLandingSpotCapturedDuringTheRoundMeansTheAircraftIsLost() {
     cleanBoard();
-    final Territory lwow = t("Lwow");
-    final Territory silesia = t("Silesia");
-    lwow.setOwner(germans);
-    silesia.setOwner(germans);
+    // draft 102: Kiev is 5 from Hamburg and Cracow 3 (Lwow is now 4, Silesia 2)
+    final Territory kiev = t("Kiev");
+    final Territory cracow = t("Cracow");
+    kiev.setOwner(germans);
+    cracow.setOwner(germans);
     add(hamburg, british, "infantry", 1);
-    add(lwow, germans, "mediumBomber", 1);
+    add(kiev, germans, "mediumBomber", 1);
     final AirStageRunner stages =
         new AirStageRunner(data)
-            .bombers(germans, a(lwow, type("mediumBomber"), 1, land(hamburg)))
+            .bombers(germans, a(kiev, type("mediumBomber"), 1, land(hamburg)))
             .run();
     assertThat(stages.problems(), is(empty()));
     assertThat(over(hamburg, germans, "mediumBomber"), is(1));
-    // Silesia (3 from Hamburg) falls; Lwow (5) is beyond the 3 left
-    silesia.setOwner(british);
+    // Cracow (3 from Hamburg) falls; Kiev (5) is beyond the 3 left
+    cracow.setOwner(british);
     stages.planesHome();
     assertThat(AirBases.airborneOver(germans, hamburg).size(), is(0));
-    assertThat(count(lwow, germans, "mediumBomber"), is(0));
-    assertThat(count(silesia, germans, "mediumBomber"), is(0));
+    assertThat(count(kiev, germans, "mediumBomber"), is(0));
+    assertThat(count(cracow, germans, "mediumBomber"), is(0));
   }
 
   @Test
@@ -577,6 +578,9 @@ class Request38Test {
     final Territory next =
         data.getMap().getNeighbors(lwow).stream().filter(n -> !n.isWater()).findFirst().orElseThrow();
     next.setOwner(germans);
+    // draft 102 has German aircraft on nearby bases; with all land British they would move here
+    // too, so only these two are on the map
+    BasedMap.clear(data, germans);
     add(lwow, germans, "fighter", 2);
     // Lwow stays British (captured): the fighters must move; nobody answers, so the default
     games.strategy.triplea.delegate.air.AirBaseLoss.freeMoves(
