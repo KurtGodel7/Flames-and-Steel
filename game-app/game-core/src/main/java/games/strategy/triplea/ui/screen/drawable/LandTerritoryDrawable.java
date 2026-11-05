@@ -35,7 +35,7 @@ public class LandTerritoryDrawable extends TerritoryDrawable {
       final float saturation) {
     final Color territoryColor =
         (TerritoryAttachment.get(territory).map(TerritoryAttachment::getIsImpassable).orElse(false))
-            ? mapData.impassableColor()
+            ? mapData.impassableColor(territory)
             : mapData.getPlayerColor(territory.getOwner().getName());
 
     final float[] values =

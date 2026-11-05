@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.awt.Color;
 import java.util.Properties;
+import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -153,6 +154,58 @@ final class PlayerColorsTest {
       final Color impassable = playerColors.getImpassableColor();
 
       assertThat(impassable, is(PlayerColors.DEFAULT_IMPASSABLE_COLOR));
+    }
+  }
+
+  @Nested
+  class ImpassableOverrides {
+    private static final Color MARSH = new Color(0x66753A);
+    private static final Color BEIGE = new Color(0xD6CFBA);
+
+    private PlayerColors colors(final String overrides) {
+      final Properties properties = new Properties();
+      properties.put(
+          PlayerColors.PROPERTY_COLOR_PREFIX + PlayerColors.PLAYER_NAME_IMPASSABLE, "D6CFBA");
+      if (overrides != null) {
+        properties.put(PlayerColors.PROPERTY_IMPASSABLE_OVERRIDES, overrides);
+      }
+      return new PlayerColors(
+          properties, Set.of("Pripet Marshes - Impassable", "Pamirs - Impassable", "Odd: name"));
+    }
+
+    @Test
+    void listedTerritoryGetsItsOwnColorOthersKeepTheMapColor() {
+      final var playerColors = colors("Pripet Marshes - Impassable:66753A");
+
+      assertThat(playerColors.getImpassableColor("Pripet Marshes - Impassable"), is(MARSH));
+      assertThat(playerColors.getImpassableColor("Pamirs - Impassable"), is(BEIGE));
+    }
+
+    @Test
+    void withoutTheKeyEveryImpassableTerritoryUsesTheMapColor() {
+      final var playerColors = colors(null);
+
+      assertThat(playerColors.getImpassableColor("Pripet Marshes - Impassable"), is(BEIGE));
+      assertThat(playerColors.getImpassableColor("Pamirs - Impassable"), is(BEIGE));
+    }
+
+    @Test
+    void severalPairsSpacesAndColonsInNames() {
+      final var playerColors = colors(" Pripet Marshes - Impassable : 66753A , Odd: name:000000 ");
+
+      assertThat(playerColors.getImpassableColor("Pripet Marshes - Impassable"), is(MARSH));
+      assertThat(playerColors.getImpassableColor("Odd: name"), is(Color.BLACK));
+    }
+
+    @Test
+    void unknownNamesAndBadColorsAreIgnored() {
+      final var playerColors =
+          colors(
+              "Atlantis:000000, Pamirs - Impassable:GREEN, no colon, Pripet Marshes - Impassable:66753A");
+
+      assertThat(playerColors.getImpassableColor("Atlantis"), is(BEIGE));
+      assertThat(playerColors.getImpassableColor("Pamirs - Impassable"), is(BEIGE));
+      assertThat(playerColors.getImpassableColor("Pripet Marshes - Impassable"), is(MARSH));
     }
   }
 }

@@ -191,7 +191,7 @@ public class MapData {
       log.warn("Failed to initialize map data: {}", ex.getMessage(), ex);
     }
 
-    playerColors = new PlayerColors(mapProperties);
+    playerColors = new PlayerColors(mapProperties, Set.copyOf(polys.keySet()));
     vcImage = loader.loadImage("misc/vc.png").orElse(null);
     blockadeImage = loader.loadImage("misc/blockade.png").orElse(null);
     errorImage = loader.loadImage("misc/error.gif").orElse(null);
@@ -492,6 +492,14 @@ public class MapData {
   /** returns the color for impassable territories. */
   public Color impassableColor() {
     return playerColors.getImpassableColor();
+  }
+
+  /**
+   * Returns the color for one impassable territory: its own color from {@code
+   * color.impassable.overrides} in map.properties, otherwise {@link #impassableColor()}.
+   */
+  public Color impassableColor(final Territory territory) {
+    return playerColors.getImpassableColor(territory.getName());
   }
 
   /**
