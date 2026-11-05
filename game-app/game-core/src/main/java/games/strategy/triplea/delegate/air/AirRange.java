@@ -27,7 +27,11 @@ public class AirRange {
 
   /** The nation's own land, or allied land where the relationship lets its aircraft land. */
   public static boolean isLandLandingSpot(final GamePlayer player, final Territory t) {
-    if (t.isWater() || AirBases.isAirborneTerritory(t) || t.getOwner().isNull()) {
+    // request 56: never land on impassable land, even where aircraft may fly over it
+    if (t.isWater()
+        || AirBases.isAirborneTerritory(t)
+        || t.getOwner().isNull()
+        || AirBases.isImpassableLand(t)) {
       return false;
     }
     if (t.getOwner().equals(player)) {

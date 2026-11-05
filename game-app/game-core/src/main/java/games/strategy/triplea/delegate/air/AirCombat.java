@@ -100,7 +100,8 @@ public class AirCombat {
    */
   public static List<Target> targetsIn(final GamePlayer player, final Territory t) {
     final List<Target> targets = new ArrayList<>();
-    if (AirBases.isAirborneTerritory(t)) {
+    // request 56: aircraft may fly over some impassable land but never fight there
+    if (AirBases.isAirborneTerritory(t) || AirBases.isImpassableLand(t)) {
       return targets;
     }
     if (t.isWater()) {
@@ -259,8 +260,8 @@ public class AirCombat {
 
   /**
    * Request 31 (Window): how much interceptors lose against this group of bombers: the largest
-   * "interceptionPenaltyAgainst" any of its bombers' owners has for a bomber type in the group
-   * (one British strategic bomber covers the American bombers with it); 0 if none.
+   * "interceptionPenaltyAgainst" any of its bombers' owners has for a bomber type in the group (one
+   * British strategic bomber covers the American bombers with it); 0 if none.
    */
   public static int interceptionPenalty(final Collection<Unit> bombers) {
     int penalty = 0;
@@ -292,7 +293,9 @@ public class AirCombat {
    */
   public static int airDefensePower(final Unit unit) {
     final int extraRolls =
-        unit.getData().getTechTracker().getBomberAirDefenseRollsBonus(unit.getOwner(), unit.getType());
+        unit.getData()
+            .getTechTracker()
+            .getBomberAirDefenseRollsBonus(unit.getOwner(), unit.getType());
     return AirUnitAttachment.get(unit.getType())
         .map(a -> airDefenseValue(unit) * Math.max(0, a.getAirDefenseRolls() + extraRolls))
         .orElse(0);
@@ -352,10 +355,11 @@ public class AirCombat {
 
   /**
    * Request 39: the value of the bomber's extra die against this kind of target, for this nation:
-   * land units (land bonus) or surface ships (naval bonus); none against submarines or in
-   * strategic bombing.
+   * land units (land bonus) or surface ships (naval bonus); none against submarines or in strategic
+   * bombing.
    */
-  public static int strikeBonus(final UnitType type, final GamePlayer owner, final TargetKind kind) {
+  public static int strikeBonus(
+      final UnitType type, final GamePlayer owner, final TargetKind kind) {
     final var bonusKind =
         switch (kind) {
           case LAND -> games.strategy.triplea.delegate.TechTracker.StrikeBonusKind.LAND;
@@ -416,8 +420,8 @@ public class AirCombat {
 
   /**
    * Request 43 (Combat Air Patrol): the nation's carriers in the sea zone that fire at these enemy
-   * bombers in the interception step (owner has the tech, at war with a bomber's owner). They
-   * then never fire back after a strike.
+   * bombers in the interception step (owner has the tech, at war with a bomber's owner). They then
+   * never fire back after a strike.
    */
   public static List<Unit> patrolCarriers(final Territory seaZone, final Collection<Unit> bombers) {
     if (!seaZone.isWater() || bombers.isEmpty()) {
@@ -515,8 +519,8 @@ public class AirCombat {
 
   /**
    * Request 30: in the air phase nobody chooses casualties. Each hit goes to a unit already damaged
-   * if there is one (sticky hits: damaged units first, and a unit once hit takes the next hits until
-   * it is destroyed); otherwise a unit picked at random among the targets. Damage is marked,
+   * if there is one (sticky hits: damaged units first, and a unit once hit takes the next hits
+   * until it is destroyed); otherwise a unit picked at random among the targets. Damage is marked,
    * destroyed units are removed, and the (quiet) battle view is told.
    *
    * @param step the battle window step the casualties belong to
@@ -596,7 +600,9 @@ public class AirCombat {
         || enemies.stream().anyMatch(AirBases::isAirborne);
   }
 
-  /** Whether the air phase battle shown at this place is a dogfight (shown at the airborne place). */
+  /**
+   * Whether the air phase battle shown at this place is a dogfight (shown at the airborne place).
+   */
   public static boolean isDogfight(final Territory location) {
     return location != null && AirBases.isAirborneTerritory(location);
   }

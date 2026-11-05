@@ -49,15 +49,17 @@ import lombok.experimental.UtilityClass;
 public class AirBases {
   public static final String AIRBORNE_TERRITORY = "FS Airborne Territory";
   public static final String DEFAULT_AIRBORNE = "Air - Airborne";
-  /** How many ways of placing the carriers the landing check tries before trusting a simpler one. */
+
+  /**
+   * How many ways of placing the carriers the landing check tries before trusting a simpler one.
+   */
   private static final int SEARCH_LIMIT = 20_000;
 
   /** The hidden territory airborne aircraft are kept in, if the map has one. */
   public static Optional<Territory> airborne(final GameState data) {
     return Optional.ofNullable(
         data.getMap()
-            .getTerritoryOrNull(
-                data.getProperties().get(AIRBORNE_TERRITORY, DEFAULT_AIRBORNE)));
+            .getTerritoryOrNull(data.getProperties().get(AIRBORNE_TERRITORY, DEFAULT_AIRBORNE)));
   }
 
   /** Whether the game puts aircraft on the map (request 38): it has the airborne territory. */
@@ -88,8 +90,8 @@ public class AirBases {
     return airborne(over.getData())
         .map(
             a ->
-                a.getUnitCollection().getMatches(
-                    u -> u.isOwnedBy(player) && over.equals(u.getFlightOver())))
+                a.getUnitCollection()
+                    .getMatches(u -> u.isOwnedBy(player) && over.equals(u.getFlightOver())))
         .orElse(List.of());
   }
 
@@ -100,7 +102,8 @@ public class AirBases {
       if (isAirborneTerritory(t)) {
         continue;
       }
-      final List<Unit> here = t.getUnitCollection().getMatches(u -> u.isOwnedBy(player) && isAircraft(u));
+      final List<Unit> here =
+          t.getUnitCollection().getMatches(u -> u.isOwnedBy(player) && isAircraft(u));
       if (!here.isEmpty()) {
         result.put(t, here);
       }
@@ -144,14 +147,16 @@ public class AirBases {
   }
 
   /** Room left on the nation's carriers in the sea zone, for aircraft of this type. */
-  public static int carrierRoom(final GamePlayer player, final Territory seaZone, final UnitType type) {
+  public static int carrierRoom(
+      final GamePlayer player, final Territory seaZone, final UnitType type) {
     if (!seaZone.isWater() || !canUseCarriers(type)) {
       return 0;
     }
     // jets need fleet carriers; other aircraft may take any room left
     int fleetRoom = 0;
     int otherRoom = 0;
-    for (final Unit c : seaZone.getUnitCollection().getMatches(u -> u.isOwnedBy(player) && isCarrier(u))) {
+    for (final Unit c :
+        seaZone.getUnitCollection().getMatches(u -> u.isOwnedBy(player) && isCarrier(u))) {
       if (AirUnitAttachment.isFleetCarrier(c)) {
         fleetRoom += c.getUnitAttachment().getCarrierCapacity();
       } else {
@@ -160,7 +165,8 @@ public class AirBases {
     }
     int jets = 0;
     int others = 0;
-    for (final Unit u : seaZone.getUnitCollection().getMatches(u -> u.isOwnedBy(player) && isAircraft(u))) {
+    for (final Unit u :
+        seaZone.getUnitCollection().getMatches(u -> u.isOwnedBy(player) && isAircraft(u))) {
       if (AirUnitAttachment.isFleetCarrierOnly(u)) {
         jets += u.getUnitAttachment().getCarrierCost();
       } else {
@@ -176,8 +182,11 @@ public class AirBases {
     return Math.max(0, jet ? freeFleet : freeFleet + freeOther);
   }
 
-  /** Whether an aircraft of this type could land in the territory now: a land base or carrier room. */
-  public static boolean canLandNow(final GamePlayer player, final Territory t, final UnitType type) {
+  /**
+   * Whether an aircraft of this type could land in the territory now: a land base or carrier room.
+   */
+  public static boolean canLandNow(
+      final GamePlayer player, final Territory t, final UnitType type) {
     return t.isWater()
         ? carrierRoom(player, t, type) >= type.getUnitAttachment().getCarrierCost()
         : isLandBase(player, t);
@@ -191,8 +200,11 @@ public class AirBases {
     return u -> !bases || !isAircraft(u);
   }
 
-  /** Why these units can't be moved in an ordinary move, or empty: aircraft fly in the air phase. */
-  public static Optional<String> ordinaryMoveProblem(final GameState data, final Collection<Unit> units) {
+  /**
+   * Why these units can't be moved in an ordinary move, or empty: aircraft fly in the air phase.
+   */
+  public static Optional<String> ordinaryMoveProblem(
+      final GameState data, final Collection<Unit> units) {
     if (!usesBases(data) || units.stream().noneMatch(AirBases::isAircraft)) {
       return Optional.empty();
     }
@@ -202,8 +214,8 @@ public class AirBases {
   }
 
   /**
-   * The nation's aircraft in the sea zone that sail with these carriers: the carriers carry as
-   * many as they hold, jets on fleet carriers first.
+   * The nation's aircraft in the sea zone that sail with these carriers: the carriers carry as many
+   * as they hold, jets on fleet carriers first.
    */
   public static List<Unit> carriedWith(
       final GamePlayer player, final Territory zone, final Collection<Unit> moving) {
@@ -225,7 +237,8 @@ public class AirBases {
         new ArrayList<>(
             zone.getUnitCollection()
                 .getMatches(u -> u.isOwnedBy(player) && isAircraft(u) && !moving.contains(u)));
-    planes.sort(java.util.Comparator.comparing((Unit u) -> !AirUnitAttachment.isFleetCarrierOnly(u)));
+    planes.sort(
+        java.util.Comparator.comparing((Unit u) -> !AirUnitAttachment.isFleetCarrierOnly(u)));
     final List<Unit> result = new ArrayList<>();
     for (final Unit u : planes) {
       final int cost = u.getUnitAttachment().getCarrierCost();
@@ -261,7 +274,8 @@ public class AirBases {
     }
     int fleet = 0;
     int other = 0;
-    final List<Unit> carriers = new ArrayList<>(units.stream().filter(AirBases::isCarrier).toList());
+    final List<Unit> carriers =
+        new ArrayList<>(units.stream().filter(AirBases::isCarrier).toList());
     carriers.addAll(zone.getUnitCollection().getMatches(u -> u.isOwnedBy(player) && isCarrier(u)));
     for (final Unit c : carriers) {
       if (AirUnitAttachment.isFleetCarrier(c)) {
@@ -276,7 +290,8 @@ public class AirBases {
     all.addAll(zone.getUnitCollection().getMatches(u -> u.isOwnedBy(player) && isAircraft(u)));
     for (final Unit u : all) {
       if (!canUseCarriers(u.getType())) {
-        return Optional.of(AirStage.typeName(u.getType()) + " can't be placed at sea: no carrier takes it.");
+        return Optional.of(
+            AirStage.typeName(u.getType()) + " can't be placed at sea: no carrier takes it.");
       }
       if (AirUnitAttachment.isFleetCarrierOnly(u)) {
         jets += u.getUnitAttachment().getCarrierCost();
@@ -323,20 +338,65 @@ public class AirBases {
 
   // ---- distances
 
-  /** Whether the nation's aircraft may fly over the territory on the way somewhere else. */
+  /**
+   * Request 56: game property listing impassable territories aircraft may fly over (never end in),
+   * separated by colons, e.g. "Pripet Marshes - Impassable".
+   */
+  public static final String IMPASSABLE_AIR_FLYOVER = "FS Impassable Air Flyover";
+
+  /** The impassable territories named in {@value #IMPASSABLE_AIR_FLYOVER}. */
+  public static Set<String> impassableFlyover(final GameState data) {
+    final Object value = data.getProperties().get(IMPASSABLE_AIR_FLYOVER);
+    if (value == null) {
+      return Set.of();
+    }
+    final Set<String> result = new HashSet<>();
+    for (final String name : value.toString().split(":")) {
+      if (!name.isBlank()) {
+        result.add(name.trim());
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Whether the nation's aircraft may fly over the territory on the way somewhere else. An
+   * impassable territory listed in {@value #IMPASSABLE_AIR_FLYOVER} counts as open sky (request
+   * 56); it is never an end: no base, no target ({@link #isImpassableLand}).
+   */
   public static Predicate<Territory> flyOver(final GamePlayer player) {
     final GameState data = player.getData();
     final boolean neutrals =
         Properties.getNeutralFlyoverAllowed(data.getProperties())
             && !Properties.getNeutralsImpassable(data.getProperties());
     final Predicate<Territory> stock = Matches.airCanFlyOver(player, neutrals);
-    return t -> !isAirborneTerritory(t) && stock.test(t);
+    final Set<String> overImpassable = impassableFlyover(data);
+    return t ->
+        !isAirborneTerritory(t)
+            && (stock.test(t)
+                || (overImpassable.contains(t.getName())
+                    && isImpassableLand(t)
+                    && mayFlyOverOwner(player, t)));
+  }
+
+  /** Impassable land: no unit may end a move, land or fight there. */
+  public static boolean isImpassableLand(final Territory t) {
+    return Matches.territoryIsImpassable().test(t);
+  }
+
+  /** A listed impassable territory with an owner keeps the owner's "may fly over" rule. */
+  private static boolean mayFlyOverOwner(final GamePlayer player, final Territory t) {
+    return t.getOwner().isNull()
+        || player
+            .getData()
+            .getRelationshipTracker()
+            .canMoveAirUnitsOverOwnedLand(player, t.getOwner());
   }
 
   /**
    * Steps from the territory to every territory within {@code max} steps, for the nation's
-   * aircraft: the start and the end may be anything, every territory between must be one it may
-   * fly over.
+   * aircraft: the start and the end may be anything, every territory between must be one it may fly
+   * over.
    */
   public static Map<Territory, Integer> distances(
       final GamePlayer player, final Territory from, final int max) {
@@ -364,8 +424,8 @@ public class AirBases {
 
   /**
    * Request 42: the shortest way the nation's aircraft fly from one territory to another (both
-   * included), by the rules of {@link #distances}, if within {@code max} steps; for drawing the stock
-   * route arrow.
+   * included), by the rules of {@link #distances}, if within {@code max} steps; for drawing the
+   * stock route arrow.
    */
   public static Optional<List<Territory>> path(
       final GamePlayer player, final Territory from, final Territory to, final int max) {
@@ -408,9 +468,8 @@ public class AirBases {
   }
 
   /**
-   * The sea zones this carrier could end the round in: those its movement reaches through sea
-   * zones its owner may enter (canals as for ships). Enemy ships are ignored: they may be gone by
-   * then.
+   * The sea zones this carrier could end the round in: those its movement reaches through sea zones
+   * its owner may enter (canals as for ships). Enemy ships are ignored: they may be gone by then.
    */
   public static Set<Territory> carrierReach(final Unit carrier, final Territory at) {
     final GamePlayer owner = carrier.getOwner();
@@ -569,10 +628,11 @@ public class AirBases {
   }
 
   /**
-   * The range an aircraft flying from its base to the target has left there, or empty if the
-   * target is beyond its range.
+   * The range an aircraft flying from its base to the target has left there, or empty if the target
+   * is beyond its range.
    */
-  public static OptionalInt rangeLeftAt(final Unit plane, final Territory from, final Territory target) {
+  public static OptionalInt rangeLeftAt(
+      final Unit plane, final Territory from, final Territory target) {
     final int range = AirRange.range(plane.getType(), plane.getOwner());
     final OptionalInt out = distance(plane.getOwner(), from, target, range);
     return out.isPresent() ? OptionalInt.of(range - out.getAsInt()) : OptionalInt.empty();
@@ -698,7 +758,8 @@ public class AirBases {
       if (!t.isWater()) {
         continue;
       }
-      for (final Unit c : t.getUnitCollection().getMatches(u -> u.isOwnedBy(player) && isCarrier(u))) {
+      for (final Unit c :
+          t.getUnitCollection().getMatches(u -> u.isOwnedBy(player) && isCarrier(u))) {
         result.put(c, carrierReach(c, t));
       }
     }
@@ -868,7 +929,9 @@ public class AirBases {
         canUse.add(
             c ->
                 o.containsKey(c)
-                    && (zones == null ? true : zones.get(c) != null && o.get(c).contains(zones.get(c))));
+                    && (zones == null
+                        ? true
+                        : zones.get(c) != null && o.get(c).contains(zones.get(c))));
       }
       for (final Map.Entry<Territory, List<Unit>> e : staying.entrySet()) {
         for (final Unit u : e.getValue()) {
