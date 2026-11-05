@@ -15,6 +15,7 @@ import games.strategy.triplea.delegate.battle.steps.change.RemoveUnprotectedUnit
 import games.strategy.triplea.delegate.battle.steps.change.RemoveUnprotectedUnitsGeneral;
 import games.strategy.triplea.delegate.battle.steps.change.suicide.RemoveFirstStrikeSuicide;
 import games.strategy.triplea.delegate.battle.steps.change.suicide.RemoveGeneralSuicide;
+import games.strategy.triplea.delegate.battle.steps.fire.AmphibiousHoldFire;
 import games.strategy.triplea.delegate.battle.steps.fire.NavalBombardment;
 import games.strategy.triplea.delegate.battle.steps.fire.NavalDestroyerFire;
 import games.strategy.triplea.delegate.battle.steps.fire.NavalKeepDestroyerCasualties;
@@ -63,6 +64,7 @@ public interface BattleStep extends IExecutable {
     NAVAL_DESTROYERS_OFFENSIVE,
     NAVAL_DESTROYERS_DEFENSIVE,
     NAVAL_KEEP_DESTROYER_CASUALTIES,
+    AMPHIBIOUS_HOLD_FIRE,
     FIRST_STRIKE_OFFENSIVE,
     FIRST_STRIKE_DEFENSIVE,
     FIRST_STRIKE_REMOVE_CASUALTIES,
@@ -117,6 +119,7 @@ public interface BattleStep extends IExecutable {
         new NavalDestroyerFire(battleState, battleActions, BattleState.Side.OFFENSE),
         new NavalDestroyerFire(battleState, battleActions, BattleState.Side.DEFENSE),
         new NavalKeepDestroyerCasualties(battleState, battleActions),
+        new AmphibiousHoldFire(battleState, battleActions),
         new OffensiveFirstStrike(battleState, battleActions),
         new DefensiveFirstStrike(battleState, battleActions),
         new ClearFirstStrikeCasualties(battleState, battleActions),

@@ -1,6 +1,5 @@
 package games.strategy.triplea.ui;
 
-import games.strategy.triplea.formatter.PlayerNames;
 import static games.strategy.triplea.image.UnitImageFactory.ImageKey;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -21,6 +20,7 @@ import games.strategy.triplea.delegate.battle.IBattle.BattleType;
 import games.strategy.triplea.delegate.battle.casualty.CasualtyUtil;
 import games.strategy.triplea.delegate.data.CasualtyDetails;
 import games.strategy.triplea.delegate.data.CasualtyList;
+import games.strategy.triplea.formatter.PlayerNames;
 import games.strategy.triplea.image.HitPointBar;
 import games.strategy.triplea.settings.ClientSetting;
 import games.strategy.triplea.ui.panels.map.MapPanel;
@@ -744,6 +744,14 @@ public class BattleDisplay extends JPanel {
 
   void listBattle(final List<String> steps) {
     this.steps.listBattle(steps);
+    // Flames and Steel (request 55): steps are listed each round; round 1 has the "landing from
+    // the sea hold fire" step while attackers landing from the sea hold fire
+    attackerModel.setLandingHoldsFire(
+        steps.stream()
+            .anyMatch(
+                step ->
+                    step.endsWith(
+                        games.strategy.triplea.delegate.battle.AmphibiousLanding.STEP_SUFFIX)));
   }
 
   static JComponent getPlayerComponent(final GamePlayer gamePlayer) {

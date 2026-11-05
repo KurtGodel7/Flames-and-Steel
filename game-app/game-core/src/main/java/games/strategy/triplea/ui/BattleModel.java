@@ -46,6 +46,19 @@ final class BattleModel extends DefaultTableModel {
   private BattleModel enemyBattleModel = null;
   // Flames and Steel: the side's total power at the last refresh, for "about 1.3 hits a round"
   private volatile int lastTotalPower;
+  // Flames and Steel (request 55): this round, attackers landing from the sea hold fire
+  private volatile boolean landingHoldsFire;
+
+  /**
+   * Request 55: whether this round's attackers landing from the sea hold fire (round 1). They are
+   * then shown in the blank column with a "Landing" badge.
+   */
+  void setLandingHoldsFire(final boolean landingHoldsFire) {
+    if (this.landingHoldsFire != landingHoldsFire) {
+      this.landingHoldsFire = landingHoldsFire;
+      refresh();
+    }
+  }
 
   /** "British: 2 battleships 3/5, 5/5; 8 HP left; about 1.3 hits a round". */
   String summary(final GamePlayer player) {
@@ -122,6 +135,10 @@ final class BattleModel extends DefaultTableModel {
       columns.add(i, new ArrayList<>());
     }
     final List<Unit> units = new ArrayList<>(this.units);
+    // request 55: attackers landing from the sea roll nothing and give no support in round 1
+    final java.util.Set<Unit> landing = landingUnits(units);
+    final List<Unit> firing = new ArrayList<>(units);
+    firing.removeAll(landing);
     final PowerStrengthAndRolls unitPowerAndRollsMap;
     final boolean isAirPreBattleOrPreRaid = battleType.isAirBattle();
     // Flames and Steel air phase battles show their own values (dogfight, strike, AA, fire back)
@@ -140,7 +157,7 @@ final class BattleModel extends DefaultTableModel {
         combatValue =
             CombatValueBuilder.mainCombatValue()
                 .enemyUnits(new ArrayList<>(enemyBattleModel.getUnits()))
-                .friendlyUnits(units)
+                .friendlyUnits(firing)
                 .side(side)
                 .gameSequence(gameData.getSequence())
                 .supportAttachments(gameData.getUnitTypeList().getSupportRules())
@@ -149,7 +166,7 @@ final class BattleModel extends DefaultTableModel {
                 .territoryEffects(territoryEffects)
                 .build();
       }
-      unitPowerAndRollsMap = PowerStrengthAndRolls.build(units, combatValue);
+      unitPowerAndRollsMap = PowerStrengthAndRolls.build(firing, combatValue);
       lastTotalPower = unitPowerAndRollsMap.calculateTotalPower();
       if (airBattleEnemies == null && isAirPreBattleOrPreRaid) {
         final List<Unit> enemies =
@@ -178,6 +195,10 @@ final class BattleModel extends DefaultTableModel {
         shift.add(new java.util.TreeMap<>());
       }
       for (final Unit current : category.getUnits()) {
+        if (landing.contains(current)) {
+          shift.get(0).merge(TableData.LANDING, 1, Integer::sum);
+          continue;
+        }
         final int strength =
             airZoneStrength != null
                 ? airZoneStrength.applyAsInt(current)
@@ -223,6 +244,27 @@ final class BattleModel extends DefaultTableModel {
     }
   }
 
+  /** Request 55: the attackers shown as landing from the sea (holding fire) this round. */
+  private java.util.Set<Unit> landingUnits(final Collection<Unit> units) {
+    if (!landingHoldsFire
+        || side != BattleState.Side.OFFENSE
+        || battleType.isAirBattle()
+        || location == null
+        || location.isWater()) {
+      return java.util.Set.of();
+    }
+    final java.util.Set<String> exempt =
+        games.strategy.triplea.delegate.battle.AmphibiousLanding.exemptTypes(
+            gameData.getProperties());
+    final java.util.Set<Unit> result = new java.util.HashSet<>();
+    for (final Unit unit : units) {
+      if (games.strategy.triplea.delegate.battle.AmphibiousLanding.isLanding(unit, exempt)) {
+        result.add(unit);
+      }
+    }
+    return result;
+  }
+
   /**
    * Request 25: for each ship supported by other ships, the support in words, e.g. "+1 Battleship"
    * or "+1 Yamato Battleship".
@@ -241,7 +283,8 @@ final class BattleModel extends DefaultTableModel {
                   bySupporter
                       .computeIfAbsent(unit, k -> new java.util.TreeMap<>())
                       .merge(
-                          games.strategy.triplea.delegate.battle.casualty.StickyCasualtyChoice.displayName(supporter.getType()),
+                          games.strategy.triplea.delegate.battle.casualty.StickyCasualtyChoice
+                              .displayName(supporter.getType()),
                           supported.getInt(unit),
                           Integer::sum);
                 }
@@ -264,6 +307,8 @@ final class BattleModel extends DefaultTableModel {
 
   static final class TableData {
     static final TableData NULL = new TableData();
+    // request 55: the support mark of attackers landing from the sea (holding fire this round)
+    static final String LANDING = "Landing";
     private GamePlayer player;
     private UnitType unitType;
     private int count;
@@ -297,7 +342,13 @@ final class BattleModel extends DefaultTableModel {
           HitPointBar.withBar(
               uiContext.getUnitImageFactory().getIcon(imageKey), hitPoints, hits, 1.0);
       // request 25: supported ships carry a green "+1" badge (the tooltip says from what)
-      this.icon = support.isEmpty() ? plain : withSupportBadge(plain, support.split(" ")[0]);
+      // request 55: units landing from the sea carry a grey "Landing" badge
+      this.icon =
+          support.isEmpty()
+              ? plain
+              : LANDING.equals(support)
+                  ? withBadge(plain, LANDING, new java.awt.Color(0x60, 0x60, 0x60))
+                  : withSupportBadge(plain, support.split(" ")[0]);
       this.hits = hits;
       this.hitPoints = hitPoints;
       this.uiContext = uiContext;
@@ -305,6 +356,12 @@ final class BattleModel extends DefaultTableModel {
 
     /** The icon with a small green badge, e.g. "+1", in its top left corner. */
     static ImageIcon withSupportBadge(final ImageIcon icon, final String badge) {
+      return withBadge(icon, badge, new java.awt.Color(0x2E, 0x7D, 0x32));
+    }
+
+    /** The icon with a small badge of the given colour in its top left corner. */
+    static ImageIcon withBadge(
+        final ImageIcon icon, final String badge, final java.awt.Color background) {
       final int width = Math.max(1, icon.getIconWidth());
       final int height = Math.max(1, icon.getIconHeight());
       final java.awt.image.BufferedImage image =
@@ -318,7 +375,7 @@ final class BattleModel extends DefaultTableModel {
       final java.awt.FontMetrics fm = g.getFontMetrics();
       final int w = fm.stringWidth(badge) + 8;
       final int h = fm.getHeight();
-      g.setColor(new java.awt.Color(0x2E, 0x7D, 0x32));
+      g.setColor(background);
       g.fillRoundRect(0, 0, w, h, 8, 8);
       g.setColor(java.awt.Color.WHITE);
       g.drawString(badge, 4, fm.getAscent());
@@ -341,7 +398,18 @@ final class BattleModel extends DefaultTableModel {
         stamp.setIcon(icon);
         MapUnitTooltipManager.setUnitTooltip(
             stamp, unitType, player, count, hits, hitPoints, uiContext);
-        if (!support.isEmpty()) {
+        if (LANDING.equals(support)) {
+          stamp.setToolTipText(
+              "<html><b>Landing from the sea:</b> "
+                  + (count == 1 ? "this unit holds" : "these units hold")
+                  + " fire this round and can be taken as casualties. "
+                  + (count == 1 ? "It fires" : "They fire")
+                  + " from round 2.<br>"
+                  + Objects.toString(stamp.getToolTipText(), "")
+                      .replaceFirst("(?i)^<html>", "")
+                      .replaceFirst("(?i)</html>$", "")
+                  + "</html>");
+        } else if (!support.isEmpty()) {
           stamp.setToolTipText(
               "<html><b>"
                   + support
