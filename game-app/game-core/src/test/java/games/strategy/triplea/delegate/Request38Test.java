@@ -13,7 +13,6 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
@@ -72,7 +71,8 @@ class Request38Test {
     }
     london = t("London");
     hamburg = t("Hamburg");
-    data.getProperties().set(AirPriority.PROPERTY, "Russians|British:AmericansPacific:Americans:Chinese");
+    data.getProperties()
+        .set(AirPriority.PROPERTY, "Russians|British:AmericansPacific:Americans:Chinese");
   }
 
   private void war(final GamePlayer a, final GamePlayer b) {
@@ -92,7 +92,8 @@ class Request38Test {
     return data.getUnitTypeList().getUnitTypeOrThrow(name);
   }
 
-  private List<Unit> add(final Territory t, final GamePlayer owner, final String type, final int n) {
+  private List<Unit> add(
+      final Territory t, final GamePlayer owner, final String type, final int n) {
     final List<Unit> units = type(type).create(n, owner);
     addTo(t, units);
     return units;
@@ -245,15 +246,19 @@ class Request38Test {
     add(london, british, "mediumBomber", 5);
     final UnitType medium = type("mediumBomber");
     final Choice four =
-        Choice.of(List.of(a(london, medium, 2, land(hamburg)), a(london, medium, 2, bomb(hamburg))));
-    assertThat(AirStage.problem(british, Stage.BOMBERS, four, Map.of(), Map.of()), is(Optional.empty()));
+        Choice.of(
+            List.of(a(london, medium, 2, land(hamburg)), a(london, medium, 2, bomb(hamburg))));
+    assertThat(
+        AirStage.problem(british, Stage.BOMBERS, four, Map.of(), Map.of()), is(Optional.empty()));
     final Choice fiveStrike =
-        Choice.of(List.of(a(london, medium, 3, land(hamburg)), a(london, medium, 2, bomb(hamburg))));
+        Choice.of(
+            List.of(a(london, medium, 3, land(hamburg)), a(london, medium, 2, bomb(hamburg))));
     assertThat(
         AirStage.problem(british, Stage.BOMBERS, fiveStrike, Map.of(), Map.of()).orElseThrow(),
         containsString("at most 4 bombers"));
     final Choice fiveBomb =
-        Choice.of(List.of(a(london, medium, 2, land(hamburg)), a(london, medium, 3, bomb(hamburg))));
+        Choice.of(
+            List.of(a(london, medium, 2, land(hamburg)), a(london, medium, 3, bomb(hamburg))));
     assertThat(
         AirStage.problem(british, Stage.BOMBERS, fiveBomb, Map.of(), Map.of()).isPresent(),
         is(true));
@@ -270,7 +275,9 @@ class Request38Test {
       stages.bombers(british, a(london, medium, strike, land(hamburg)));
     } else {
       stages.bombers(
-          british, a(london, medium, strike, land(hamburg)), a(london, medium, bomb, bomb(hamburg)));
+          british,
+          a(london, medium, strike, land(hamburg)),
+          a(london, medium, bomb, bomb(hamburg)));
     }
     stages.run();
     assertThat(stages.problems(), is(empty()));
@@ -308,7 +315,8 @@ class Request38Test {
         Map.of(
             british,
             List.of(a(london, medium, 3, land(hamburg)), a(london, medium, 1, bomb(hamburg))));
-    assertThat(AirStage.problem(germans, Stage.FIGHTERS, six, Map.of(), mixed), is(Optional.empty()));
+    assertThat(
+        AirStage.problem(germans, Stage.FIGHTERS, six, Map.of(), mixed), is(Optional.empty()));
   }
 
   // ---- section 12
@@ -337,7 +345,8 @@ class Request38Test {
     data.getProperties().set(AirPriority.ONE_NATION_PER_RAID, true);
     final GamePlayer americans = BasedMap.p(data, "Americans");
     final List<GamePlayer> order = AirPriority.turnOrder(data);
-    final GamePlayer earlier = order.indexOf(british) < order.indexOf(americans) ? british : americans;
+    final GamePlayer earlier =
+        order.indexOf(british) < order.indexOf(americans) ? british : americans;
     final GamePlayer later = earlier == british ? americans : british;
     add(london, british, "strategicBomber", 1);
     add(london, americans, "strategicBomber", 1);
@@ -347,9 +356,7 @@ class Request38Test {
             .bombers(earlier, a(london, type("strategicBomber"), 1, bomb(hamburg)))
             .run();
     // whichever answered first, the later nation was told why and its bomber stayed at home
-    assertThat(
-        stages.problems(),
-        hasItem(containsString(AirPriority.raidText(hamburg, earlier))));
+    assertThat(stages.problems(), hasItem(containsString(AirPriority.raidText(hamburg, earlier))));
     assertThat(over(hamburg, earlier, "strategicBomber"), is(1));
     assertThat(over(hamburg, later, "strategicBomber"), is(0));
     assertThat(count(london, later, "strategicBomber"), is(1));
@@ -450,7 +457,7 @@ class Request38Test {
     cleanBoard();
     // draft 102: Kiev is 5 from Hamburg and Cracow 3 (Lwow is now 4, Silesia 2)
     final Territory kiev = t("Kiev");
-    final Territory cracow = t("Cracow");
+    final Territory cracow = t("Krakow");
     kiev.setOwner(germans);
     cracow.setOwner(germans);
     add(hamburg, british, "infantry", 1);
@@ -500,7 +507,8 @@ class Request38Test {
     // the jet is in the air over the sea zone with 1 step of range left
     final Unit jet = base.getUnitCollection().getMatches(Matches.unitIsAir()).get(0);
     BasedMap.fly(data, target, List.of(jet));
-    data.performChange(ChangeFactory.unitPropertyChange(jet, 1, Unit.PropertyName.FLIGHT_RANGE_LEFT));
+    data.performChange(
+        ChangeFactory.unitPropertyChange(jet, 1, Unit.PropertyName.FLIGHT_RANGE_LEFT));
     // the carrier sails 2 toward its aircraft in Germany's turn
     data.performChange(ChangeFactory.moveUnits(gulf, near, carrier));
     new AirStageRunner(data).planesHome();
@@ -534,7 +542,9 @@ class Request38Test {
     assertThat(
         AirHome.problem(germans, List.of(new Landing(lwow, false, fighter, 1, four))).isPresent(),
         is(true));
-    new AirStageRunner(data).home(germans, new Landing(lwow, false, fighter, 1, three)).planesHome();
+    new AirStageRunner(data)
+        .home(germans, new Landing(lwow, false, fighter, 1, three))
+        .planesHome();
     assertThat(count(three, germans, "fighter"), is(1));
   }
 
@@ -576,7 +586,10 @@ class Request38Test {
     cleanBoard();
     final Territory lwow = t("Lwow");
     final Territory next =
-        data.getMap().getNeighbors(lwow).stream().filter(n -> !n.isWater()).findFirst().orElseThrow();
+        data.getMap().getNeighbors(lwow).stream()
+            .filter(n -> !n.isWater())
+            .findFirst()
+            .orElseThrow();
     next.setOwner(germans);
     // draft 102 has German aircraft on nearby bases; with all land British they would move here
     // too, so only these two are on the map
@@ -605,7 +618,10 @@ class Request38Test {
     cleanBoard();
     final Territory gulf = t("Sea Zone 104 Persian Gulf");
     final Territory next =
-        data.getMap().getNeighbors(gulf).stream().filter(Territory::isWater).findFirst().orElseThrow();
+        data.getMap().getNeighbors(gulf).stream()
+            .filter(Territory::isWater)
+            .findFirst()
+            .orElseThrow();
     removeFrom(next, next.getUnits());
     add(next, germans, "carrier", 1); // room for 2
     add(gulf, germans, "fighter", 3); // their carrier was sunk
@@ -624,7 +640,9 @@ class Request38Test {
   /** The Germans' non-combat move with a move delegate ready. */
   private MoveDelegate germanMove() {
     final var sequence = data.getSequence();
-    for (int i = 0; i < 10_000 && !sequence.getStep().getName().equals("germanNonCombatMove"); i++) {
+    for (int i = 0;
+        i < 10_000 && !sequence.getStep().getName().equals("germanNonCombatMove");
+        i++) {
       sequence.next();
     }
     final MoveDelegate move = (MoveDelegate) data.getDelegate("move");

@@ -54,14 +54,13 @@ class AirBasesTest {
     final Territory kiev = t(data, "Kiev");
     final Territory hamburg = t(data, "Hamburg");
     kiev.setOwner(germans);
-    t(data, "Cracow").setOwner(germans);
+    t(data, "Krakow").setOwner(germans);
     final Unit medium = add(data, kiev, germans, "mediumBomber", 1).get(0);
     assertThat(AirRange.range(medium.getType(), germans), is(8));
     assertThat(AirBases.distance(germans, kiev, hamburg, 20), is(OptionalInt.of(5)));
-    assertThat(AirBases.distance(germans, hamburg, t(data, "Cracow"), 20), is(OptionalInt.of(3)));
+    assertThat(AirBases.distance(germans, hamburg, t(data, "Krakow"), 20), is(OptionalInt.of(3)));
     assertThat(AirBases.flightProblem(medium, kiev, hamburg), is(Optional.empty()));
-    assertThat(
-        AirBases.landingNote(new Flight(medium, hamburg, 3)), is("lands at Cracow, 0 left"));
+    assertThat(AirBases.landingNote(new Flight(medium, hamburg, 3)), is("lands at Krakow, 0 left"));
   }
 
   @Test
@@ -82,8 +81,7 @@ class AirBasesTest {
     final Territory kiev = t(data, "Kiev");
     kiev.setOwner(germans);
     final Unit fighter = add(data, kiev, germans, "fighter", 1).get(0);
-    final String problem =
-        AirBases.flightProblem(fighter, kiev, t(data, "Hamburg")).orElseThrow();
+    final String problem = AirBases.flightProblem(fighter, kiev, t(data, "Hamburg")).orElseThrow();
     assertThat(problem, is("Hamburg is 5 steps from Kiev; fighters fly 3."));
   }
 
@@ -101,13 +99,16 @@ class AirBasesTest {
     assertThat(AirBases.flightProblem(jet, base, target).isPresent(), is(true));
     final Unit carrier = add(data, gulf, germans, "fleetCarrier", 1).get(0);
     assertThat(
-        AirBases.carrierReach(carrier, gulf).contains(t(data, "Sea Zone 117 Arabian Sea - Northeast")),
+        AirBases.carrierReach(carrier, gulf)
+            .contains(t(data, "Sea Zone 117 Arabian Sea - Northeast")),
         is(true));
     assertThat(AirBases.flightProblem(jet, base, target), is(Optional.empty()));
     assertThat(
         AirBases.landingNote(new Flight(jet, target, 1)),
         containsString("fleet carrier from Sea Zone 104 Persian Gulf can reach"));
-    assertThat(AirBases.landingProblem(germans, List.of(new Flight(jet, target, 1))), is(Optional.empty()));
+    assertThat(
+        AirBases.landingProblem(germans, List.of(new Flight(jet, target, 1))),
+        is(Optional.empty()));
   }
 
   /** James: if the only spot is a carrier for 4, only 4 may go; losses don't count. */

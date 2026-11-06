@@ -15,8 +15,6 @@ import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.UnitType;
-import games.strategy.engine.data.gameparser.GameParser;
-import games.strategy.triplea.delegate.air.AirCombat;
 import games.strategy.triplea.delegate.air.AirCombat.Target;
 import games.strategy.triplea.delegate.air.AirCombat.TargetAssignment;
 import games.strategy.triplea.settings.ClientSetting;
@@ -26,7 +24,6 @@ import java.awt.Component;
 import java.awt.Container;
 import java.awt.Rectangle;
 import java.awt.image.BufferedImage;
-import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -123,7 +120,8 @@ class AirTargetPanelLayoutTest {
     when(map.getUiContext()).thenReturn(ui);
     SwingUtilities.invokeAndWait(
         () -> {
-          scroller = new games.strategy.triplea.ui.unit.scroller.UnitScroller(data, map, () -> false);
+          scroller =
+              new games.strategy.triplea.ui.unit.scroller.UnitScroller(data, map, () -> false);
           scrollerBar = scroller.build();
         });
     prepareBase();
@@ -260,7 +258,7 @@ class AirTargetPanelLayoutTest {
   private List<AbstractButton> buttons(final String text) {
     return all(panel).stream()
         .filter(c -> c instanceof AbstractButton b && text.equals(b.getText()))
-        .map(c -> (AbstractButton) c)
+        .map(AbstractButton.class::cast)
         .toList();
   }
 
@@ -428,14 +426,15 @@ class AirTargetPanelLayoutTest {
           dialog.counts().put(move.unitType(), 1);
         });
     flush();
-    assertThat("selecting in the list selects on the map", panel.selectedTarget(), is(move.target()));
+    assertThat(
+        "selecting in the list selects on the map", panel.selectedTarget(), is(move.target()));
     final BufferedImage shot = render(dialog.getContentPane(), 820, 480);
     ImageIO.write(shot, "png", SHOTS.resolve("request41_pick_window.png").toFile());
     SwingUtilities.invokeAndWait(
         () ->
             all(dialog.getContentPane()).stream()
                 .filter(c -> c instanceof AbstractButton b && "Assign".equals(b.getText()))
-                .map(c -> (AbstractButton) c)
+                .map(AbstractButton.class::cast)
                 .findFirst()
                 .orElseThrow()
                 .doClick());
@@ -458,6 +457,7 @@ class AirTargetPanelLayoutTest {
         is(true));
     assertThat(buttons("Pick from list…").size(), is(1));
   }
+
   // ---- request 40: the player chooses the order
 
   @Test
@@ -505,7 +505,8 @@ class AirTargetPanelLayoutTest {
 
   // ---- request 41: the stock move controls
 
-  private static games.strategy.triplea.ui.MouseDetails mouse(final int modifiers, final int button) {
+  private static games.strategy.triplea.ui.MouseDetails mouse(
+      final int modifiers, final int button) {
     final java.awt.event.MouseEvent e =
         new java.awt.event.MouseEvent(
             new javax.swing.JPanel(),
@@ -534,7 +535,7 @@ class AirTargetPanelLayoutTest {
 
   /** Two German dive bombers in Cracow, a Soviet army in Bialystok next door. */
   private Territory[] cracowAndBialystok() {
-    final Territory cracow = data.getMap().getTerritoryOrThrow("Cracow");
+    final Territory cracow = data.getMap().getTerritoryOrThrow("Krakow");
     final Territory bialystok = data.getMap().getTerritoryOrThrow("Bialystok");
     Assumptions.assumeTrue(cracow.isOwnedBy(germans), "Cracow is not German");
     final var dive = data.getUnitTypeList().getUnitTypeOrThrow("diveBomber");
@@ -656,8 +657,7 @@ class AirTargetPanelLayoutTest {
         games.strategy.engine.data.changefactory.ChangeFactory.addUnits(
             t[0], medium.create(6, germans)));
     startPanel(false);
-    final java.util.concurrent.atomic.AtomicReference<String> asked =
-        new java.util.concurrent.atomic.AtomicReference<>();
+    final AtomicReference<String> asked = new AtomicReference<>();
     panel.setChooserAnswer(
         (chooser, title) -> {
           asked.set(title);
@@ -692,8 +692,7 @@ class AirTargetPanelLayoutTest {
     assertThat("two moves, one dive bomber each", panel.staged().size(), is(2));
     final BufferedImage shot = render(panel, WIDTH, HEIGHT);
     ImageIO.write(shot, "png", SHOTS.resolve("request42_bomber_stage_two_moves.png").toFile());
-    assertThat(
-        all(panel).stream().anyMatch(c -> c instanceof javax.swing.JComboBox), is(false));
+    assertThat(all(panel).stream().anyMatch(javax.swing.JComboBox.class::isInstance), is(false));
     assertThat(buttons("Next base").isEmpty(), is(true));
     // request 48: the line is plain text again (the unit scroller's bar is the control)
     assertThat(
@@ -707,6 +706,7 @@ class AirTargetPanelLayoutTest {
     flush();
     assertThat(panel.staged().isEmpty(), is(true));
   }
+
   // ---- request 42: the stock route arrow; undo selects nothing
 
   @Test
@@ -722,7 +722,8 @@ class AirTargetPanelLayoutTest {
     final org.mockito.ArgumentCaptor<games.strategy.engine.data.Route> route =
         org.mockito.ArgumentCaptor.forClass(games.strategy.engine.data.Route.class);
     verify(map, org.mockito.Mockito.atLeastOnce()).setRoute(route.capture(), any(), any(), any());
-    final games.strategy.engine.data.Route last = route.getAllValues().get(route.getAllValues().size() - 1);
+    final games.strategy.engine.data.Route last =
+        route.getAllValues().get(route.getAllValues().size() - 1);
     assertThat(last.getStart(), is(t[0]));
     assertThat(last.getEnd(), is(t[1]));
     final org.mockito.ArgumentCaptor<java.util.Collection<games.strategy.engine.data.Unit>> shadow =
@@ -946,8 +947,10 @@ class AirTargetPanelLayoutTest {
         java.awt.RenderingHints.VALUE_INTERPOLATION_BICUBIC);
     g.scale(2, 2);
     g.translate(-region.x, -region.y);
-    for (final var tile : tiles.getTiles(new java.awt.geom.Rectangle2D.Double(
-        region.x, region.y, region.width, region.height))) {
+    for (final var tile :
+        tiles.getTiles(
+            new java.awt.geom.Rectangle2D.Double(
+                region.x, region.y, region.width, region.height))) {
       tile.drawImage(data, mapData);
       if (tile.getImage() != null) {
         g.drawImage(tile.getImage(), tile.getBounds().x, tile.getBounds().y, null);
@@ -978,19 +981,18 @@ class AirTargetPanelLayoutTest {
     final games.strategy.triplea.ui.UiContext ui = TestUi.create(data);
     // the bomber stage: one of Cracow's two dive bombers sent to Bialystok
     ImageIO.write(
-        mapAround(
-            ui, java.util.Set.copyOf(offMap()), List.of(overlay.getValue()), t[0], t[1]),
+        mapAround(ui, java.util.Set.copyOf(offMap()), List.of(overlay.getValue()), t[0], t[1]),
         "png",
         SHOTS.resolve("request44_bomber_stage_map.png").toFile());
     SwingUtilities.invokeAndWait(
         () -> {
-          panel.click(dives(t[0]).stream().filter(u -> !offMap().contains(u)).toList(), t[0], click());
+          panel.click(
+              dives(t[0]).stream().filter(u -> !offMap().contains(u)).toList(), t[0], click());
           panel.click(List.of(), t[1], click());
         });
     flush();
     ImageIO.write(
-        mapAround(
-            ui, java.util.Set.copyOf(offMap()), List.of(overlay.getValue()), t[0], t[1]),
+        mapAround(ui, java.util.Set.copyOf(offMap()), List.of(overlay.getValue()), t[0], t[1]),
         "png",
         SHOTS.resolve("request44_bomber_stage_map_both.png").toFile());
     // later in the round: both in the air over Bialystok, a German fighter too, outside the air
@@ -1040,7 +1042,8 @@ class AirTargetPanelLayoutTest {
     final var stage = games.strategy.triplea.delegate.air.AirStage.Stage.BOMBERS;
     final List<TargetAssignment> orders = new ArrayList<>();
     final Map<Territory, Integer> left = new java.util.HashMap<>(keep);
-    for (final Territory zone : games.strategy.triplea.delegate.air.AirStage.bases(germans, stage)) {
+    for (final Territory zone :
+        games.strategy.triplea.delegate.air.AirStage.bases(germans, stage)) {
       final IntegerMap<UnitType> free = panel.unassigned(germans, zone);
       for (final UnitType type : free.keySet()) {
         final List<Target> targets =
@@ -1168,12 +1171,16 @@ class AirTargetPanelLayoutTest {
     final javax.swing.JFrame window = sideWindow();
     flush();
     // the bar says how many, and it is the one control (the side panel line is plain text)
-    assertThat(scrollerBar.getToggleButton().getText(), org.hamcrest.Matchers.startsWith(
-        "Aircraft without orders: 1"));
+    assertThat(
+        scrollerBar.getToggleButton().getText(),
+        org.hamcrest.Matchers.startsWith("Aircraft without orders: 1"));
     assertThat(
         all(panel).stream()
-            .anyMatch(c -> c instanceof AbstractButton b && b.getText() != null
-                && b.getText().contains("without orders")),
+            .anyMatch(
+                c ->
+                    c instanceof AbstractButton b
+                        && b.getText() != null
+                        && b.getText().contains("without orders")),
         is(false));
     // the bar, clicked with the mouse
     SwingUtilities.invokeAndWait(() -> mouseClick(scrollerBar.getToggleButton()));
@@ -1221,7 +1228,7 @@ class AirTargetPanelLayoutTest {
   private List<javax.swing.JTextArea> helpTexts() {
     return all(panel).stream()
         .filter(c -> c instanceof javax.swing.JTextArea a && a.getText().contains("Select bombers"))
-        .map(c -> (javax.swing.JTextArea) c)
+        .map(javax.swing.JTextArea.class::cast)
         .toList();
   }
 
@@ -1274,7 +1281,7 @@ class AirTargetPanelLayoutTest {
     SwingUtilities.invokeAndWait(() -> panel.setStagedForTests(ordersLeaving(Map.of(t[0], 1))));
     flush();
     final javax.swing.JFrame window = sideWindow();
-    final java.awt.Container side = (java.awt.Container) window.getContentPane().getComponent(0);
+    final Container side = (Container) window.getContentPane().getComponent(0);
     final org.mockito.ArgumentCaptor<games.strategy.triplea.ui.panels.map.MapOverlay> overlay =
         org.mockito.ArgumentCaptor.forClass(games.strategy.triplea.ui.panels.map.MapOverlay.class);
     verify(map, org.mockito.Mockito.atLeastOnce()).addOverlay(overlay.capture());
@@ -1285,8 +1292,13 @@ class AirTargetPanelLayoutTest {
     flush();
     assertThat(panel.selectedBase(), is(t[0]));
     final BufferedImage after =
-        shot(ui, side, overlay.getValue(), "After pressing the bar: Cracow's dive bomber selected",
-            t[0], t[1]);
+        shot(
+            ui,
+            side,
+            overlay.getValue(),
+            "After pressing the bar: Cracow's dive bomber selected",
+            t[0],
+            t[1]);
     window.dispose();
     final BufferedImage both =
         new BufferedImage(
@@ -1305,10 +1317,11 @@ class AirTargetPanelLayoutTest {
   /** Request 48: the map around the places (with the banner) beside the side panel and its bar. */
   private BufferedImage shot(
       final games.strategy.triplea.ui.UiContext ui,
-      final java.awt.Container side,
+      final Container side,
       final games.strategy.triplea.ui.panels.map.MapOverlay overlay,
       final String caption,
-      final Territory... places) throws Exception {
+      final Territory... places)
+      throws Exception {
     final BufferedImage around =
         mapAround(ui, java.util.Set.copyOf(offMap()), List.of(overlay), places);
     final AirMapMode airMap = new AirMapMode(ui, null, data, text -> {});
@@ -1361,8 +1374,7 @@ class AirTargetPanelLayoutTest {
     final Territory[] t = cracowAndBialystok();
     startPanel(false);
     // every bomber has orders but one of Cracow's dive bombers
-    SwingUtilities.invokeAndWait(
-        () -> panel.setStagedForTests(ordersLeaving(Map.of(t[0], 1))));
+    SwingUtilities.invokeAndWait(() -> panel.setStagedForTests(ordersLeaving(Map.of(t[0], 1))));
     flush();
     SwingUtilities.invokeAndWait(() -> panel.nextWithoutOrders(true));
     flush();

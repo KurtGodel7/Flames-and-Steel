@@ -8,7 +8,6 @@ import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.not;
 import static org.mockito.Mockito.verify;
 
 import games.strategy.engine.data.GameData;
@@ -20,7 +19,6 @@ import games.strategy.engine.data.changefactory.ChangeFactory;
 import games.strategy.triplea.delegate.air.AirBattleReport;
 import games.strategy.triplea.delegate.air.AirBattleReport.Row;
 import games.strategy.triplea.delegate.air.AirBattleReport.Stack;
-import games.strategy.triplea.delegate.air.AirCombat;
 import games.strategy.triplea.delegate.air.AirCombat.Target;
 import games.strategy.triplea.delegate.air.AirCombat.TargetAssignment;
 import games.strategy.triplea.delegate.air.AirCombat.TargetKind;
@@ -29,7 +27,6 @@ import games.strategy.triplea.delegate.air.AirPriority;
 import games.strategy.triplea.delegate.air.BasedMap;
 import games.strategy.triplea.ui.AirBattleSummaryPanel;
 import games.strategy.triplea.ui.AirBattleWindowPreview;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -77,8 +74,7 @@ class Request46Test {
     removeFrom(london, london.getUnitCollection().getMatches(Matches.unitIsAir()));
     // Hamburg: its factory, two conscripts and one AA gun (casualties picked by a 0 die: the first)
     removeFrom(
-        hamburg,
-        hamburg.getUnitCollection().getMatches(Matches.unitCanProduceUnits().negate()));
+        hamburg, hamburg.getUnitCollection().getMatches(Matches.unitCanProduceUnits().negate()));
     add(hamburg, germans, "conscript", 2);
     add(hamburg, germans, "aaGun", 1);
   }
@@ -91,14 +87,19 @@ class Request46Test {
     return data.getUnitTypeList().getUnitTypeOrThrow(name);
   }
 
-  private List<Unit> add(final Territory t, final GamePlayer owner, final String type, final int n) {
+  private List<Unit> add(
+      final Territory t, final GamePlayer owner, final String type, final int n) {
     final List<Unit> units = type(type).create(n, owner);
     addTo(t, units);
     return units;
   }
 
   private TargetAssignment a(
-      final Territory base, final String type, final int n, final TargetKind kind, final String at) {
+      final Territory base,
+      final String type,
+      final int n,
+      final TargetKind kind,
+      final String at) {
     return new TargetAssignment(base, type(type), n, new Target(t(at), kind));
   }
 
@@ -135,7 +136,8 @@ class Request46Test {
     final List<Stack> bombers = stacks(hamburgRow.attackers(), "strategicBomber");
     assertThat(
         bombers.stream().anyMatch(s -> s.hits() == 1 && s.aborted() && !s.destroyed()), is(true));
-    assertThat(hamburgRow.attackers().stream().allMatch(s -> s.owner().equals("British")), is(true));
+    assertThat(
+        hamburgRow.attackers().stream().allMatch(s -> s.owner().equals("British")), is(true));
     final List<Stack> conscripts = stacks(hamburgRow.defenders(), "conscript");
     assertThat(conscripts.size(), is(1));
     assertThat(conscripts.get(0).destroyed(), is(true));
@@ -178,7 +180,7 @@ class Request46Test {
   private AirBattleReport screenshotRound() {
     add(london, british, "strategicBomber", 2);
     add(hamburg, germans, "fighter", 4);
-    final Territory cracow = t("Cracow");
+    final Territory cracow = t("Krakow");
     return report(
         new AirStageRunner(data)
             .die(0)
@@ -188,7 +190,8 @@ class Request46Test {
                 a(london, "strategicBomber", 1, TargetKind.LAND, "Ireland"))
             .bombers(germans, a(cracow, "diveBomber", 2, TargetKind.LAND, "Lwow"))
             .cover(
-                germans, new TargetAssignment(hamburg, type("fighter"), 4, AirCover.over(hamburg))));
+                germans,
+                new TargetAssignment(hamburg, type("fighter"), 4, AirCover.over(hamburg))));
   }
 
   @Test
@@ -201,8 +204,7 @@ class Request46Test {
         is(true));
     assertThat(stacks(hamburgRow.attackers(), "strategicBomber").get(0).destroyed(), is(true));
     assertThat(
-        stacks(hamburgRow.defenders(), "fighter").stream().anyMatch(s -> s.hits() > 0),
-        is(true));
+        stacks(hamburgRow.defenders(), "fighter").stream().anyMatch(s -> s.hits() > 0), is(true));
     assertThat(hamburgRow.lossValue().containsKey("Germans"), is(false));
 
     final AirBattleWindowPreview.Seen german = AirBattleWindowPreview.draw(data, report, germans);
