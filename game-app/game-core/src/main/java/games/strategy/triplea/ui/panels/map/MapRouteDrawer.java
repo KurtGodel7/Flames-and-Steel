@@ -67,6 +67,7 @@ public class MapRouteDrawer {
       final Graphics2D graphics,
       final RouteDescription routeDescription,
       final String maxMovement,
+      final boolean overLimit,
       final ResourceCollection movementFuelCost,
       final ResourceImageFactory resourceImageFactory) {
     final Route route = routeDescription.getRoute();
@@ -90,12 +91,24 @@ public class MapRouteDrawer {
       }
       if (tooFewPoints && !tooFewTerritories) {
         drawMoveLength(
-            graphics, points, numTerritories, maxMovement, movementFuelCost, resourceImageFactory);
+            graphics,
+            points,
+            numTerritories,
+            maxMovement,
+            overLimit,
+            movementFuelCost,
+            resourceImageFactory);
       }
     } else {
       drawCurvedPath(graphics, points);
       drawMoveLength(
-          graphics, points, numTerritories, maxMovement, movementFuelCost, resourceImageFactory);
+          graphics,
+          points,
+          numTerritories,
+          maxMovement,
+          overLimit,
+          movementFuelCost,
+          resourceImageFactory);
     }
     drawJoints(graphics, points);
     drawCustomCursor(graphics, routeDescription, points[points.length - 1]);
@@ -268,6 +281,7 @@ public class MapRouteDrawer {
       final Point2D[] points,
       final int numTerritories,
       final String maxMovement,
+      final boolean overLimit,
       final ResourceCollection movementFuelCost,
       final ResourceImageFactory resourceImageFactory) {
 
@@ -275,6 +289,7 @@ public class MapRouteDrawer {
         newMovementLeftImage(
             String.valueOf(numTerritories - 1),
             maxMovement,
+            overLimit,
             movementFuelCost,
             resourceImageFactory);
     final int textXOffset = -movementImage.getWidth() / 2;
@@ -334,9 +349,10 @@ public class MapRouteDrawer {
   }
 
   /** This draws current moves, max moves, and fuel cost. */
-  private static BufferedImage newMovementLeftImage(
+  static BufferedImage newMovementLeftImage(
       final String curMovement,
       final String maxMovement,
+      final boolean overLimit,
       final ResourceCollection movementFuelCost,
       final ResourceImageFactory resourceImageFactory) {
 
@@ -352,15 +368,16 @@ public class MapRouteDrawer {
     graphics.setFont(MESSAGE_FONT);
     final FontMetrics fontMetrics = graphics.getFontMetrics();
 
-    // Draw background
-    graphics.setColor(new Color(220, 220, 220));
+    // Draw background (Flames and Steel, request 59: red when the move is over the limit)
+    graphics.setColor(overLimit ? new Color(235, 110, 110) : new Color(220, 220, 220));
     final int rectHeight = MESSAGE_HEIGHT - 2;
     graphics.fillRoundRect(0, 0, imageWidth - 2, rectHeight, rectHeight, rectHeight);
     graphics.setColor(Color.BLACK);
     graphics.drawRoundRect(0, 0, imageWidth - 2, rectHeight, rectHeight, rectHeight);
 
     // Draw current movement
-    graphics.setColor(new Color(0, 0, 200));
+    final Color textColor = overLimit ? Color.BLACK : new Color(0, 0, 200);
+    graphics.setColor(textColor);
     final boolean hasEnoughMovement = !unitMovementLeft.isEmpty();
     final int textWidthOffset = fontMetrics.stringWidth(curMovement) / 2;
     graphics.drawString(
@@ -371,7 +388,7 @@ public class MapRouteDrawer {
     // If has enough movement, draw remaining movement and fuel costs
     if (hasEnoughMovement) {
       int x = MESSAGE_PADDING + fontMetrics.stringWidth(curMovement);
-      graphics.setColor(new Color(0, 0, 200));
+      graphics.setColor(textColor);
       graphics.drawString(unitMovementLeft, x, MESSAGE_TEXT_Y);
       x += fontMetrics.stringWidth(unitMovementLeft) + MESSAGE_TEXT_SPACING;
       graphics.setColor(new Color(200, 0, 0));

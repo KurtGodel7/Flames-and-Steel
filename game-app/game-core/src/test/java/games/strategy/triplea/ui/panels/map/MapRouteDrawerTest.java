@@ -101,7 +101,12 @@ final class MapRouteDrawerTest {
     when(mockResourceCollection.getResourcesCopy()).thenReturn(new IntegerMap<>());
     final ResourceImageFactory mockResourceImageFactory = mock(ResourceImageFactory.class);
     routeDrawer.drawRoute(
-        mockGraphics, dummyRouteDescription, "2", mockResourceCollection, mockResourceImageFactory);
+        mockGraphics,
+        dummyRouteDescription,
+        "2",
+        false,
+        mockResourceCollection,
+        mockResourceImageFactory);
     verify(mockGraphics, atLeastOnce()).fill(any(Shape.class));
     verify(mockGraphics, atLeastOnce()).draw(any(Shape.class));
     verify(mockedMapPanel, atLeastOnce()).getXOffset(); // Those methods are needed

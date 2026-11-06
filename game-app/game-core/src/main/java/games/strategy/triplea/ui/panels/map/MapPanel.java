@@ -107,6 +107,8 @@ public class MapPanel extends ImageScrollerLargeView {
   private final TileManager tileManager;
   private @Nullable BufferedImage mouseShadowImage = null;
   private String movementLeftForCurrentUnits = "";
+  // Flames and Steel (request 59): the route label's figure is over the limit (drawn red)
+  private boolean routeOverLimit;
   private ResourceCollection movementFuelCost;
   @Getter private final UiContext uiContext;
   private final ExecutorService executor =
@@ -781,6 +783,7 @@ public class MapPanel extends ImageScrollerLargeView {
           g2d,
           routeDescription,
           movementLeftForCurrentUnits,
+          routeOverLimit,
           movementFuelCost,
           uiContext.getResourceImageFactory());
     }
@@ -959,7 +962,22 @@ public class MapPanel extends ImageScrollerLargeView {
     smallMapImageManager.updateOffscreenImage(uiContext.getMapImage().getSmallMapImage());
   }
 
+  /**
+   * Flames and Steel (request 59): the stock mouse shadow, but the route label's second figure is
+   * the range the air system counts (not {@link Unit#getMovementLeft()}), drawn red when the move
+   * is over the limit.
+   */
+  public void setMouseShadowUnits(
+      final @Nullable Collection<Unit> units, final int rangeLeft, final boolean overLimit) {
+    setMouseShadowUnits(units);
+    if (units != null && !units.isEmpty()) {
+      movementLeftForCurrentUnits = String.valueOf(Math.max(0, rangeLeft));
+      routeOverLimit = overLimit;
+    }
+  }
+
   public void setMouseShadowUnits(final @Nullable Collection<Unit> units) {
+    routeOverLimit = false;
     if (units == null || units.isEmpty()) {
       movementLeftForCurrentUnits = "";
       mouseShadowImage = null;

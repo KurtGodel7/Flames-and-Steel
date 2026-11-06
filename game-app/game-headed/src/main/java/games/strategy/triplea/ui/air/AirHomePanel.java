@@ -25,7 +25,6 @@ import java.awt.Component;
 import java.awt.FlowLayout;
 import java.awt.Graphics2D;
 import java.awt.Insets;
-import java.awt.Point;
 import java.awt.Polygon;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -96,11 +95,20 @@ public final class AirHomePanel extends ActionPanel {
     final List<Territory> path;
     try (GameData.Unlocker ignored = getData().acquireReadLock()) {
       path =
-          games.strategy.triplea.delegate.air.AirBases.path(getCurrentPlayer(), g.from(), territory, 60)
+          games.strategy.triplea.delegate.air.AirBases.path(
+                  getCurrentPlayer(), g.from(), territory, 60)
               .orElse(List.of(g.from(), territory));
     }
-    getMap().setMouseShadowUnits(g.units().subList(0, Math.min(count, g.units().size())));
-    getMap().setRoute(new games.strategy.engine.data.Route(path), draw.middle(g.from()), mouse, null);
+    // request 59: the label's second figure is the range the group has left (as the panel says),
+    // red when the territory is not a landing spot in reach
+    final boolean overLimit =
+        path.size() - 1 > g.range()
+            || (!territory.equals(g.from()) && !spots.containsKey(territory));
+    getMap()
+        .setMouseShadowUnits(
+            g.units().subList(0, Math.min(count, g.units().size())), g.range(), overLimit);
+    getMap()
+        .setRoute(new games.strategy.engine.data.Route(path), draw.middle(g.from()), mouse, null);
   }
 
   public AirHomePanel(final TripleAFrame frame) {
@@ -109,7 +117,9 @@ public final class AirHomePanel extends ActionPanel {
     this.draw = new AirDraw(frame.getUiContext());
     // request 40: Escape clears the selection
     getInputMap(WHEN_IN_FOCUSED_WINDOW)
-        .put(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_ESCAPE, 0), "fsHomeClear");
+        .put(
+            javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_ESCAPE, 0),
+            "fsHomeClear");
     getActionMap()
         .put(
             "fsHomeClear",
@@ -238,7 +248,9 @@ public final class AirHomePanel extends ActionPanel {
     }
     final int at = lastVisited == null ? -1 : places.indexOf(lastVisited);
     final int i =
-        at < 0 ? (forward ? 0 : places.size() - 1) : Math.floorMod(at + (forward ? 1 : -1), places.size());
+        at < 0
+            ? (forward ? 0 : places.size() - 1)
+            : Math.floorMod(at + (forward ? 1 : -1), places.size());
     final Territory place = places.get(i);
     lastVisited = place;
     final Group g =
@@ -321,9 +333,7 @@ public final class AirHomePanel extends ActionPanel {
       final int answer =
           JOptionPane.showConfirmDialog(
               JOptionPane.getFrameForComponent(this),
-              "Aircraft without a landing order:\n"
-                  + String.join("\n", lines)
-                  + "\nEnd anyway?",
+              "Aircraft without a landing order:\n" + String.join("\n", lines) + "\nEnd anyway?",
               "Planes go home",
               JOptionPane.YES_NO_OPTION);
       if (answer != JOptionPane.YES_OPTION) {
@@ -428,7 +438,11 @@ public final class AirHomePanel extends ActionPanel {
   private int unitsLike(final Group g) {
     return (int)
         groups(getCurrentPlayer(), false).stream()
-            .filter(x -> x.from().equals(g.from()) && x.airborne() == g.airborne() && x.type().equals(g.type()))
+            .filter(
+                x ->
+                    x.from().equals(g.from())
+                        && x.airborne() == g.airborne()
+                        && x.type().equals(g.type()))
             .mapToInt(x -> x.units().size())
             .sum();
   }
@@ -449,7 +463,10 @@ public final class AirHomePanel extends ActionPanel {
     }
     final GamePlayer player = getCurrentPlayer();
     if (md.isRightButton()) {
-      if (selected != null && selected.from().equals(territory) && count > 1 && !md.isControlDown()) {
+      if (selected != null
+          && selected.from().equals(territory)
+          && count > 1
+          && !md.isControlDown()) {
         count -= md.isAltDown() ? Math.min(count - 1, 10) : 1;
       } else {
         selected = null;
@@ -464,9 +481,12 @@ public final class AirHomePanel extends ActionPanel {
       return;
     }
     // the clicked stack's type on a base, else the aircraft in the air over the territory
-    final java.util.Optional<UnitType> clickedType =
+    final Optional<UnitType> clickedType =
         units.stream()
-            .filter(u -> u.isOwnedBy(player) && games.strategy.triplea.delegate.air.AirBases.isAircraft(u))
+            .filter(
+                u ->
+                    u.isOwnedBy(player)
+                        && games.strategy.triplea.delegate.air.AirBases.isAircraft(u))
             .map(Unit::getType)
             .findFirst();
     Group pick = null;
@@ -474,7 +494,9 @@ public final class AirHomePanel extends ActionPanel {
       if (!g.from().equals(territory) || left(g) <= 0) {
         continue;
       }
-      if (clickedType.isPresent() ? !g.airborne() && g.type().equals(clickedType.get()) : g.airborne()) {
+      if (clickedType.isPresent()
+          ? !g.airborne() && g.type().equals(clickedType.get())
+          : g.airborne()) {
         pick = g;
         break;
       }
@@ -487,8 +509,7 @@ public final class AirHomePanel extends ActionPanel {
       return;
     }
     final boolean same = pick.equals(selected);
-    final int add =
-        md.isControlDown() || md.isShiftDown() ? left(pick) : md.isAltDown() ? 10 : 1;
+    final int add = md.isControlDown() || md.isShiftDown() ? left(pick) : md.isAltDown() ? 10 : 1;
     select(player, pick, Math.min(left(pick), (same ? count : 0) + add));
   }
 
@@ -654,7 +675,8 @@ public final class AirHomePanel extends ActionPanel {
                 getMap().repaint();
               }));
     }
-    // request 53: no wider than the panel (a long line is cut, with a tooltip), never scrolls sideways
+    // request 53: no wider than the panel (a long line is cut, with a tooltip), never scrolls
+    // sideways
     final javax.swing.JComponent made =
         AirMovesList.boxed(
             entries.isEmpty()
@@ -793,7 +815,7 @@ public final class AirHomePanel extends ActionPanel {
    * spot (not in the air or on their old base); undo puts them back.
    */
   private void showLanded() {
-    final Map<Territory, List<Unit>> byPlace = new java.util.LinkedHashMap<>();
+    final Map<Territory, List<Unit>> byPlace = new LinkedHashMap<>();
     final java.util.Set<Unit> moved = new java.util.HashSet<>();
     final GamePlayer player = getCurrentPlayer();
     if (player != null) {
