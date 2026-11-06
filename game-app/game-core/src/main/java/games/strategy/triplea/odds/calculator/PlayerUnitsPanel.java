@@ -98,7 +98,13 @@ public class PlayerUnitsPanel extends JPanel {
           previousPlayer = category.getOwner();
         }
         if (panel != null) {
-          final var unitPanel = new UnitPanel(uiContext, category, costs);
+          // request 58: attacking land units say how many of them land from the sea
+          final var unitPanel =
+              new UnitPanel(
+                  uiContext,
+                  category,
+                  costs,
+                  !defender && isLandBattle && Matches.unitTypeIsLand().test(category.getType()));
           unitPanel.addChangeListener(this::notifyListeners);
           panel.add(unitPanel);
           unitPanels.add(unitPanel);
@@ -191,6 +197,24 @@ public class PlayerUnitsPanel extends JPanel {
    */
   boolean hasNoneZeroUnitEntries() {
     return unitPanels.stream().anyMatch(unitPanel -> unitPanel.getCount() != 0);
+  }
+
+  /** Request 58: sets every land unit as all landing from the sea, or none. */
+  public void setAllFromSea(final boolean all) {
+    unitPanels.forEach(p -> p.setFromSea(all ? p.getCount() : 0));
+  }
+
+  /** Request 58: land units landing from the sea, and land units attacking over land. */
+  public int[] landingAndOverland() {
+    int landing = 0;
+    int overland = 0;
+    for (final UnitPanel p : unitPanels) {
+      if (p.hasFromSea()) {
+        landing += p.getFromSea();
+        overland += p.getCount() - p.getFromSea();
+      }
+    }
+    return new int[] {landing, overland};
   }
 
   public void addChangeListener(final Runnable listener) {

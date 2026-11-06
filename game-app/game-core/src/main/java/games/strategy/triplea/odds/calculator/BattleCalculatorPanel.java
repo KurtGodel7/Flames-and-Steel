@@ -5,16 +5,20 @@ import static java.text.MessageFormat.format;
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.GameState;
-import games.strategy.engine.data.MutableProperty;
 import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.TerritoryEffect;
 import games.strategy.engine.data.Unit;
 import games.strategy.engine.framework.ui.background.WaitDialog;
 import games.strategy.triplea.Properties;
+import games.strategy.triplea.delegate.AbstractMoveDelegate;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.TerritoryEffectHelper;
+import games.strategy.triplea.delegate.battle.AmphibiousLanding;
 import games.strategy.triplea.delegate.battle.BattleDelegate;
 import games.strategy.triplea.delegate.battle.BattleState;
+import games.strategy.triplea.delegate.battle.BombardCap;
+import games.strategy.triplea.delegate.battle.IBattle;
+import games.strategy.triplea.delegate.battle.MustFightBattle;
 import games.strategy.triplea.delegate.battle.casualty.CasualtyUtil;
 import games.strategy.triplea.delegate.power.calculator.CombatValueBuilder;
 import games.strategy.triplea.delegate.power.calculator.PowerStrengthAndRolls;
@@ -87,7 +91,11 @@ class BattleCalculatorPanel extends JPanel {
   private final JButton calculateButton = new JButton("Pls Wait, Copying Data...");
   private final JCheckBox keepOneAttackingLandUnitCheckBox =
       new JCheckBox("One attacking land must live");
-  private final JCheckBox amphibiousCheckBox = new JCheckBox("Add amphibious attack modifiers");
+  // request 58: a shortcut that fills every land unit's "from sea" count (or clears them)
+  private final JCheckBox amphibiousCheckBox =
+      new JCheckBox("All land attackers land from the sea");
+  // request 58: the landing/bombardment assumptions of the last calculation
+  private final JLabel assumptions = new JLabel();
   private final JCheckBox landBattleCheckBox = new JCheckBox("Land battle");
   private final JCheckBox retreatWhenOnlyAirLeftCheckBox =
       new JCheckBox("Retreat when only air left");
@@ -199,7 +207,9 @@ class BattleCalculatorPanel extends JPanel {
         "We retreat if only air is left, and if 'retreat when x units "
             + "left' is positive we will retreat when x of non-air is left too.");
     amphibiousCheckBox.setToolTipText(
-        "Applies amphibious attack modifiers to all attacking land units");
+        "Sets every attacking land unit's 'from sea' count to all of them (or none). Units"
+            + " landing from the sea hold fire and give no support in round 1, allow shore"
+            + " bombardment, and get amphibious modifiers such as the Marines' bonus.");
     attackerUnitsTotalNumber.setToolTipText(
         "Totals do not include AA guns and other infrastructure, and does not "
             + "include Bombarding sea units for land battles.");
@@ -316,6 +326,7 @@ class BattleCalculatorPanel extends JPanel {
     resultsText.add(roundsAverage, builder3.gridY(row2++).insets(0, 10, 0, 0).build());
     resultsText.add(count, builder3.gridY(row2++).insets(15, 10, 0, 0).build());
     resultsText.add(time, builder3.gridY(row2++).insets(0, 10, 0, 0).build());
+    resultsText.add(assumptions, builder3.gridY(row2++).insets(6, 10, 0, 0).build());
 
     row2++;
     final JButton swapSidesButton = new JButton("Swap Sides");
@@ -385,7 +396,11 @@ class BattleCalculatorPanel extends JPanel {
           setAttackingUnits(List.of());
           setWidgetActivation();
         });
-    amphibiousCheckBox.addActionListener(e -> setWidgetActivation());
+    amphibiousCheckBox.addActionListener(
+        e -> {
+          attackingUnitsPanel.setAllFromSea(amphibiousCheckBox.isSelected());
+          setWidgetActivation();
+        });
     landBattleCheckBox.addActionListener(
         e -> {
           attackerOrderOfLosses = null;
@@ -513,8 +528,112 @@ class BattleCalculatorPanel extends JPanel {
 
     attAndDef.getAttacker().ifPresent(this::setAttacker);
     attAndDef.getDefender().ifPresent(this::setDefender);
-    setAttackingUnits(attAndDef.getAttackingUnits());
+    final List<Unit> attacking = new ArrayList<>(attAndDef.getAttackingUnits());
+    // request 58: the ships that bombard (or could bombard) this battle
+    attacking.addAll(bombardingShips());
+    setAttackingUnits(attacking);
     setDefendingUnits(attAndDef.getDefendingUnits());
+  }
+
+  /**
+   * Request 58: for a pending land battle with units landing from the sea, the attacker's ships
+   * bombarding it (once the battle step has chosen them), or else the attacker's ships able to
+   * bombard in the sea zones the landing came from.
+   */
+  private List<Unit> bombardingShips() {
+    if (battleSiteTerritory == null || battleSiteTerritory.isWater()) {
+      return List.of();
+    }
+    final GamePlayer attacker = getAttacker();
+    if (attacker == null) {
+      return List.of();
+    }
+    try (GameData.Unlocker ignored = data.acquireReadLock()) {
+      final IBattle battle =
+          AbstractMoveDelegate.getBattleTracker(data)
+              .getPendingNonBombingBattle(battleSiteTerritory);
+      if (!(battle instanceof MustFightBattle mfb) || !mfb.isAmphibious()) {
+        return List.of();
+      }
+      if (!mfb.getBombardingUnits().isEmpty()) {
+        return new ArrayList<>(mfb.getBombardingUnits());
+      }
+      final List<Unit> ships = new ArrayList<>();
+      for (final Territory from : mfb.getAttackingFrom()) {
+        if (from.isWater()) {
+          ships.addAll(
+              from.getUnitCollection()
+                  .getMatches(
+                      Matches.unitIsOwnedBy(attacker).and(Matches.unitCanBombard(attacker))));
+        }
+      }
+      return ships;
+    }
+  }
+
+  /** Request 58: "Assumed: 3 landing (hold fire in round 1), 5 by land, bombardment: 2 dice". */
+  String assumptionsText(
+      final List<Unit> attacking, final List<Unit> bombarding, final GamePlayer attacker) {
+    if (!isLandBattle()) {
+      return "";
+    }
+    final List<Unit> land = CollectionUtils.getMatches(attacking, Matches.unitIsLand());
+    final int landing = CollectionUtils.countMatches(land, Unit::getWasAmphibious);
+    final List<String> parts = new ArrayList<>();
+    if (landing > 0) {
+      final int holding =
+          AmphibiousLanding.applies(data.getProperties())
+              ? (int)
+                  land.stream()
+                      .filter(
+                          u ->
+                              AmphibiousLanding.isLanding(
+                                  u, AmphibiousLanding.exemptTypes(data.getProperties())))
+                      .count()
+              : 0;
+      parts.add(
+          landing
+              + " landing"
+              + (holding == 0
+                  ? ""
+                  : holding == landing
+                      ? " (hold fire in round 1)"
+                      : " (" + holding + " hold fire in round 1)"));
+    }
+    parts.add((land.size() - landing) + " by land");
+    if (!bombarding.isEmpty()) {
+      parts.add("bombardment: " + bombardmentDice(attacking, bombarding, attacker) + " dice");
+    }
+    return "<html>Assumed: " + String.join(", ", parts) + "</html>";
+  }
+
+  /** Request 58: the bombardment dice in round 1, with the request 51 cap. */
+  private int bombardmentDice(
+      final List<Unit> attacking, final List<Unit> bombarding, final GamePlayer attacker) {
+    try (GameData.Unlocker ignored = data.acquireReadLock()) {
+      final var properties = data.getProperties();
+      return PowerStrengthAndRolls.build(
+              bombarding,
+              CombatValueBuilder.navalBombardmentCombatValue()
+                  .enemyUnits(defendingUnitsPanel.getUnits())
+                  .friendlyUnits(attacking)
+                  .supportAttachments(data.getUnitTypeList().getSupportRules())
+                  .lhtrHeavyBombers(Properties.getLhtrHeavyBombers(properties))
+                  .gameDiceSides(data.getDiceSides())
+                  .territoryEffects(getTerritoryEffects())
+                  .diceCap(
+                      BombardCap.applies(properties)
+                          ? BombardCap.diceCap(attacking, attacker)
+                          : null)
+                  .reducedDieValue(BombardCap.reducedDieValue(properties))
+                  .build())
+          .calculateTotalRolls();
+    }
+  }
+
+  /** Request 58: for tests. */
+  PlayerUnitsPanel getAttackingUnitsPanelForTest() {
+    return attackingUnitsPanel;
   }
 
   GamePlayer getAttacker() {
@@ -531,10 +650,6 @@ class BattleCalculatorPanel extends JPanel {
 
   private void setDefender(final GamePlayer gamePlayer) {
     defenderCombo.setSelectedItem(gamePlayer);
-  }
-
-  private boolean isAmphibiousBattle() {
-    return (landBattleCheckBox.isSelected() && amphibiousCheckBox.isSelected());
   }
 
   private Collection<TerritoryEffect> getTerritoryEffects() {
@@ -575,20 +690,25 @@ class BattleCalculatorPanel extends JPanel {
               bombarding =
                   CollectionUtils.getMatches(attacking, Matches.unitCanBombard(getAttacker()));
               attacking.removeAll(bombarding);
-              final int numLandUnits =
-                  CollectionUtils.countMatches(attacking, Matches.unitIsLand());
+              // request 58: as in a real battle, at most (units landing from the sea x N) ships
+              // bombard (request 51); the dice cap itself is applied in the battle
+              final int maxShips = BombardCap.diceCap(attacking, attacker);
               if (Properties.getShoreBombardPerGroundUnitRestricted(data.getProperties())
-                  && numLandUnits < bombarding.size()) {
+                  && maxShips < bombarding.size()) {
                 BattleDelegate.sortUnitsToBombard(bombarding);
                 // Create new list as needs to be serializable which subList isn't
-                bombarding = new ArrayList<>(bombarding.subList(0, numLandUnits));
+                bombarding = new ArrayList<>(bombarding.subList(0, maxShips));
               }
             }
+            final List<Unit> bombardingUsed = bombarding;
+            final String assumed = assumptionsText(attacking, bombardingUsed, attacker);
+            SwingUtilities.invokeLater(() -> assumptions.setText(assumed));
             calculator.setRetreatAfterRound(retreatAfterXRounds.getValue());
             calculator.setRetreatAfterXUnitsLeft(retreatAfterXUnitsLeft.getValue());
             calculator.setKeepOneAttackingLandUnit(
                 landBattleCheckBox.isSelected() && keepOneAttackingLandUnitCheckBox.isSelected());
-            calculator.setAmphibious(isAmphibiousBattle());
+            // request 58: each unit says whether it lands from the sea ("from sea" counts)
+            calculator.setAmphibious(false);
             calculator.setAttackerOrderOfLosses(attackerOrderOfLosses);
             calculator.setDefenderOrderOfLosses(defenderOrderOfLosses);
             final Collection<TerritoryEffect> territoryEffects = getTerritoryEffects();
@@ -754,6 +874,7 @@ class BattleCalculatorPanel extends JPanel {
 
   private void setResultsToBlank() {
     final String blank = "------";
+    assumptions.setText("");
     attackerWin.setText(blank);
     defenderWin.setText(blank);
     draw.setText(blank);
@@ -795,22 +916,7 @@ class BattleCalculatorPanel extends JPanel {
       attackerUnitsTotalHitPoints.setText(getTotalNumberText("HP: ", attackHitPoints));
       defenderUnitsTotalHitPoints.setText(getTotalNumberText("HP: ", defenseHitPoints));
       final Collection<TerritoryEffect> territoryEffects = getTerritoryEffects();
-      if (isAmphibiousBattle()) {
-        attackers.stream()
-            .filter(Matches.unitIsLand())
-            .forEach(
-                unit -> {
-                  final Optional<MutableProperty<?>> property =
-                      unit.getProperty(Unit.PropertyName.UNLOADED_AMPHIBIOUS);
-                  if (property.isPresent()) {
-                    try {
-                      property.get().setValue(true);
-                    } catch (final MutableProperty.InvalidValueException e) {
-                      // ignore units that can't be unloaded
-                    }
-                  }
-                });
-      }
+      // request 58: the units already say whether they land from the sea ("from sea" counts)
       final int attackPower =
           PowerStrengthAndRolls.build(
                   attackers,
