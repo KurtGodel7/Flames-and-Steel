@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import javax.swing.tree.TreeNode;
@@ -37,10 +38,17 @@ public class StatisticsAggregator {
     this.mapData = map;
   }
 
-  private static Map<OverTimeStatisticType, IStat> createOverTimeStatisticsMapping(
+  private Map<OverTimeStatisticType, IStat> createOverTimeStatisticsMapping(
       final Collection<Resource> resources) {
     final Map<OverTimeStatisticType, IStat> statisticsMapping =
         new HashMap<>(defaultStatisticsMapping);
+    // Flames and Steel (request 60): production plus manpower income at the set value
+    if (StatsSides.mpValue(game) > 0) {
+      statisticsMapping.put(
+          new OverTimeStatisticType.NamedStatistic(
+              "Income+MP", "Production + MP income \u00d7 MP value"),
+          new StatsSides.IncomeMpStat());
+    }
     resources.forEach(
         resource ->
             statisticsMapping.put(
@@ -65,7 +73,13 @@ public class StatisticsAggregator {
     }
 
     final List<GamePlayer> players = game.getPlayerList().getPlayers();
-    final List<String> alliances = new ArrayList<>(game.getAllianceTracker().getAlliances());
+    // Flames and Steel (request 60): side totals by "FS Stats Sides" when it is set
+    final Map<String, List<GamePlayer>> alliances = new LinkedHashMap<>(StatsSides.sides(game));
+    if (alliances.isEmpty()) {
+      for (final String a : game.getAllianceTracker().getAlliances()) {
+        alliances.put(a, new ArrayList<>(game.getAllianceTracker().getPlayersInAlliance(a)));
+      }
+    }
     for (final Round round : getRounds()) {
       game.getHistory().gotoNode(round);
       collectOverTimeStatisticsForRound(overTimeStatisticSources, players, alliances, round);
@@ -75,7 +89,7 @@ public class StatisticsAggregator {
   private void collectOverTimeStatisticsForRound(
       final Map<OverTimeStatisticType, IStat> overTimeStatisticSources,
       final List<GamePlayer> players,
-      final List<String> alliances,
+      final Map<String, List<GamePlayer>> alliances,
       final Round round) {
     for (final GamePlayer player : players) {
       overTimeStatisticSources.forEach(
@@ -85,14 +99,19 @@ public class StatisticsAggregator {
                   .get(type)
                   .put(player.getName(), round, source.getValue(player, game, mapData)));
     }
-    for (final String alliance : alliances) {
-      overTimeStatisticSources.forEach(
-          (type, source) ->
-              underConstruction
-                  .getOverTimeStatistics()
-                  .get(type)
-                  .put(alliance, round, source.getValue(alliance, game, mapData)));
-    }
+    alliances.forEach(
+        (alliance, members) ->
+            overTimeStatisticSources.forEach(
+                (type, source) ->
+                    underConstruction
+                        .getOverTimeStatistics()
+                        .get(type)
+                        .put(
+                            alliance,
+                            round,
+                            members.stream()
+                                .mapToDouble(p -> source.getValue(p, game, mapData))
+                                .sum())));
   }
 
   private List<Round> getRounds() {

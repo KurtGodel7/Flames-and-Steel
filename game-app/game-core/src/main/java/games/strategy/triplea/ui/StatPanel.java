@@ -1,7 +1,5 @@
 package games.strategy.triplea.ui;
 
-import games.strategy.triplea.formatter.PlayerNames;
-import games.strategy.engine.data.AllianceTracker;
 import games.strategy.engine.data.Change;
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
@@ -10,6 +8,7 @@ import games.strategy.engine.data.events.GameDataChangeListener;
 import games.strategy.engine.stats.IStat;
 import games.strategy.engine.stats.ProductionStat;
 import games.strategy.engine.stats.ResourceStat;
+import games.strategy.engine.stats.StatsSides;
 import games.strategy.engine.stats.TuvStat;
 import games.strategy.engine.stats.UnitsStat;
 import games.strategy.engine.stats.VictoryCityStat;
@@ -17,6 +16,7 @@ import games.strategy.triplea.Constants;
 import games.strategy.triplea.Properties;
 import games.strategy.triplea.attachments.PlayerAttachment;
 import games.strategy.triplea.delegate.Matches;
+import games.strategy.triplea.formatter.PlayerNames;
 import games.strategy.triplea.ui.mapdata.MapData;
 import java.awt.GridLayout;
 import java.awt.Image;
@@ -47,6 +47,11 @@ class StatPanel extends JPanel implements GameDataChangeListener {
   protected GameData gameData;
   private final transient UiContext uiContext;
   private final StatTableModel dataModel;
+
+  /** For tests (request 60). */
+  StatTableModel dataModel() {
+    return dataModel;
+  }
 
   StatPanel(final GameData data, final UiContext uiContext) {
     this.gameData = data;
@@ -133,6 +138,10 @@ class StatPanel extends JPanel implements GameDataChangeListener {
       statsList.add(new ProductionStat());
       statsList.add(new UnitsStat());
       statsList.add(new TuvStat());
+      // Flames and Steel (request 60): manpower at its set PU value
+      if (StatsSides.mpValue(gameData) > 0) {
+        statsList.add(new StatsSides.IncomeMpStat());
+      }
       if (gameData.getMap().getTerritories().stream().anyMatch(Matches.territoryIsVictoryCity())) {
         statsList.add(new VictoryCityStat());
       }
@@ -148,8 +157,9 @@ class StatPanel extends JPanel implements GameDataChangeListener {
       final GameData gameDataSync = StatPanel.this.gameData;
       try (GameData.Unlocker ignored = gameDataSync.acquireReadLock()) {
         final List<GamePlayer> players = gameDataSync.getPlayerList().getPlayers();
-        final List<String> alliances = getAlliancesToShow(gameDataSync.getAllianceTracker());
-        collectedData = new String[players.size() + alliances.size()][stats.length + 1];
+        // Flames and Steel (request 60): the sides of "FS Stats Sides", else the alliances
+        final Map<String, List<GamePlayer>> totals = StatsSides.totalRows(gameDataSync);
+        collectedData = new String[players.size() + totals.size()][stats.length + 1];
         int row = 0;
         for (final GamePlayer player : players) {
           collectedData[row][0] = PlayerNames.display(player);
@@ -164,22 +174,19 @@ class StatPanel extends JPanel implements GameDataChangeListener {
           }
           row++;
         }
-        for (final @Nls String alliance : alliances) {
-          collectedData[row][0] = "<html><b>" + alliance;
+        for (final Map.Entry<String, List<GamePlayer>> side : totals.entrySet()) {
+          collectedData[row][0] = "<html><b>" + side.getKey();
           for (int i = 0; i < stats.length; i++) {
-            double value = stats[i].getValue(alliance, gameDataSync, uiContext.getMapData());
+            final IStat stat = stats[i];
+            double value =
+                side.getValue().stream()
+                    .mapToDouble(p -> stat.getValue(p, gameDataSync, uiContext.getMapData()))
+                    .sum();
             collectedData[row][i + 1] = IStat.DECIMAL_FORMAT.format(value);
           }
           row++;
         }
       }
-    }
-
-    private List<@Nls String> getAlliancesToShow(AllianceTracker tracker) {
-      return tracker.getAlliances().stream()
-          .filter(a -> tracker.getPlayersInAlliance(a).size() > 1)
-          .sorted()
-          .toList();
     }
 
     /*

@@ -21,6 +21,15 @@ public interface OverTimeStatisticType {
     private final String axisLabel;
   }
 
+  /** Flames and Steel (request 60): a statistic with a fixed name ("Income+MP"). */
+  @Getter(onMethod_ = @Override)
+  @RequiredArgsConstructor
+  @lombok.EqualsAndHashCode
+  class NamedStatistic implements OverTimeStatisticType {
+    private final String name;
+    private final String axisLabel;
+  }
+
   @RequiredArgsConstructor
   class ResourceStatistic implements OverTimeStatisticType {
 
