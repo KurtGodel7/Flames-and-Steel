@@ -95,6 +95,50 @@ public class Apcs {
     return count;
   }
 
+  /**
+   * Request 57: how many more SPCs the nation may buy now, and if none, why (for the build screen).
+   *
+   * @param allowed {@code max(0, limit - count)}
+   * @param reason empty when some may be bought, else "needs Advanced 1 research", "limit reached
+   *     (2 of 2)" or "national limit reached (3)"
+   */
+  public record Allowance(int allowed, int limit, int count, int nationalCap, String reason) {}
+
+  public static Allowance allowance(final GamePlayer player, final GameMap map) {
+    final PlayerAttachment attachment = PlayerAttachment.get(player);
+    final int nationalCap = attachment == null ? 0 : attachment.getApcLimit();
+    int fromTechs = 0;
+    for (final TechAdvance tech :
+        TechTracker.getCurrentTechAdvances(player, player.getData().getTechnologyFrontier())) {
+      final TechAbilityAttachment ability = TechAbilityAttachment.get(tech);
+      if (ability != null) {
+        fromTechs += ability.getApcLimitBonus();
+      }
+    }
+    final int limit = Math.min(nationalCap, fromTechs);
+    final int count = countTowardsLimit(player, map);
+    final int allowed = Math.max(0, limit - count);
+    final String reason;
+    if (allowed > 0) {
+      reason = "";
+    } else if (fromTechs <= 0) {
+      reason = "needs Advanced 1 research";
+    } else if (fromTechs > nationalCap) {
+      reason = "national limit reached (" + nationalCap + ")";
+    } else {
+      reason = "limit reached (" + count + " of " + limit + ")";
+    }
+    return new Allowance(allowed, limit, count, nationalCap, reason);
+  }
+
+  /** Request 57: the build screen's tooltip line explaining the SPC rule. */
+  public static String allowanceRule(final Allowance allowance) {
+    return "You may own as many Special Production Centers as your Advanced techs (Advanced 1\u20134),"
+        + " up to your national limit of "
+        + allowance.nationalCap()
+        + ". Each builds one advanced unit type you have researched.";
+  }
+
   private static boolean builtBy(final Unit apc, final GamePlayer player) {
     final GamePlayer original = apc.getOriginalOwner();
     return original == null ? apc.isOwnedBy(player) : original.equals(player);

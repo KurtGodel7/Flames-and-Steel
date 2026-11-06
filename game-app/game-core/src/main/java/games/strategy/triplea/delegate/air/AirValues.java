@@ -9,6 +9,7 @@ import games.strategy.triplea.delegate.TechAdvance;
 import games.strategy.triplea.delegate.TechTracker;
 import games.strategy.triplea.formatter.TechNames;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -61,14 +62,33 @@ public class AirValues {
       return "";
     }
     final String[] parts = line.split(" \\| ");
-    final StringBuilder sb = new StringBuilder("<html>");
-    for (int i = 0; i < parts.length; i++) {
-      sb.append(parts[i]);
-      if (i < parts.length - 1) {
-        sb.append(i == 1 ? "<br>" : " | ");
+    if (parts.length < 2) {
+      return "<html>" + unbreakable(line) + "</html>";
+    }
+    // request 57: two lines of about equal length ("Attack 3 | Air defense 1" / "Range 8 | Hits 2 |
+    // Bombing 1/2"), each kept whole so a narrow tile never wraps it one word per line
+    int split = 1;
+    int best = Integer.MAX_VALUE;
+    for (int k = 1; k < parts.length; k++) {
+      final int longer =
+          Math.max(
+              String.join(" | ", Arrays.copyOfRange(parts, 0, k)).length(),
+              String.join(" | ", Arrays.copyOfRange(parts, k, parts.length)).length());
+      if (longer < best) {
+        best = longer;
+        split = k;
       }
     }
-    return sb.append("</html>").toString();
+    return "<html>"
+        + unbreakable(String.join(" | ", Arrays.copyOfRange(parts, 0, split)))
+        + "<br>"
+        + unbreakable(String.join(" | ", Arrays.copyOfRange(parts, split, parts.length)))
+        + "</html>";
+  }
+
+  /** The text with non-breaking spaces, so an HTML label keeps it on one line. */
+  public static String unbreakable(final String text) {
+    return text.replace(" ", "&nbsp;");
   }
 
   /**
@@ -141,7 +161,8 @@ public class AirValues {
               null,
               TechAbilityAttachment::getBombingBonus));
     }
-    lines.add("<i>Aircraft fight only in the air stage; stock attack and defense are not used.</i>");
+    lines.add(
+        "<i>Aircraft fight only in the air stage; stock attack and defense are not used.</i>");
     return String.join("<br>", lines);
   }
 
@@ -172,7 +193,8 @@ public class AirValues {
         new StringBuilder("<b>").append(name).append(' ').append(total).append("</b>: ");
     sb.append(meaning);
     final List<String> sources = new ArrayList<>();
-    final int nationBonus = nation == null ? 0 : nation.apply(player.getTechAttachment()).getInt(type);
+    final int nationBonus =
+        nation == null ? 0 : nation.apply(player.getTechAttachment()).getInt(type);
     if (nationBonus != 0) {
       sources.add(
           AirCombat.adjective(player)

@@ -299,8 +299,14 @@ class ProductionPanel extends JPanel {
     for (final Rule current : rules) {
       int max = leftToSpend.fitsHowOften(current.getCost());
       max += current.getQuantity();
-      current.setMax(max);
+      // request 57: no more than may be bought (SPCs)
+      current.setMax(Math.min(max, current.getPurchaseLimit()));
     }
+  }
+
+  /** Request 57: whether tiles are greyed out when none may be bought (not in edit mode). */
+  protected boolean enforcesPurchaseLimits() {
+    return true;
   }
 
   protected ResourceCollection getResources() {
@@ -328,6 +334,8 @@ class ProductionPanel extends JPanel {
     private final ProductionRule rule;
     private final GamePlayer player;
     private final Set<ScrollableTextField> textFields = new HashSet<>();
+    // request 57: most of this unit that may be bought now (SPCs: limit set by Advanced techs)
+    private int purchaseLimit = Integer.MAX_VALUE;
     private final ScrollableTextFieldListener listener =
         new ScrollableTextFieldListener() {
           @Override
@@ -394,17 +402,8 @@ class ProductionPanel extends JPanel {
           }
           tooltip.append(uiContext.getTooltipProperties().getTooltip(type, player));
           name.setText(UnitNames.of(type));
-          // Flames and Steel: an SPC that would build nothing says so (request 11 item 3)
-          final Optional<String> spcWarning =
-              games.strategy.triplea.attachments.ApcAttachment.isApc(type)
-                  ? games.strategy.triplea.delegate.apc.Apcs.buildsNothingWarning(player)
-                  : java.util.Optional.empty();
-          if (spcWarning.isPresent()) {
-            name.setText(
-                "<html>"
-                    + UnitNames.of(type)
-                    + "<br><font color='#E07000'>builds nothing yet</font></html>");
-            tooltip.append("<br><b>").append(spcWarning.get()).append("</b>");
+          if (games.strategy.triplea.attachments.ApcAttachment.isApc(type)) {
+            spcTile(type, name, tooltip);
           }
           if (attach.getConsumesUnits().totalValues() == 1) {
             name.setForeground(Color.CYAN);
@@ -470,6 +469,12 @@ class ProductionPanel extends JPanel {
 
       final ScrollableTextField textField = new ScrollableTextField(0, Integer.MAX_VALUE);
       textField.setValue(quantity);
+      if (purchaseLimit <= 0 && enforcesPurchaseLimits()) {
+        // request 57: none may be bought now: the tile is greyed out and can't be changed
+        textField.setEnabled(false);
+        name.setForeground(Color.GRAY);
+        info.setForeground(Color.GRAY);
+      }
 
       @NonNls final String toolTipText = "<html>" + tooltip + "</html>";
       info.setToolTipText(toolTipText);
@@ -536,6 +541,42 @@ class ProductionPanel extends JPanel {
       textFields.add(textField);
       panel.setBorder(new EtchedBorder());
       return panel;
+    }
+
+    /**
+     * Request 57: the SPC tile says how many may be bought now ("may buy 1 more"), or why none
+     * ("needs Advanced 1 research", "limit reached (1 of 1)"); request 11's "builds nothing yet"
+     * stays as a second line when one may be bought but no tech unlocks an SPC unit.
+     */
+    private void spcTile(final UnitType type, final JLabel name, final StringBuilder tooltip) {
+      final var allowance =
+          games.strategy.triplea.delegate.apc.Apcs.allowance(player, player.getData().getMap());
+      purchaseLimit = allowance.allowed();
+      final StringBuilder text =
+          new StringBuilder("<html>")
+              .append(
+                  games.strategy.triplea.delegate.air.AirValues.unbreakable(UnitNames.of(type)));
+      if (allowance.allowed() <= 0) {
+        text.append("<br><font color='#E07000'>")
+            .append(games.strategy.triplea.delegate.air.AirValues.unbreakable(allowance.reason()))
+            .append("</font>");
+      } else {
+        text.append("<br>may&nbsp;buy&nbsp;").append(allowance.allowed()).append("&nbsp;more");
+        final Optional<String> warning =
+            games.strategy.triplea.delegate.apc.Apcs.buildsNothingWarning(player);
+        if (warning.isPresent()) {
+          text.append("<br><font color='#E07000'>builds&nbsp;nothing&nbsp;yet</font>");
+          tooltip.append("<br><b>").append(warning.get()).append("</b>");
+        }
+      }
+      name.setText(text.append("</html>").toString());
+      tooltip
+          .append("<br>")
+          .append(games.strategy.triplea.delegate.apc.Apcs.allowanceRule(allowance));
+    }
+
+    int getPurchaseLimit() {
+      return purchaseLimit;
     }
 
     IntegerMap<Resource> getCost() {

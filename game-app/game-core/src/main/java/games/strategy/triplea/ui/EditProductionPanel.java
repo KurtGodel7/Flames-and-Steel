@@ -60,6 +60,11 @@ class EditProductionPanel extends ProductionPanel {
   }
 
   @Override
+  protected boolean enforcesPurchaseLimits() {
+    return false;
+  }
+
+  @Override
   protected void calculateLimits() {
     for (final Rule current : getRules()) {
       current.setMax(99);
@@ -139,7 +144,8 @@ class EditProductionPanel extends ProductionPanel {
     try {
       final UnitImageFactory imageFactory = uiContext.getUnitImageFactory();
       return imageFactory != null
-          && imageFactory.hasImage(UnitImageFactory.ImageKey.builder().player(player).type(ut).build());
+          && imageFactory.hasImage(
+              UnitImageFactory.ImageKey.builder().player(player).type(ut).build());
     } catch (final Exception e) {
       return false;
     }
