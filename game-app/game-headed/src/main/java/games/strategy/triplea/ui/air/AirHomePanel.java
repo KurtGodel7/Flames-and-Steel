@@ -872,8 +872,9 @@ public final class AirHomePanel extends ActionPanel {
         draw.outlineBox(g, sel.from(), AirDraw.ORIGIN_LINE, 5f);
       }
       for (final Landing l : staged) {
+        final java.awt.Point from = draw.middle(l.from());
         AirDraw.arrow(
-            g, draw.middle(l.from()), draw.middle(l.to()), AirDraw.LEGAL_LINE, 3f, false, "", 6);
+            g, from, draw.nearest(from, draw.middle(l.to())), AirDraw.LEGAL_LINE, 3f, false, "", 6);
       }
       // the landed aircraft, stacked at their spot as the map stacks units
       for (final Map.Entry<Territory, List<Unit>> e : landed.entrySet()) {

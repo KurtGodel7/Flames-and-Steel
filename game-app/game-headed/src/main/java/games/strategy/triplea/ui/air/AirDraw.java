@@ -2,8 +2,8 @@ package games.strategy.triplea.ui.air;
 
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.Territory;
-import games.strategy.engine.data.UnitType;
 import games.strategy.engine.data.Unit;
+import games.strategy.engine.data.UnitType;
 import games.strategy.triplea.image.HitPointBar;
 import games.strategy.triplea.image.MapImage;
 import games.strategy.triplea.image.UnitImageFactory;
@@ -17,7 +17,6 @@ import java.awt.Composite;
 import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics2D;
-import java.awt.Image;
 import java.awt.Point;
 import java.awt.Polygon;
 import java.awt.Rectangle;
@@ -104,9 +103,9 @@ final class AirDraw {
   }
 
   /**
-   * Request 44: a row of stacks centred on the point, each drawn as the map draws units (the
-   * image, the count when not 1, the hit-point bar), on a light backing so aircraft away from
-   * their base stand out. Returns each stack's box.
+   * Request 44: a row of stacks centred on the point, each drawn as the map draws units (the image,
+   * the count when not 1, the hit-point bar), on a light backing so aircraft away from their base
+   * stand out. Returns each stack's box.
    */
   List<Rectangle> drawStacks(
       final Graphics2D g, final Point centre, final List<Stack> stacks, final float alpha) {
@@ -157,7 +156,7 @@ final class AirDraw {
     if (units.isEmpty()) {
       return;
     }
-    final games.strategy.engine.data.Unit unit = units.get(0);
+    final Unit unit = units.get(0);
     HitPointBar.paint(
         g,
         iconX,
@@ -235,10 +234,77 @@ final class AirDraw {
     return mapData().getCenter(t);
   }
 
-  /** The middle of a territory's bounding box (for targets drawn on the map). */
+  private final java.util.Map<Territory, Point> middles =
+      new java.util.concurrent.ConcurrentHashMap<>();
+
+  /**
+   * Where aircraft, tags and arrow ends are drawn over a territory. Request 64: a point inside the
+   * territory: the middle of its bounding box when that lies inside it (as before), else its centre
+   * (centers.txt), else a point inside its largest polygon. Enclaves such as British Honduras
+   * inside Guatemala no longer get another territory's aircraft.
+   */
   Point middle(final Territory t) {
+    return new Point(middles.computeIfAbsent(t, this::insidePoint));
+  }
+
+  private Point insidePoint(final Territory t) {
     final Rectangle r = mapData().getBoundingRect(t);
-    return new Point((int) r.getCenterX(), (int) r.getCenterY());
+    final Point box = new Point((int) r.getCenterX(), (int) r.getCenterY());
+    if (contains(t, box)) {
+      return box;
+    }
+    final Point centre = mapData().getCenter(t);
+    if (centre != null && contains(t, centre)) {
+      return centre;
+    }
+    final Polygon largest =
+        mapData().getPolygons(t).stream()
+            .max(
+                java.util.Comparator.comparingDouble(
+                    p -> p.getBounds().getWidth() * p.getBounds().getHeight()))
+            .orElse(null);
+    if (largest == null) {
+      return centre != null ? centre : box;
+    }
+    final Rectangle b = largest.getBounds();
+    final Point mid = new Point((int) b.getCenterX(), (int) b.getCenterY());
+    // the grid point inside the polygon nearest its own middle
+    Point best = null;
+    double bestDistance = Double.MAX_VALUE;
+    final int step = Math.max(2, Math.min(b.width, b.height) / 24);
+    for (int x = b.x; x <= b.x + b.width; x += step) {
+      for (int y = b.y; y <= b.y + b.height; y += step) {
+        if (largest.contains(x, y) && mid.distance(x, y) < bestDistance) {
+          bestDistance = mid.distance(x, y);
+          best = new Point(x, y);
+        }
+      }
+    }
+    return best != null ? best : (centre != null ? centre : box);
+  }
+
+  private boolean contains(final Territory t, final Point p) {
+    return mapData().getPolygons(t).stream().anyMatch(poly -> poly.contains(p));
+  }
+
+  /**
+   * Request 64: the copy of {@code to} nearest {@code from} when the map scrolls round
+   * horizontally, so a line between them takes the short way across the seam. The map draws the air
+   * overlays once each side of the seam, so the line shows from either side.
+   */
+  Point nearest(final Point from, final Point to) {
+    if (!mapData().scrollWrapX()) {
+      return to;
+    }
+    final int width = mapData().getMapDimensions().width;
+    final int dx = to.x - from.x;
+    if (dx > width / 2) {
+      return new Point(to.x - width, to.y);
+    }
+    if (dx < -width / 2) {
+      return new Point(to.x + width, to.y);
+    }
+    return to;
   }
 
   /**

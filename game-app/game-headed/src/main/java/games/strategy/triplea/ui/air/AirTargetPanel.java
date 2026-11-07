@@ -2281,30 +2281,16 @@ public final class AirTargetPanel extends ActionPanel {
       // request 38 section 12: the allies' choices so far, dashed
       for (final List<TargetAssignment> list : allied.values()) {
         for (final TargetAssignment a : list) {
-          final Point end = draw.middle(a.target().territory());
-          AirDraw.arrow(
-              g,
-              draw.center(a.zone()),
-              new Point(end.x, end.y + below),
-              ALLY_LINE,
-              2.5f,
-              true,
-              "",
-              6);
+          final Point start = draw.center(a.zone());
+          final Point end = draw.nearest(start, draw.middle(a.target().territory()));
+          AirDraw.arrow(g, start, new Point(end.x, end.y + below), ALLY_LINE, 2.5f, true, "", 6);
         }
       }
       // own choices: arrow from the base to the target
       for (final TargetAssignment a : staged) {
-        final Point end = draw.middle(a.target().territory());
-        AirDraw.arrow(
-            g,
-            draw.center(a.zone()),
-            new Point(end.x, end.y + below),
-            STRIKE_LINE,
-            4f,
-            false,
-            "",
-            6);
+        final Point start = draw.center(a.zone());
+        final Point end = draw.nearest(start, draw.middle(a.target().territory()));
+        AirDraw.arrow(g, start, new Point(end.x, end.y + below), STRIKE_LINE, 4f, false, "", 6);
       }
       // request 44: the aircraft with orders, stacked over their target as the map stacks units
       for (final Map.Entry<Territory, List<Unit>> e : ordered.entrySet()) {
