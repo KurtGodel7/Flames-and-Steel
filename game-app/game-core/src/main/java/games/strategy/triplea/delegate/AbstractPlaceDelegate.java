@@ -841,6 +841,10 @@ public abstract class AbstractPlaceDelegate extends BaseTripleADelegate
     if (!to.isWater() && FactoryArea.includesFactory(units) && !FactoryArea.allows(player, to)) {
       return Optional.of(FactoryArea.reason(player));
     }
+    // Flames and Steel (request 61): new SPCs only in the player's SPC area
+    if (!to.isWater() && SpcArea.includesSpc(units) && !SpcArea.allows(player, to)) {
+      return Optional.of(SpcArea.reason(player));
+    }
     final Collection<Unit> allowedUnits = getUnitsToBePlaced(to, units, player);
     if (allowedUnits == null || !allowedUnits.containsAll(units)) {
       return Optional.of(String.format("Cannot place these units in %s", to.getName()));
@@ -996,6 +1000,10 @@ public abstract class AbstractPlaceDelegate extends BaseTripleADelegate
     // Flames and Steel: no new factories outside the player's factory area
     if (!water && !FactoryArea.allows(player, to)) {
       placeableUnits.removeIf(Matches.unitCanProduceUnits());
+    }
+    // Flames and Steel (request 61): no new SPCs outside the player's SPC area
+    if (!water && !SpcArea.allows(player, to)) {
+      placeableUnits.removeIf(games.strategy.triplea.delegate.apc.Apcs::isApc);
     }
     // remove any units that require other units to be consumed on creation, if we don't have enough
     // to consume (veqryn)

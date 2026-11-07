@@ -107,6 +107,10 @@ public class BidPlaceDelegate extends AbstractPlaceDelegate {
     placeableUnits.addAll(CollectionUtils.getMatches(units, groundUnits));
     placeableUnits.addAll(CollectionUtils.getMatches(units, airUnits));
     addConstructionUnits(units, to, placeableUnits);
+    // Flames and Steel (request 61): bid SPCs only in the player's SPC area
+    if (!SpcArea.allows(player, to)) {
+      placeableUnits.removeIf(games.strategy.triplea.delegate.apc.Apcs::isApc);
+    }
     if (hasUnitPlacementRestrictions()) {
       final int territoryProduction = TerritoryAttachment.getProduction(to);
       final Predicate<Unit> cantBePlacedDueToTerritoryProduction =

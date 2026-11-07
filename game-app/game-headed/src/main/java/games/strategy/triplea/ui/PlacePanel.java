@@ -18,6 +18,8 @@ import games.strategy.triplea.delegate.FactoryArea;
 import games.strategy.triplea.delegate.FreeConscripts;
 import games.strategy.triplea.delegate.GameStepPropertiesHelper;
 import games.strategy.triplea.delegate.Matches;
+import games.strategy.triplea.delegate.SpcArea;
+import games.strategy.triplea.delegate.apc.Apcs;
 import games.strategy.triplea.delegate.data.PlaceableUnits;
 import games.strategy.triplea.delegate.remote.IAbstractPlaceDelegate;
 import games.strategy.triplea.formatter.MyFormatter;
@@ -99,9 +101,11 @@ class PlacePanel extends AbstractMovePanel implements GameDataChangeListener {
             // the 'player' and 'bridge' attributes set, which is done server side
             // and not client side. Using the local client bridge causes a NPE when
             // a game-client (in a networked game) tries to place units.
+            final IAbstractPlaceDelegate delegate =
+                (IAbstractPlaceDelegate) getPlayerBridge().getRemoteDelegate();
             final PlaceableUnits production =
-                ((IAbstractPlaceDelegate) getPlayerBridge().getRemoteDelegate())
-                    .getPlaceableUnits(units, territory);
+                spcChecked(
+                    territory, units, delegate.getPlaceableUnits(units, territory), delegate);
             if (production.isError()) {
               JOptionPane.showMessageDialog(
                   getTopLevelAncestor(),
@@ -111,6 +115,51 @@ class PlacePanel extends AbstractMovePanel implements GameDataChangeListener {
             }
             return production;
           }
+        }
+
+        /**
+         * Request 63: when the player holds SPCs and none is offered in this land territory, ask
+         * for an SPC on its own: if that is allowed, offer it too (with room for one more unit); if
+         * not, say why in the status bar instead of silently leaving it out.
+         */
+        private PlaceableUnits spcChecked(
+            final Territory territory,
+            final Collection<Unit> units,
+            final PlaceableUnits production,
+            final IAbstractPlaceDelegate delegate) {
+          final List<Unit> spcs = CollectionUtils.getMatches(units, Apcs::isApc);
+          if (territory.isWater()
+              || spcs.isEmpty()
+              || production.isError()
+              || production.getUnits().stream().anyMatch(Apcs::isApc)) {
+            return production;
+          }
+          final GamePlayer player = getCurrentPlayer();
+          final String why;
+          if (!SpcArea.allows(player, territory)) {
+            why = SpcArea.reason(player);
+          } else if (spcs.get(0).getUnitAttachment().unitPlacementRestrictionsContain(territory)) {
+            why = "SPCs can't be placed in " + territory.getName() + " (not on the SPC list)";
+          } else {
+            final PlaceableUnits alone = delegate.getPlaceableUnits(spcs, territory);
+            final List<Unit> offered =
+                alone.isError()
+                    ? List.of()
+                    : CollectionUtils.getMatches(alone.getUnits(), Apcs::isApc);
+            if (!offered.isEmpty()) {
+              final List<Unit> merged = new ArrayList<>(production.getUnits());
+              merged.addAll(offered);
+              final int max = production.getMaxUnits();
+              return new PlaceableUnits(
+                  merged, max < 0 ? max : max + Math.max(1, alone.getMaxUnits()));
+            }
+            why =
+                alone.isError()
+                    ? alone.getErrorMessage()
+                    : "no SPC can be placed in " + territory.getName() + " this turn";
+          }
+          setStatusWarningMessage(territory.getName() + ": " + why);
+          return production;
         }
 
         @Override
