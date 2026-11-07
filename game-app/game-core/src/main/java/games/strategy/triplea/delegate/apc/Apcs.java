@@ -280,12 +280,26 @@ public class Apcs {
   /** Records the production choices (a null type means the APC builds nothing). */
   public static void setProduction(
       final IDelegateBridge bridge, final GamePlayer player, final Map<Unit, UnitType> choices) {
+    setProduction(bridge, player, choices, Map.of());
+  }
+
+  /**
+   * Request 62: records the production choices and, for SPCs building ships, the sea zone the ships
+   * go to (an SPC not in {@code seaZones} keeps its stored zone). A land or air unit, or nothing,
+   * clears the stored zone.
+   */
+  public static void setProduction(
+      final IDelegateBridge bridge,
+      final GamePlayer player,
+      final Map<Unit, UnitType> choices,
+      final Map<Unit, Territory> seaZones) {
     final PlayerAttachment attachment = PlayerAttachment.get(player);
     if (attachment == null) {
       return;
     }
     final Map<String, String> production = new HashMap<>(attachment.getApcProduction());
     final IntegerMap<String> progress = new IntegerMap<>(attachment.getApcProgress());
+    final Map<String, String> zones = new HashMap<>(attachment.getApcSeaZone());
     for (final Map.Entry<Unit, UnitType> choice : choices.entrySet()) {
       final String id = choice.getKey().getId().toString();
       final String before = production.get(id);
@@ -298,11 +312,86 @@ public class Apcs {
         // switching type starts slow builds from scratch
         progress.removeKey(id);
       }
+      if (choice.getValue() == null || !choice.getValue().getUnitAttachment().isSea()) {
+        zones.remove(id);
+      } else if (seaZones.containsKey(choice.getKey())) {
+        final Territory zone = seaZones.get(choice.getKey());
+        if (zone == null) {
+          zones.remove(id);
+        } else {
+          zones.put(id, zone.getName());
+        }
+      }
     }
     final CompositeChange change = new CompositeChange();
     change.add(ChangeFactory.attachmentPropertyChange(attachment, production, "apcProduction"));
     change.add(ChangeFactory.attachmentPropertyChange(attachment, progress, "apcProgress"));
+    if (!zones.equals(attachment.getApcSeaZone())) {
+      change.add(ChangeFactory.attachmentPropertyChange(attachment, zones, "apcSeaZone"));
+    }
     bridge.addChange(change);
+  }
+
+  /**
+   * Request 62: the sea zones next to the SPC's territory that its ships may go to, by name (the
+   * airborne helper territories left out).
+   */
+  public static List<Territory> seaZonesNextTo(final Territory apcTerritory, final GameMap map) {
+    return map.getNeighbors(apcTerritory).stream()
+        .filter(Territory::isWater)
+        .filter(t -> !games.strategy.triplea.delegate.air.AirBases.isAirborneTerritory(t))
+        .sorted(Comparator.comparing(Territory::getName))
+        .toList();
+  }
+
+  /** Request 62: the sea zone chosen for the SPC's ships, if any (it may no longer be adjacent). */
+  public static Optional<Territory> getSeaZone(final Unit apc, final GamePlayer player) {
+    final PlayerAttachment attachment = PlayerAttachment.get(player);
+    if (attachment == null) {
+      return Optional.empty();
+    }
+    final String name = attachment.getApcSeaZone().get(apc.getId().toString());
+    return name == null
+        ? Optional.empty()
+        : player.getData().getMap().getTerritories().stream()
+            .filter(t -> t.getName().equals(name))
+            .findFirst();
+  }
+
+  /** Request 62: why a chosen sea zone is refused (not next to that SPC), if it is. */
+  public static Optional<String> validateSeaZones(
+      final GamePlayer player, final Map<Unit, Territory> seaZones, final GameMap map) {
+    for (final Map.Entry<Unit, Territory> e : seaZones.entrySet()) {
+      if (e.getValue() == null) {
+        continue;
+      }
+      if (!isOwnApc(e.getKey(), player)) {
+        return Optional.of("That is not one of " + player.getName() + "'s own SPCs.");
+      }
+      final Optional<Territory> at = territoryOf(e.getKey(), map);
+      if (at.isEmpty() || !seaZonesNextTo(at.get(), map).contains(e.getValue())) {
+        return Optional.of(
+            e.getValue().getName()
+                + " is not next to the SPC in "
+                + at.map(Territory::getName).orElse("?")
+                + ".");
+      }
+    }
+    return Optional.empty();
+  }
+
+  /**
+   * Request 62: where the SPC's ships go now: the chosen sea zone while it is still next to the
+   * SPC, else the first adjacent sea zone by name.
+   */
+  public static Optional<Territory> shipsGoTo(
+      final Unit apc, final Territory apcTerritory, final GamePlayer player, final GameMap map) {
+    final List<Territory> zones = seaZonesNextTo(apcTerritory, map);
+    final Optional<Territory> chosen = getSeaZone(apc, player);
+    if (chosen.isPresent() && zones.contains(chosen.get())) {
+      return chosen;
+    }
+    return zones.stream().findFirst();
   }
 
   /** Each of the nation's own APCs builds its units, which appear in its territory. */
@@ -334,11 +423,16 @@ public class Apcs {
                 + type.get().getName()
                 + " ready in "
                 + (rate.getApcTurnsPerUnit() - progress.getInt(id))
-                + " more turn(s)");
+                + " more turn(s)"
+                + (type.get().getUnitAttachment().isSea()
+                    ? shipsGoTo(apc, territory.get(), player, map)
+                        .map(z -> ", ships to " + z.getName())
+                        .orElse("")
+                    : ""));
         continue;
       }
       progress.removeKey(id);
-      final Optional<Territory> placeAt = placeFor(type.get(), territory.get(), player, map);
+      final Optional<Territory> placeAt = placeFor(type.get(), territory.get(), apc, player, map);
       if (placeAt.isEmpty()) {
         lines.add(
             "SPC in "
@@ -531,10 +625,19 @@ public class Apcs {
     if (!type.getUnitAttachment().isSea()) {
       return Optional.of(apcTerritory);
     }
-    return map.getNeighbors(apcTerritory).stream()
-        .filter(Territory::isWater)
-        .filter(t -> !games.strategy.triplea.delegate.air.AirBases.isAirborneTerritory(t))
-        .sorted(Comparator.comparing(Territory::getName))
-        .findFirst();
+    return seaZonesNextTo(apcTerritory, map).stream().findFirst();
+  }
+
+  /** Request 62: as above, but ships go to the sea zone chosen for this SPC (see shipsGoTo). */
+  private static Optional<Territory> placeFor(
+      final UnitType type,
+      final Territory apcTerritory,
+      final Unit apc,
+      final GamePlayer player,
+      final GameMap map) {
+    if (!type.getUnitAttachment().isSea()) {
+      return Optional.of(apcTerritory);
+    }
+    return shipsGoTo(apc, apcTerritory, player, map);
   }
 }

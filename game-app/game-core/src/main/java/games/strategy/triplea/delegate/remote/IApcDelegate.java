@@ -21,6 +21,17 @@ public interface IApcDelegate extends IRemote, IDelegate {
   @Nullable
   String setProduction(Map<Unit, UnitType> choices);
 
+  /**
+   * Request 62: as {@link #setProduction}, plus the sea zone each SPC building ships sends them to
+   * (an SPC left out keeps its stored zone).
+   *
+   * @return why the choice is refused, or null if accepted
+   */
+  @RemoteActionCode(13)
+  @Nullable
+  String setProductionAndSeaZones(
+      Map<Unit, UnitType> choices, Map<Unit, games.strategy.engine.data.Territory> seaZones);
+
   @RemoteActionCode(6)
   @Override
   void initialize(String name, String displayName);

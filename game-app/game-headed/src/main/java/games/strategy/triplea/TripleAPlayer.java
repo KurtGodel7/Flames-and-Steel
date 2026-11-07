@@ -10,7 +10,6 @@ import games.strategy.engine.data.RepairRule;
 import games.strategy.engine.data.Resource;
 import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
-import games.strategy.engine.data.UnitType;
 import games.strategy.triplea.attachments.PlayerAttachment;
 import games.strategy.triplea.attachments.PoliticalActionAttachment;
 import games.strategy.triplea.attachments.TerritoryAttachment;
@@ -18,8 +17,8 @@ import games.strategy.triplea.attachments.UserActionAttachment;
 import games.strategy.triplea.delegate.DiceRoll;
 import games.strategy.triplea.delegate.GameStepPropertiesHelper;
 import games.strategy.triplea.delegate.Matches;
-import games.strategy.triplea.delegate.air.AirStage.Stage;
 import games.strategy.triplea.delegate.air.AirCombat.TargetAssignment;
+import games.strategy.triplea.delegate.air.AirStage.Stage;
 import games.strategy.triplea.delegate.data.BattleListing;
 import games.strategy.triplea.delegate.data.CasualtyDetails;
 import games.strategy.triplea.delegate.data.CasualtyList;
@@ -317,14 +316,15 @@ public class TripleAPlayer extends AbstractBasePlayer {
     final IApcDelegate apcDelegate = (IApcDelegate) getPlayerBridge().getRemoteDelegate();
     ui.showStepInfo(getGamePlayer(), "Choose in the APC window.");
     while (!getPlayerBridge().isGameOver()) {
-      final String error = apcDelegate.setProduction(ui.getApcProduction(getGamePlayer()));
+      final var choices = ui.getApcProduction(getGamePlayer());
+      final String error =
+          apcDelegate.setProductionAndSeaZones(choices.types(), choices.seaZones());
       if (error == null) {
         return;
       }
       ui.notifyError(error);
     }
   }
-
 
   private void research() {
     if (getPlayerBridge().isGameOver()) {

@@ -1,6 +1,5 @@
 package games.strategy.triplea.ui;
 
-import games.strategy.triplea.formatter.PlayerNames;
 import static games.strategy.triplea.image.UnitImageFactory.ImageKey;
 
 import com.google.common.base.Preconditions;
@@ -22,7 +21,6 @@ import games.strategy.engine.data.ResourceCollection;
 import games.strategy.engine.data.Route;
 import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
-import games.strategy.engine.data.UnitType;
 import games.strategy.engine.data.changefactory.ChangeFactory;
 import games.strategy.engine.data.events.GameDataChangeListener;
 import games.strategy.engine.framework.ClientGame;
@@ -68,6 +66,7 @@ import games.strategy.triplea.delegate.remote.IEditDelegate;
 import games.strategy.triplea.delegate.remote.IPoliticsDelegate;
 import games.strategy.triplea.delegate.remote.IUserActionDelegate;
 import games.strategy.triplea.formatter.MyFormatter;
+import games.strategy.triplea.formatter.PlayerNames;
 import games.strategy.triplea.image.MapImage;
 import games.strategy.triplea.image.TileImageFactory;
 import games.strategy.triplea.settings.ClientSetting;
@@ -877,8 +876,8 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
   }
 
   /**
-   * Request 46: the round's air battles as pictures, in one window that scrolls; drawn for the
-   * next nation this screen plays.
+   * Request 46: the round's air battles as pictures, in one window that scrolls; drawn for the next
+   * nation this screen plays.
    */
   public void showAirBattles(final games.strategy.triplea.delegate.air.AirBattleReport report) {
     if (report.rows().isEmpty() && report.bombingTotals().isEmpty()) {
@@ -895,7 +894,7 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
             // in view
             final java.awt.Rectangle screen = usableScreen();
             summary.setMaxViewportHeight(Math.min(600, screen.height - 220));
-            final javax.swing.JScrollPane scroll = new javax.swing.JScrollPane(summary);
+            final JScrollPane scroll = new JScrollPane(summary);
             scroll.setBorder(null);
             scroll.getVerticalScrollBar().setUnitIncrement(24);
             EventThreadJOptionPane.showMessageDialog(
@@ -917,7 +916,7 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
       return new java.awt.Rectangle(java.awt.Toolkit.getDefaultToolkit().getScreenSize());
     }
     final java.awt.Rectangle bounds = gc.getBounds();
-    final java.awt.Insets insets = java.awt.Toolkit.getDefaultToolkit().getScreenInsets(gc);
+    final Insets insets = java.awt.Toolkit.getDefaultToolkit().getScreenInsets(gc);
     return new java.awt.Rectangle(
         bounds.x + insets.left,
         bounds.y + insets.top,
@@ -1802,7 +1801,8 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
       requestWindowFocus();
       SwingUtilities.invokeLater(this::showActionPanelTab);
       if (home) {
-        final games.strategy.triplea.ui.air.AirHomePanel panel = actionButtonsPanel.getAirHomePanel();
+        final games.strategy.triplea.ui.air.AirHomePanel panel =
+            actionButtonsPanel.getAirHomePanel();
         if (panel == null) {
           return games.strategy.triplea.delegate.air.AirStage.Choice.none();
         }
@@ -1859,9 +1859,9 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
 
   /** Request 47: brings the unit's place into view and flashes it. */
   private void showOnMap(final Unit unit) {
-    games.strategy.engine.data.Territory where = null;
+    Territory where = null;
     try (GameData.Unlocker ignored = data.acquireReadLock()) {
-      for (final games.strategy.engine.data.Territory t : data.getMap().getTerritories()) {
+      for (final Territory t : data.getMap().getTerritories()) {
         if (t.getUnitCollection().contains(unit)) {
           where = t;
           break;
@@ -1968,7 +1968,7 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
   }
 
   /** Flames and Steel: asks what each of the nation's APCs builds. */
-  public Map<Unit, UnitType> getApcProduction(final GamePlayer gamePlayer) {
+  public ApcProductionDialog.Choices getApcProduction(final GamePlayer gamePlayer) {
     messageAndDialogThreadPool.waitForAll();
     requestWindowFocus();
     return Interruptibles.awaitResult(
@@ -1976,7 +1976,7 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
                 SwingAction.invokeAndWaitResult(
                     () -> ApcProductionDialog.show(TripleAFrame.this, gamePlayer, data)))
         .result
-        .orElse(Map.of());
+        .orElse(new ApcProductionDialog.Choices(Map.of(), Map.of()));
   }
 
   private ResearchScreen researchScreen() {

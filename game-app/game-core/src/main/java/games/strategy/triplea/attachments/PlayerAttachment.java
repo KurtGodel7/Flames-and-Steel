@@ -65,6 +65,8 @@ public class PlayerAttachment extends DefaultAttachment {
   // what each APC builds (APC unit id -> unit type name), and turns of progress towards it
   private @Nullable Map<String, String> apcProduction = null;
   private @Nullable IntegerMap<String> apcProgress = null;
+  // request 62: where each APC's ships appear (APC unit id -> sea zone name)
+  private @Nullable Map<String, String> apcSeaZone = null;
   // request 50: turns each APC still waits for a tech's free units ("<APC unit id>:<tech name>")
   private @Nullable IntegerMap<String> apcFreeUnitsWait = null;
   // Flames and Steel: units still unplaced from the nation's last turn (unit type name -> count),
@@ -484,6 +486,19 @@ public class PlayerAttachment extends DefaultAttachment {
     return apcProduction == null ? Map.of() : Collections.unmodifiableMap(apcProduction);
   }
 
+  private void setApcSeaZone(final String value) throws GameParseException {
+    throw new GameParseException("apcSeaZone is set during the game, not in the XML");
+  }
+
+  private void setApcSeaZone(final Map<String, String> value) {
+    apcSeaZone = value;
+  }
+
+  /** Request 62: the sea zone each APC's ships go to: APC unit id to sea zone name. */
+  public Map<String, String> getApcSeaZone() {
+    return apcSeaZone == null ? Map.of() : Collections.unmodifiableMap(apcSeaZone);
+  }
+
   private void setApcProgress(final String value) throws GameParseException {
     throw new GameParseException("apcProgress is set during the game, not in the XML");
   }
@@ -626,6 +641,13 @@ public class PlayerAttachment extends DefaultAttachment {
                   this::setApcProduction,
                   this::getApcProduction,
                   () -> apcProduction = null));
+      case "apcSeaZone" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setApcSeaZone,
+                  this::setApcSeaZone,
+                  this::getApcSeaZone,
+                  () -> apcSeaZone = null));
       case "apcProgress" ->
           Optional.of(
               MutableProperty.of(

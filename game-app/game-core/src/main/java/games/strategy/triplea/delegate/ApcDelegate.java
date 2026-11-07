@@ -33,14 +33,23 @@ public class ApcDelegate extends BaseTripleADelegate implements IApcDelegate {
 
   @Override
   public @Nullable String setProduction(final Map<Unit, UnitType> choices) {
+    return setProductionAndSeaZones(choices, Map.of());
+  }
+
+  @Override
+  public @Nullable String setProductionAndSeaZones(
+      final Map<Unit, UnitType> choices,
+      final Map<Unit, games.strategy.engine.data.Territory> seaZones) {
     if (player == null || !stepName().endsWith("ApcProduction")) {
       return "This is not an SPC production step.";
     }
-    final Optional<String> error = Apcs.validate(player, choices, getData().getMap());
+    final Optional<String> error =
+        Apcs.validate(player, choices, getData().getMap())
+            .or(() -> Apcs.validateSeaZones(player, seaZones, getData().getMap()));
     if (error.isPresent()) {
       return error.get();
     }
-    Apcs.setProduction(bridge, player, choices);
+    Apcs.setProduction(bridge, player, choices, seaZones);
     return null;
   }
 
