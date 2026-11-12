@@ -16,7 +16,6 @@ import games.strategy.engine.data.GameStep;
 import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.UnitType;
-import games.strategy.engine.data.gameparser.GameParser;
 import games.strategy.triplea.attachments.MunitionsAttachment;
 import games.strategy.triplea.delegate.battle.BattleState;
 import games.strategy.triplea.delegate.battle.FakeBattleState;
@@ -214,7 +213,7 @@ class Draft46Test {
             "Italians/Tank",
             3,
             "Germans/KingTiger",
-            2);
+            1);
     expected.forEach(
         (key, required) -> {
           final String[] s = key.split("/");

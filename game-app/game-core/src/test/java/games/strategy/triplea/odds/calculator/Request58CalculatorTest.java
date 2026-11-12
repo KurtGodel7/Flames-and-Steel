@@ -63,8 +63,9 @@ class Request58CalculatorTest extends AbstractClientSettingTestCase {
         .getAverageAttackingUnitsLeft();
   }
 
+  /** Six defenders at 2 (draft 109: British infantry defend at 3, colonial militia at 2). */
   private List<Unit> sixDefenders() {
-    return units("infantry", 6, british, false);
+    return units("colonialMilitia", 6, british, false);
   }
 
   /** 5 by land + 4 from sea lies between all 9 by land and all 9 from sea. */
