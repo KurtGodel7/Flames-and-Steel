@@ -20,7 +20,6 @@ import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
-import games.strategy.engine.data.gameparser.GameParser;
 import games.strategy.engine.delegate.IDelegateBridge;
 import games.strategy.engine.history.IDelegateHistoryWriter;
 import games.strategy.triplea.delegate.AirCombatDelegate;
@@ -127,10 +126,11 @@ class DogfightValuesTest {
     // request 38: both nations' fighters are in the air over one territory
     final games.strategy.engine.data.UnitType fighter =
         data.getUnitTypeList().getUnitTypeOrThrow("fighter");
-    final Territory over = data.getMap().getTerritoryOrThrow("Hunan");
+    final Territory over = data.getMap().getTerritoryOrThrow("Changsha");
     final List<Unit> japaneseFighter =
-        airChina.getUnitCollection().getMatches(
-            u -> u.isOwnedBy(japanese) && u.getType().equals(fighter));
+        airChina
+            .getUnitCollection()
+            .getMatches(u -> u.isOwnedBy(japanese) && u.getType().equals(fighter));
     BasedMap.fly(data, over, japaneseFighter);
     BasedMap.fly(data, over, chinese1);
     delegate.setStageCover(

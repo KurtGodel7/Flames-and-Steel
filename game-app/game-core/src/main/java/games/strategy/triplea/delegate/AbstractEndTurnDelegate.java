@@ -54,7 +54,9 @@ public abstract class AbstractEndTurnDelegate extends BaseTripleADelegate
   private boolean hasPostedTurnSummary = false;
 
   private static boolean canPlayerCollectIncome(final GamePlayer player, final GameMap gameMap) {
-    return TerritoryAttachment.doWeHaveEnoughCapitalsToProduce(player, gameMap);
+    // request 65: a neutral-like player (Vichy) has no capital and always collects
+    return NeutralLikePlayers.isListed(player)
+        || TerritoryAttachment.doWeHaveEnoughCapitalsToProduce(player, gameMap);
   }
 
   /**
@@ -107,6 +109,10 @@ public abstract class AbstractEndTurnDelegate extends BaseTripleADelegate
                   data.getResourceList()
                       .getResourceOptional(Peacetime.MANPOWER_RESOURCE)
                       .ifPresent(r -> resources.put(r, v)));
+    }
+    // request 65: a nation that pays its income on (Vichy) keeps no PUs
+    if (IncomeShare.applies(player)) {
+      resources.put(data.getResourceList().getResourceOrThrow(Constants.PUS), 0);
     }
     return resources;
   }
@@ -253,6 +259,7 @@ public abstract class AbstractEndTurnDelegate extends BaseTripleADelegate
     }
     endTurnReport.append(mobilizationIncome(leftOverResources));
     endTurnReport.append(peacetimeIncome(leftOverResources));
+    endTurnReport.append(IncomeShare.pay(bridge, player, leftOverResources));
     endTurnReport.append(Munitions.convert(bridge, player));
     endTurnReport.append(Munitions.absorb(bridge, player));
     endTurnReport.append(AlliedUnitSale.sellAlliedUnits(bridge, player));
@@ -578,7 +585,9 @@ public abstract class AbstractEndTurnDelegate extends BaseTripleADelegate
     // request 34: "America Atlantic is at peace", "Americans are at peace"
     final String shown = games.strategy.triplea.formatter.PlayerNames.display(player);
     final String message =
-        shown + (shown.equals(player.getName()) ? " are" : " is") + " at peace: fixed income "
+        shown
+            + (shown.equals(player.getName()) ? " are" : " is")
+            + " at peace: fixed income "
             + text
             + ".";
     bridge.getHistoryWriter().startEvent(message);

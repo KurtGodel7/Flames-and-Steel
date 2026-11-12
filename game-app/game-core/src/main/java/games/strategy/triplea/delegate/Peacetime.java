@@ -44,6 +44,8 @@ public class Peacetime {
     }
     final GameState data = player.getData();
     return data.getPlayerList().getPlayers().stream()
+        // request 65: war with a neutral-like player (Vichy) is not war
+        .filter(other -> !NeutralLikePlayers.isListed(other))
         .noneMatch(other -> data.getRelationshipTracker().isAtWar(player, other));
   }
 

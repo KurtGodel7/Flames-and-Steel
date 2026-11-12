@@ -14,7 +14,6 @@ import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.UnitType;
 import games.strategy.engine.data.changefactory.ChangeFactory;
-import games.strategy.engine.data.gameparser.GameParser;
 import games.strategy.engine.delegate.IDelegateBridge;
 import games.strategy.triplea.attachments.TerritoryAttachment;
 import java.nio.file.Files;
@@ -133,9 +132,9 @@ class ChineseLiberationTest {
   @Test
   void liberationWorksWhileJapanHoldsTheChineseCapital() {
     data.performChange(ChangeFactory.changeOwner(territory("Chungking"), japanese));
-    data.performChange(ChangeFactory.changeOwner(territory("Hunan"), japanese));
-    takeOver(territory("Hunan"), british);
-    assertThat(territory("Hunan").getOwner(), is(china));
+    data.performChange(ChangeFactory.changeOwner(territory("Changsha"), japanese));
+    takeOver(territory("Changsha"), british);
+    assertThat(territory("Changsha").getOwner(), is(china));
   }
 
   @Test
@@ -148,7 +147,7 @@ class ChineseLiberationTest {
 
   @Test
   void taiwanIsNotChinese() {
-    final Territory taihoku = territory("Taihoku");
+    final Territory taihoku = territory("Formosa");
     assertThat(ChineseLiberation.isChineseHomeland(taihoku), is(false));
     takeOver(taihoku, british);
     assertThat(taihoku.getOwner(), is(british));
@@ -234,7 +233,7 @@ class ChineseLiberationTest {
 
   @Test
   void westernUnitsBecomeAChineseGarrisonAtTheEndOfChinasTurn() {
-    final Territory hunan = territory("Hunan");
+    final Territory hunan = territory("Changsha");
     final List<Unit> force = units(americans, "infantry", 6, "tank", 3);
     force.get(7).setHits(1); // damaged: counts at full value
     data.performChange(ChangeFactory.addUnits(hunan, force));
@@ -247,7 +246,7 @@ class ChineseLiberationTest {
 
     final String report = ChineseLiberation.garrisonWesternUnits(bridge(china), china);
 
-    assertThat(report, containsString("Hunan: "));
+    assertThat(report, containsString("Changsha: "));
     assertThat(report, containsString("6 PUs pass to China from 9 America Atlantic units."));
     assertThat(china.getResources().getQuantity(pus), is(pusBefore + 6));
     assertThat(china.getResources().getQuantity(mp), is(mpBefore));
@@ -256,9 +255,11 @@ class ChineseLiberationTest {
         hunan.getUnitCollection().getMatches(Matches.unitIsOfType(type("conscript"))).size(),
         is(conscriptsBefore + 4));
     assertThat(
-        hunan.getUnitCollection()
-            .getMatches(Matches.unitIsOfType(type("heavyGun")).and(Matches.unitIsOwnedBy(china)))
-            .size()
+        hunan
+                .getUnitCollection()
+                .getMatches(
+                    Matches.unitIsOfType(type("heavyGun")).and(Matches.unitIsOwnedBy(china)))
+                .size()
             >= 1,
         is(true));
   }
@@ -267,7 +268,7 @@ class ChineseLiberationTest {
   void eachTerritoryIsComputedSeparately() {
     final var pus = data.getResourceList().getResourceOrThrow("PUs");
     final int before = china.getResources().getQuantity(pus);
-    for (final String name : List.of("Hunan", "Kwangsi", "Yunnan")) {
+    for (final String name : List.of("Changsha", "Kweilin", "Yunnan")) {
       data.performChange(
           ChangeFactory.addUnits(territory(name), units(british, "infantry", 6, "tank", 3)));
     }
@@ -305,7 +306,9 @@ class ChineseLiberationTest {
 
     assertThat(china.getResources().getQuantity(mp), is(before + 1));
     assertThat(
-        games.strategy.triplea.ui.TerritoryManpower.of(mukden).orElseThrow().receivers()
+        games.strategy.triplea.ui.TerritoryManpower.of(mukden)
+            .orElseThrow()
+            .receivers()
             .containsKey(china),
         is(true));
   }
@@ -318,13 +321,13 @@ class ChineseLiberationTest {
     assertThat(mukden.getOwner(), is(russians));
     assertThat(ChineseLiberation.homelandManpower(mukden, china), is(0));
     // Hunan already pays China through China's own trigger
-    assertThat(ChineseLiberation.homelandManpower(territory("Hunan"), china), is(0));
+    assertThat(ChineseLiberation.homelandManpower(territory("Changsha"), china), is(0));
     assertThat(ChineseLiberation.collectHomelandManpower(bridge(china), china), is(""));
   }
 
   @Test
   void sovietUnitsNeverBecomeAGarrison() {
-    final Territory hunan = territory("Hunan");
+    final Territory hunan = territory("Changsha");
     data.performChange(ChangeFactory.addUnits(hunan, type("infantry").create(2, russians)));
     assertThat(ChineseLiberation.garrisonWesternUnits(bridge(china), china), is(""));
     assertThat(hunan.anyUnitsMatch(Matches.unitIsOwnedBy(russians)), is(true));
@@ -333,7 +336,7 @@ class ChineseLiberationTest {
   @Test
   void westernAndSovietUnitsCannotEnterChineseLand() {
     final Territory hongKong = territory("Hong Kong");
-    final Territory kwangsi = territory("Kwangsi");
+    final Territory kwangsi = territory("Kweilin");
     assertThat(kwangsi.getOwner(), is(china));
     final Territory soviet =
         data.getMap().getTerritories().stream()

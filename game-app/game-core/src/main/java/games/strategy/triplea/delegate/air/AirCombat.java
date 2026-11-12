@@ -14,6 +14,7 @@ import games.strategy.triplea.attachments.TechAbilityAttachment;
 import games.strategy.triplea.attachments.TerritoryAttachment;
 import games.strategy.triplea.delegate.DiceRoll;
 import games.strategy.triplea.delegate.Matches;
+import games.strategy.triplea.delegate.NeutralLikePlayers;
 import games.strategy.triplea.delegate.TechAdvance;
 import games.strategy.triplea.delegate.TechTracker;
 import games.strategy.triplea.delegate.battle.BattleDelegate;
@@ -125,7 +126,7 @@ public class AirCombat {
   /** An enemy-owned land territory with a factory or APC. */
   public static boolean isStrategicTarget(final GamePlayer player, final Territory t) {
     return !t.isWater()
-        && !t.getOwner().isNull()
+        && !NeutralLikePlayers.ownsAsNeutral(t)
         && atWar(player, t.getOwner())
         && t.anyUnitsMatch(Matches.unitCanProduceUnits().or(u -> ApcAttachment.isApc(u.getType())));
   }

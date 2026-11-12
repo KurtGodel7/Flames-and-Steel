@@ -922,7 +922,8 @@ public final class Matches {
       if (!player.isAtWar(t.getOwner())) {
         return false;
       }
-      return !t.getOwner().isNull() && t.anyUnitsMatch(enemyUnit(player).and(unitMatch));
+      return !NeutralLikePlayers.ownsAsNeutral(t)
+          && t.anyUnitsMatch(enemyUnit(player).and(unitMatch));
     };
   }
 
@@ -1175,7 +1176,8 @@ public final class Matches {
   }
 
   public static Predicate<Territory> isTerritoryNeutral() {
-    return t -> t.getOwner().isNull();
+    // request 65: neutral-like players (Vichy) own neutral land too
+    return NeutralLikePlayers::ownsAsNeutral;
   }
 
   public static Predicate<Territory> isTerritoryOwnedByAnyOf(final Collection<GamePlayer> players) {
@@ -1238,7 +1240,8 @@ public final class Matches {
       }
       // cant blitz on neutrals
       GameData data = player.getData();
-      if (t.getOwner().isNull() && !Properties.getNeutralsBlitzable(data.getProperties())) {
+      if (NeutralLikePlayers.ownsAsNeutral(t)
+          && !Properties.getNeutralsBlitzable(data.getProperties())) {
         return false;
       }
       // was conquered but not blitzed

@@ -24,10 +24,11 @@ import games.strategy.triplea.UnitUtils;
 import games.strategy.triplea.attachments.PlayerAttachment;
 import games.strategy.triplea.attachments.TechAbilityAttachment;
 import games.strategy.triplea.attachments.TerritoryAttachment;
+import games.strategy.triplea.delegate.ChineseLiberation;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.Munitions;
+import games.strategy.triplea.delegate.NeutralLikePlayers;
 import games.strategy.triplea.delegate.OriginalOwnerTracker;
-import games.strategy.triplea.delegate.ChineseLiberation;
 import games.strategy.triplea.delegate.TechAdvance;
 import games.strategy.triplea.delegate.TechTracker;
 import games.strategy.triplea.delegate.TerritoryEffectHelper;
@@ -599,7 +600,7 @@ public class BattleTracker implements Serializable {
       writeHistoryOnTakeOverForConvoyRoute(territory, gamePlayer, bridge);
     }
     // if neutral, we may charge money to enter
-    if (territory.getOwner().isNull()
+    if (NeutralLikePlayers.ownsAsNeutral(territory)
         && !territory.isWater()
         && Properties.getNeutralCharge(data.getProperties()) >= 0) {
       addChangeChargeForEnteringNeutrals(territory, gamePlayer, bridge, changeTracker);

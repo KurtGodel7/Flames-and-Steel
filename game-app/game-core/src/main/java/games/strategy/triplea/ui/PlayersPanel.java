@@ -1,8 +1,8 @@
 package games.strategy.triplea.ui;
 
-import games.strategy.triplea.formatter.PlayerNames;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.framework.IGame;
+import games.strategy.triplea.formatter.PlayerNames;
 import java.awt.Component;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -19,6 +19,10 @@ public class PlayersPanel {
    * with British, Americans".
    */
   static String turnlessText(final GamePlayer player) {
+    if (games.strategy.triplea.delegate.NeutralLikePlayers.isListed(player)) {
+      // request 65: "Vichy: income only; neutral, anyone may attack"
+      return PlayerNames.display(player) + ": income only; neutral, anyone may attack";
+    }
     final var tracker = player.getData().getRelationshipTracker();
     final java.util.List<String> war = new java.util.ArrayList<>();
     final java.util.List<String> allied = new java.util.ArrayList<>();

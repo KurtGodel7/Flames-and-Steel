@@ -3,6 +3,7 @@ package games.strategy.triplea.delegate.air;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.UnitType;
+import games.strategy.triplea.delegate.NeutralLikePlayers;
 import lombok.experimental.UtilityClass;
 
 /**
@@ -30,7 +31,7 @@ public class AirRange {
     // request 56: never land on impassable land, even where aircraft may fly over it
     if (t.isWater()
         || AirBases.isAirborneTerritory(t)
-        || t.getOwner().isNull()
+        || NeutralLikePlayers.ownsAsNeutral(t)
         || AirBases.isImpassableLand(t)) {
       return false;
     }

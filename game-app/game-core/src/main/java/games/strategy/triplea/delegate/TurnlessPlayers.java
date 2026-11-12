@@ -13,10 +13,17 @@ import java.util.List;
 public final class TurnlessPlayers {
   private TurnlessPlayers() {}
 
-  /** True for a real player (not the neutral player) with no step of its own. */
+  /**
+   * True for a real player (not the neutral player) with no step of its own, or a neutral-like
+   * player (request 65, Vichy) whose only step collects income.
+   */
   public static boolean isTurnless(final GamePlayer player) {
     if (player == null || player.isNull()) {
       return false;
+    }
+    // request 65: a neutral-like player (Vichy) only collects income: no seat either
+    if (NeutralLikePlayers.isListed(player)) {
+      return true;
     }
     final GameData data = player.getData();
     if (data == null) {

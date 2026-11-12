@@ -188,10 +188,14 @@ public class AirCombatDelegate extends BaseTripleADelegate {
     aircraft.forEach(u -> report.watch(u, zone, true));
     // request 43 (Combat Air Patrol): carriers below fire at enemy bombers in the interception,
     // even with no fighters of their own in the air there
-    final List<Unit> patrolsA = AirCombat.patrolCarriers(place.territory(), bombers(zone, sideB))
-        .stream().filter(c -> AirCover.sameSide(first, c.getOwner())).toList();
-    final List<Unit> patrolsB = AirCombat.patrolCarriers(place.territory(), bombers(zone, sideA))
-        .stream().filter(c -> !AirCover.sameSide(first, c.getOwner())).toList();
+    final List<Unit> patrolsA =
+        AirCombat.patrolCarriers(place.territory(), bombers(zone, sideB)).stream()
+            .filter(c -> AirCover.sameSide(first, c.getOwner()))
+            .toList();
+    final List<Unit> patrolsB =
+        AirCombat.patrolCarriers(place.territory(), bombers(zone, sideA)).stream()
+            .filter(c -> !AirCover.sameSide(first, c.getOwner()))
+            .toList();
     patrolsA.forEach(u -> report.watch(u, place.territory(), true));
     patrolsB.forEach(u -> report.watch(u, place.territory(), true));
     try {
@@ -225,7 +229,7 @@ public class AirCombatDelegate extends BaseTripleADelegate {
       }
     }
     final GamePlayer owner = place.territory().getOwner();
-    if (!place.territory().isWater() && !owner.isNull()) {
+    if (!place.territory().isWater() && !NeutralLikePlayers.isNeutral(owner)) {
       for (final Unit unit : aircraft) {
         if (!AirCover.sameSide(owner, unit.getOwner())) {
           return unit.getOwner();
@@ -238,8 +242,8 @@ public class AirCombatDelegate extends BaseTripleADelegate {
   /**
    * Request 46: what happened to the units in one territory's battle, for its row of pictures in
    * the summary. Units are watched before they fight; those always shown (aircraft, AA guns that
-   * fired, patrolling carriers, a factory bombed) appear whatever happens to them, the others (units
-   * a strike could hit) only when destroyed or damaged.
+   * fired, patrolling carriers, a factory bombed) appear whatever happens to them, the others
+   * (units a strike could hit) only when destroyed or damaged.
    */
   private static final class PlaceLog {
     private final Place place;
@@ -274,8 +278,8 @@ public class AirCombatDelegate extends BaseTripleADelegate {
     }
 
     /**
-     * Request 49: after each part of the battle, what it did: units newly damaged were damaged
-     * "by" it, units newly gone were destroyed "by" it ("by the interceptors").
+     * Request 49: after each part of the battle, what it did: units newly damaged were damaged "by"
+     * it, units newly gone were destroyed "by" it ("by the interceptors").
      */
     void after(final String by) {
       for (final Unit unit : where.keySet()) {
@@ -409,14 +413,8 @@ public class AirCombatDelegate extends BaseTripleADelegate {
       }
       text.addAll(notes);
       return new AirBattleReport.Row(
-          place.territory().getName(),
-          attackers,
-          defenders,
-          text,
-          lossValue,
-          List.copyOf(hurt));
+          place.territory().getName(), attackers, defenders, text, lossValue, List.copyOf(hurt));
     }
-
   }
 
   /**
@@ -492,7 +490,6 @@ public class AirCombatDelegate extends BaseTripleADelegate {
                 : hit.killed().size() + " lost, " + hit.damaged().size() + " damaged"));
   }
 
-
   /** Whether the sides fight at all: a dogfight, or interceptors against enemy bombers. */
   static boolean hasAirFight(final List<Unit> sideA, final List<Unit> sideB) {
     final boolean fightersA = sideA.stream().anyMatch(AirCombat::isFighterType);
@@ -516,8 +513,7 @@ public class AirCombatDelegate extends BaseTripleADelegate {
     final Territory zone = place.zone();
     final GamePlayer playerA = AirCombat.chooser(sideA);
     // request 43: with no aircraft of its own there, the side is its patrolling carriers
-    final GamePlayer playerB =
-        AirCombat.chooser(sideB.isEmpty() ? patrolsB : sideB);
+    final GamePlayer playerB = AirCombat.chooser(sideB.isEmpty() ? patrolsB : sideB);
     final int rounds = AirCombat.dogfightRounds(getData());
     final boolean dogfight =
         rounds > 0 && !fighters(zone, sideA).isEmpty() && !fighters(zone, sideB).isEmpty();
@@ -826,7 +822,6 @@ public class AirCombatDelegate extends BaseTripleADelegate {
     bridge.addChange(ChangeFactory.unitsHit(healed, List.of(zone)));
   }
 
-
   /** A strike: aircraft from one zone against one target. */
   private record Strike(Territory zone, Target target, List<Unit> aircraft) {
     /** The strike's aircraft still alive, aborted ones included (AA fires at them all). */
@@ -845,7 +840,6 @@ public class AirCombatDelegate extends BaseTripleADelegate {
         ? "Strategic bombing of " + strike.target().territory().getName()
         : "Air strike on " + strike.target().describe();
   }
-
 
   /**
    * Runs one air battle. If it fails, the error is logged, the history says the battle was skipped,
@@ -888,8 +882,7 @@ public class AirCombatDelegate extends BaseTripleADelegate {
         kind == TargetKind.STRATEGIC
             ? "Strategic bombing of " + t.getName()
             : "Air strike on " + strike.target().describe();
-    final List<Unit> abortedBefore =
-        strike.survivors().stream().filter(aborted::contains).toList();
+    final List<Unit> abortedBefore = strike.survivors().stream().filter(aborted::contains).toList();
     if (aaGuns.isEmpty() && attackers(strike).isEmpty()) {
       // nothing fires at aborted bombers here and they make no attack
       bridge
@@ -987,8 +980,7 @@ public class AirCombatDelegate extends BaseTripleADelegate {
               "Aborted after AA (damaged, no attack): " + AirCombat.sideText(abortedByAa),
               abortedByAa);
     }
-    final List<Unit> abortedNow =
-        strike.survivors().stream().filter(aborted::contains).toList();
+    final List<Unit> abortedNow = strike.survivors().stream().filter(aborted::contains).toList();
     view.showText(
         abortStep,
         List.of(
@@ -1050,11 +1042,7 @@ public class AirCombatDelegate extends BaseTripleADelegate {
       damaged.removeAll(hit.killed());
       hit.damaged().stream().filter(u -> !damaged.contains(u)).forEach(damaged::add);
       if (rounds > 1) {
-        roundText.add(
-            "round "
-                + round
-                + ": "
-                + (hit.all().isEmpty() ? "no hits" : hitText(hit)));
+        roundText.add("round " + round + ": " + (hit.all().isEmpty() ? "no hits" : hitText(hit)));
       }
       if (kind == TargetKind.SURFACE) {
         // transports are never casualties, but are lost once nothing protects them
@@ -1066,10 +1054,7 @@ public class AirCombatDelegate extends BaseTripleADelegate {
           bridge
               .getHistoryWriter()
               .addChildToEvent(
-                  MyFormatter.unitsToText(transports)
-                      + " undefended in "
-                      + t.getName()
-                      + ", lost",
+                  MyFormatter.unitsToText(transports) + " undefended in " + t.getName() + ", lost",
                   transports);
           bridge.addChange(ChangeFactory.removeUnits(t, transports));
           if (placeLog != null) {
@@ -1082,7 +1067,8 @@ public class AirCombatDelegate extends BaseTripleADelegate {
         abortedByShips.stream().filter(u -> !fired.contains(u)).forEach(fired::add);
         final List<Unit> exposed = alive(strike.zone(), fired);
         // request 43 (Combat Air Patrol): carriers that fired in the interception don't fire back
-        final List<Unit> firingBack = hit.all().stream().filter(u -> !AirCombat.patrols(u)).toList();
+        final List<Unit> firingBack =
+            hit.all().stream().filter(u -> !AirCombat.patrols(u)).toList();
         if (!firingBack.isEmpty() && !exposed.isEmpty()) {
           final String backText =
               "Ships in " + t.getName() + " fire back" + (rounds > 1 ? ", round " + round : "");
@@ -1275,7 +1261,11 @@ public class AirCombatDelegate extends BaseTripleADelegate {
       placeLog.bombed(victim, targets, loss);
       if (damage > capLeft) {
         placeLog.notes.add(
-            "Bombing: " + damage + " PU of damage, capped at " + capLeft + " (twice the territory's value)");
+            "Bombing: "
+                + damage
+                + " PU of damage, capped at "
+                + capLeft
+                + " (twice the territory's value)");
       }
     }
     final Raid raid = new Raid(attacker, t, victim, loss);
@@ -1307,7 +1297,11 @@ public class AirCombatDelegate extends BaseTripleADelegate {
         + loss
         + " PUs"
         + (damage > capLeft
-            ? " (" + damage + " PUs of damage, capped at " + capLeft + ": 2 × the territory's value)"
+            ? " ("
+                + damage
+                + " PUs of damage, capped at "
+                + capLeft
+                + ": 2 × the territory's value)"
             : "");
   }
 
@@ -1332,7 +1326,8 @@ public class AirCombatDelegate extends BaseTripleADelegate {
     if (summary.isEmpty() && raids.isEmpty()) {
       return;
     }
-    summary.forEach(line -> bridge.getHistoryWriter().addChildToEvent(line.replaceAll("<[^>]*>", "")));
+    summary.forEach(
+        line -> bridge.getHistoryWriter().addChildToEvent(line.replaceAll("<[^>]*>", "")));
     if (!raids.isEmpty()) {
       final Map<GamePlayer, Integer> totals = new LinkedHashMap<>();
       raids.forEach(r -> totals.merge(r.victim(), r.loss(), Integer::sum));
@@ -1418,7 +1413,6 @@ public class AirCombatDelegate extends BaseTripleADelegate {
     }
     return new ArrayList<>(strikes.values());
   }
-
 
   private String stepName() {
     return getData().getSequence().getStep().getName();

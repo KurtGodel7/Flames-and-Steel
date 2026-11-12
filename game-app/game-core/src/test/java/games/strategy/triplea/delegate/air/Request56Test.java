@@ -125,9 +125,9 @@ class Request56Test {
   @Test
   void listingTheSaharaLetsItalianAircraftCrossIt() {
     flyover(PRIPET + ":" + SAHARA);
-    assertThat(steps(italians, "Tripoli", "Dakar"), is(2));
+    assertThat(steps(italians, "Tripoli", "Mauritania"), is(2));
 
     flyover(PRIPET);
-    assertThat(steps(italians, "Tripoli", "Dakar"), greaterThan(2));
+    assertThat(steps(italians, "Tripoli", "Mauritania"), greaterThan(2));
   }
 }

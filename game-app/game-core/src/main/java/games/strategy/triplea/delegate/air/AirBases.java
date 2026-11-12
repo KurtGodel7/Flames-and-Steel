@@ -10,6 +10,7 @@ import games.strategy.engine.data.UnitType;
 import games.strategy.triplea.Properties;
 import games.strategy.triplea.attachments.AirUnitAttachment;
 import games.strategy.triplea.delegate.Matches;
+import games.strategy.triplea.delegate.NeutralLikePlayers;
 import games.strategy.triplea.delegate.move.validation.MoveValidator;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -386,7 +387,7 @@ public class AirBases {
 
   /** A listed impassable territory with an owner keeps the owner's "may fly over" rule. */
   private static boolean mayFlyOverOwner(final GamePlayer player, final Territory t) {
-    return t.getOwner().isNull()
+    return NeutralLikePlayers.ownsAsNeutral(t)
         || player
             .getData()
             .getRelationshipTracker()

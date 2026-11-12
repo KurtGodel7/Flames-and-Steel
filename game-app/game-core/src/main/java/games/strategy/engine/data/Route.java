@@ -317,7 +317,9 @@ public class Route implements Serializable, Iterable<Territory> {
   public boolean hasNeutralBeforeEnd() {
     for (final Territory current : getMiddleSteps()) {
       // neutral is owned by null and is not sea
-      if (!current.isWater() && current.getOwner().isNull()) {
+      // request 65: neutral-like players (Vichy) count as neutral
+      if (!current.isWater()
+          && games.strategy.triplea.delegate.NeutralLikePlayers.ownsAsNeutral(current)) {
         return true;
       }
     }
