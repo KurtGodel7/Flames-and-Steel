@@ -195,7 +195,7 @@ class ChineseLiberationTest {
     final var g = ChineseLiberation.garrisonFor(units(americans, "infantry", 2, "tank", 1), data);
     assertThat(g.conscripts(), is(2));
     assertThat(g.pool(), is(10));
-    assertThat(count(g, "antiTankGun"), is(3));
+    assertThat(count(g, "lightGun"), is(3));
     assertThat(count(g, "heavyGun"), is(0));
     assertThat(g.full(), is(false));
     assertThat(g.cash(), is(0));
@@ -206,7 +206,7 @@ class ChineseLiberationTest {
     final var g = ChineseLiberation.garrisonFor(units(americans, "infantry", 6, "tank", 3), data);
     assertThat(g.conscripts(), is(4));
     assertThat(g.pool(), is(34)); // 6 + 24 + 2 extra infantry x 1 MP x 2
-    assertThat(count(g, "antiTankGun"), is(3));
+    assertThat(count(g, "lightGun"), is(3));
     assertThat(count(g, "heavyGun"), is(1));
     assertThat(count(g, "trench"), is(2));
     assertThat(g.surplus(), is(12));
@@ -217,7 +217,7 @@ class ChineseLiberationTest {
   void noInfantryAndTwoTanks() {
     final var g = ChineseLiberation.garrisonFor(units(british, "tank", 2), data);
     assertThat(g.conscripts(), is(0));
-    assertThat(count(g, "antiTankGun"), is(3));
+    assertThat(count(g, "lightGun"), is(3));
     assertThat(count(g, "heavyGun"), is(1));
     assertThat(count(g, "trench"), is(0));
     assertThat(g.cash(), is(0));

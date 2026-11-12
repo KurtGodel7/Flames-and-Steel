@@ -31,8 +31,8 @@ import org.triplea.java.collections.IntegerMap;
  * <ul>
  *   <li>A land territory with the territory option "chineseHomeland" that one of the liberators
  *       (game property {@value #LIBERATORS}, default British and Americans) takes from the Axis
- *       passes to China, whoever its original owner and whoever holds China's capital. Taken by
- *       the USSR it stays Soviet (the normal rule).
+ *       passes to China, whoever its original owner and whoever holds China's capital. Taken by the
+ *       USSR it stays Soviet (the normal rule).
  *   <li>At the end of China's turn, separately in each Chinese-owned land territory holding
  *       liberator units: the first {@value #CONSCRIPTS} infantry-type units (any unit whose cost
  *       includes Manpower) each become one Chinese conscript. A pool adds the PU cost of every
@@ -52,13 +52,13 @@ public class ChineseLiberation {
   public static final String MP_VALUE = "FS Chinese Sale MP Value";
   public static final String PERCENT = "FS Chinese Sale Percent";
   private static final String DEFAULT_GARRISON =
-      "antiTankGun:antiTankGun:antiTankGun:heavyGun:trench:trench";
+      "lightGun:lightGun:lightGun:heavyGun:trench:trench";
   private static final String CONSCRIPT = "conscript";
   private static final String MANPOWER = "Manpower";
 
   /**
-   * Whether the territory is historically Chinese: tagged "chineseHomeland" in the XML. Until a
-   * map tags any territory at all, the land whose original owner is China counts (draft 77, which
+   * Whether the territory is historically Chinese: tagged "chineseHomeland" in the XML. Until a map
+   * tags any territory at all, the land whose original owner is China counts (draft 77, which
    * already gives Manchuria China as original owner and Taiwan Japan).
    */
   public static boolean isChineseHomeland(final Territory territory) {
@@ -163,7 +163,8 @@ public class ChineseLiberation {
   /** The map's standard rule for a unit type ("buy_tank"), else the dearest rule that makes it. */
   private static Optional<ProductionRule> normalRule(final UnitType type, final GameState data) {
     final Resource pus = data.getResourceList().getResourceOrThrow(Constants.PUS);
-    final ProductionRule named = data.getProductionRuleList().getProductionRule("buy_" + type.getName());
+    final ProductionRule named =
+        data.getProductionRuleList().getProductionRule("buy_" + type.getName());
     if (named != null && named.getResults().getInt(type) > 0) {
       return Optional.of(named);
     }
@@ -244,10 +245,10 @@ public class ChineseLiberation {
   }
 
   /**
-   * The manpower China collects from a Chinese homeland territory it owns, beyond its own
-   * triggers: the territory's map value (its per-territory manpower triggers) when those triggers
-   * pay another nation, e.g. Japan for Manchuria. 0 when China's own triggers pay it already, the
-   * territory has no manpower, or China does not own it.
+   * The manpower China collects from a Chinese homeland territory it owns, beyond its own triggers:
+   * the territory's map value (its per-territory manpower triggers) when those triggers pay another
+   * nation, e.g. Japan for Manchuria. 0 when China's own triggers pay it already, the territory has
+   * no manpower, or China does not own it.
    */
   public static int homelandManpower(final Territory territory, final GamePlayer china) {
     if (!CHINA.equals(china.getName())
@@ -265,9 +266,9 @@ public class ChineseLiberation {
   }
 
   /**
-   * At the end of China's turn: China collects the map manpower of the Chinese homeland
-   * territories it owns that its own triggers don't pay (request 28). A Soviet-held one pays
-   * nobody: only China gets this exception.
+   * At the end of China's turn: China collects the map manpower of the Chinese homeland territories
+   * it owns that its own triggers don't pay (request 28). A Soviet-held one pays nobody: only China
+   * gets this exception.
    */
   public static String collectHomelandManpower(
       final IDelegateBridge bridge, final GamePlayer player) {
@@ -398,7 +399,9 @@ public class ChineseLiberation {
     return String.join(", ", parts);
   }
 
-  /** "Pool 34 PUs (units 30, 2 MP beyond the conscripts × 2); garrison 22; surplus 12 × 50% = 6." */
+  /**
+   * "Pool 34 PUs (units 30, 2 MP beyond the conscripts × 2); garrison 22; surplus 12 × 50% = 6."
+   */
   private static String poolText(
       final Collection<Unit> units, final Garrison garrison, final GameState data) {
     final int unitValue = units.stream().mapToInt(u -> puCost(u, data)).sum();

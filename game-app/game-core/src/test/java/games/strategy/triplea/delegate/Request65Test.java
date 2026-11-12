@@ -20,7 +20,8 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Request 65: Vichy France, a neutral-like player that only collects income and pays half of it to
- * Germany (Indochina: to Japan). Runs on the installed map with Vichy added in memory.
+ * Germany (Indochina: to Japan). Runs on the installed map (draft 110 on: Vichy in the XML,
+ * southern France included).
  */
 class Request65Test {
   private GameData data;
@@ -94,18 +95,18 @@ class Request65Test {
   }
 
   @Test
-  void vichyStartsWith28PusOfLand() {
+  void vichyStartsWith37PusOfLand() {
     final int income =
         AbstractEndTurnDelegate.getProduction(data.getMap().getTerritoriesOwnedBy(vichy), data);
-    assertThat(income, is(28));
+    assertThat(income, is(37));
     assertThat(NeutralLikePlayers.isListed(vichy), is(true));
     assertThat(TurnlessPlayers.isTurnless(vichy), is(true));
   }
 
   @Test
-  void roundOneGermanyGets10JapanGets3VichyKeepsNothing() {
+  void roundOneGermanyGets15JapanGets3VichyKeepsNothing() {
     final int[] gained = vichyTurn();
-    assertThat(gained[0], is(10));
+    assertThat(gained[0], is(15));
     assertThat(gained[1], is(3));
     assertThat(pus("Vichy"), is(0));
     assertThat(
@@ -115,9 +116,9 @@ class Request65Test {
   }
 
   @Test
-  void britainTakesDamascusGermanyGets9() {
+  void britainTakesDamascusGermanyGets14() {
     give("Damascus", "British");
-    assertThat(vichyTurn()[0], is(9));
+    assertThat(vichyTurn()[0], is(14));
   }
 
   @Test
@@ -130,7 +131,7 @@ class Request65Test {
   void parisFallingChangesNothing() {
     give("Paris", "Russians");
     final int[] gained = vichyTurn();
-    assertThat(gained[0], is(10));
+    assertThat(gained[0], is(15));
     assertThat(gained[1], is(3));
   }
 
