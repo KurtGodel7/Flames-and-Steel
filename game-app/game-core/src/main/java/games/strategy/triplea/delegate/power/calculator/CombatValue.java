@@ -27,7 +27,12 @@ public interface CombatValue {
     // unit support is stateful which would mess up the sort calculations so remove unit supports
     final StrengthCalculator strengthCalculator = this.buildWithNoUnitSupports().getStrength();
     final var cache = new HashMap<Unit, Integer>();
-    final Function<Unit, Integer> getStrength = u -> strengthCalculator.getStrength(u).getValue();
+    // request 66: extra dice count with the main value
+    final Function<Unit, Integer> getStrength =
+        u -> {
+          final StrengthValue strength = strengthCalculator.getStrength(u);
+          return strength.getValue() + strength.getExtraDicePower();
+        };
     return Comparator.<Unit, Boolean>comparing(
             unit -> cache.computeIfAbsent(unit, getStrength) == 0)
         .thenComparingDouble(

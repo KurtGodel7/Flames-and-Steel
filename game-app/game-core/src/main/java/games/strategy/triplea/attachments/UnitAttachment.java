@@ -134,6 +134,9 @@ public class UnitAttachment extends DefaultAttachment {
   private @Nullable Tuple<Integer, String> attackingLimit = null;
   private int attackRolls = 1;
   private int defenseRolls = 1;
+  // Flames and Steel (request 66): extra dice, each at its own value
+  private @Nullable List<Integer> attackExtraDie = null;
+  private @Nullable List<Integer> defenseExtraDie = null;
   private boolean chooseBestRoll = false;
   private @Nullable Boolean canRetreatOnStalemate;
 
@@ -1606,6 +1609,81 @@ public class UnitAttachment extends DefaultAttachment {
     defenseRolls = 1;
   }
 
+  private static List<Integer> addExtraDie(final String value, final @Nullable List<Integer> list) {
+    final List<Integer> result = list == null ? new ArrayList<>() : list;
+    final String[] s = splitOnColon(value);
+    final int count = s.length > 1 ? getInt(s[1]) : 1;
+    for (int i = 0; i < count; i++) {
+      result.add(getInt(s[0]));
+    }
+    return result;
+  }
+
+  private void setAttackExtraDie(final String value) {
+    attackExtraDie = addExtraDie(value, attackExtraDie);
+  }
+
+  private void setAttackExtraDie(final List<Integer> value) {
+    attackExtraDie = value;
+  }
+
+  /** Request 66: the type's own extra attack dice (no techs), one value per die. */
+  public List<Integer> getAttackExtraDie() {
+    return getListProperty(attackExtraDie);
+  }
+
+  private void setDefenseExtraDie(final String value) {
+    defenseExtraDie = addExtraDie(value, defenseExtraDie);
+  }
+
+  private void setDefenseExtraDie(final List<Integer> value) {
+    defenseExtraDie = value;
+  }
+
+  /** Request 66: the type's own extra defense dice (no techs), one value per die. */
+  public List<Integer> getDefenseExtraDie() {
+    return getListProperty(defenseExtraDie);
+  }
+
+  /** Request 66: " + 2" for each extra die above 0 (capped at the dice sides), or "". */
+  public String extraDiceText(final List<Integer> dice) {
+    final StringBuilder text = new StringBuilder();
+    for (final int die : dice) {
+      final int value = Math.min(getData().getDiceSides(), die);
+      if (value > 0) {
+        text.append(" + ").append(value);
+      }
+    }
+    return text.toString();
+  }
+
+  /** Request 66: the attack shown to players, e.g. "4" or "3 + 2". */
+  public String attackText(final GamePlayer player) {
+    return getAttack(player) + extraDiceText(getAttackExtraDice(player));
+  }
+
+  /** Request 66: the defense shown to players, e.g. "3 + 2". */
+  public String defenseText(final GamePlayer player) {
+    return getDefense(player) + extraDiceText(getDefenseExtraDice(player));
+  }
+
+  /**
+   * Request 66: the extra attack dice the player's units of this type roll, from the unit and the
+   * player's techs. Values are not yet capped or supported.
+   */
+  public List<Integer> getAttackExtraDice(final GamePlayer player) {
+    final List<Integer> result = new ArrayList<>(getAttackExtraDie());
+    result.addAll(getTechTracker().getAttackExtraDice(player, getUnitType()));
+    return result;
+  }
+
+  /** Request 66: as {@link #getAttackExtraDice} for defense. */
+  public List<Integer> getDefenseExtraDice(final GamePlayer player) {
+    final List<Integer> result = new ArrayList<>(getDefenseExtraDie());
+    result.addAll(getTechTracker().getDefenseExtraDice(player, getUnitType()));
+    return result;
+  }
+
   private void setChooseBestRoll(final String s) {
     chooseBestRoll = getBool(s);
   }
@@ -2975,8 +3053,15 @@ public class UnitAttachment extends DefaultAttachment {
     }
     final int attackRolls = getAttackRolls(player);
     final int defenseRolls = getDefenseRolls(player);
-    final String attack = (attackRolls > 1 ? (attackRolls + "x") : "") + getAttack(player);
-    final String defense = (defenseRolls > 1 ? (defenseRolls + "x") : "") + getDefense(player);
+    // request 66: extra dice show as "3 + 2"
+    final String attack =
+        (attackRolls > 1 ? (attackRolls + "x") : "")
+            + getAttack(player)
+            + extraDiceText(getAttackExtraDice(player));
+    final String defense =
+        (defenseRolls > 1 ? (defenseRolls + "x") : "")
+            + getDefense(player)
+            + extraDiceText(getDefenseExtraDice(player));
     final String movement = String.valueOf(getMovement(player));
     formatter.append("Att | Def | Mov", attack + " | " + defense + " | " + movement);
     if (getHitPoints() > 1) {
@@ -3628,6 +3713,20 @@ public class UnitAttachment extends DefaultAttachment {
                   this::setAttackingLimit,
                   this::getAttackingLimitOrNull,
                   this::resetAttackingLimit));
+      case "attackExtraDie" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setAttackExtraDie,
+                  this::setAttackExtraDie,
+                  this::getAttackExtraDie,
+                  () -> attackExtraDie = null));
+      case "defenseExtraDie" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setDefenseExtraDie,
+                  this::setDefenseExtraDie,
+                  this::getDefenseExtraDie,
+                  () -> defenseExtraDie = null));
       case ATTACK_ROLL ->
           Optional.of(
               MutableProperty.of(

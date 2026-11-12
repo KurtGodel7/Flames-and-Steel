@@ -43,6 +43,16 @@ public class PowerCalculator {
       final int diceSides,
       final StrengthValue unitStrength,
       final RollValue unitRolls) {
+    // request 66: each extra die adds its own value, like one more roll at that value
+    return mainValue(chooseBestRoll, diceSides, unitStrength, unitRolls)
+        + unitStrength.getExtraDicePower();
+  }
+
+  private static int mainValue(
+      final boolean chooseBestRoll,
+      final int diceSides,
+      final StrengthValue unitStrength,
+      final RollValue unitRolls) {
     if (unitStrength.isZero() || unitRolls.isZero()) {
       return 0;
     }

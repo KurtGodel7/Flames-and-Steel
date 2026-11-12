@@ -30,9 +30,7 @@ public class TechDescriptions {
   public static String describe(final TechAdvance tech, final GamePlayer player) {
     if (player != null && tech.getData() != null) {
       final String own =
-          tech.getData()
-              .getProperties()
-              .get(PREFIX + tech.getName() + " " + player.getName(), "");
+          tech.getData().getProperties().get(PREFIX + tech.getName() + " " + player.getName(), "");
       if (!own.isBlank()) {
         return own;
       }
@@ -101,11 +99,16 @@ public class TechDescriptions {
             hitPoints)) {
       types.addAll(map.keySet());
     }
+    // request 66: extra dice at their own values
+    ability.getAttackExtraDie().forEach(t -> types.add(t.getSecond()));
+    ability.getDefenseExtraDie().forEach(t -> types.add(t.getSecond()));
     final List<String> clauses = new ArrayList<>();
     for (final UnitType type : types) {
       final String plural = plural(type);
       bonus(clauses, attack.getInt(type), defense.getInt(type), "attack", "defense", plural);
       rolls(clauses, attackRolls.getInt(type), defenseRolls.getInt(type), plural);
+      extraDice(clauses, ability.getAttackExtraDie(), type, "attack", plural);
+      extraDice(clauses, ability.getDefenseExtraDie(), type, "defense", plural);
       if (movement.getInt(type) != 0) {
         clauses.add(signed(movement.getInt(type)) + " movement for " + plural);
       }
@@ -135,8 +138,14 @@ public class TechDescriptions {
         clauses.add(signed(hitPoints.getInt(type)) + " hit point for " + plural);
       }
       // request 27: interception (fighters) and air defense (bombers) are separate values
-      airValue(clauses, interception.getInt(type), interceptionRolls.getInt(type), "interception", plural);
-      airValue(clauses, airDefense.getInt(type), airDefenseRolls.getInt(type), "air defense", plural);
+      airValue(
+          clauses,
+          interception.getInt(type),
+          interceptionRolls.getInt(type),
+          "interception",
+          plural);
+      airValue(
+          clauses, airDefense.getInt(type), airDefenseRolls.getInt(type), "air defense", plural);
     }
     // request 43: Combat Air Patrol and VT Proximity Fuze
     if (ability.getCarrierInterception()) {
@@ -161,12 +170,7 @@ public class TechDescriptions {
       final String plural) {
     if (set > 0) {
       clauses.add(
-          plural
-              + "' bonus die against "
-              + what
-              + " is now "
-              + set
-              + " (if not higher already)");
+          plural + "' bonus die against " + what + " is now " + set + " (if not higher already)");
     }
     if (added != 0) {
       clauses.add(signed(added) + " to " + plural + "' bonus die against " + what);
@@ -251,5 +255,29 @@ public class TechDescriptions {
 
   private static String capitalize(final String s) {
     return s.isEmpty() ? s : Character.toUpperCase(s.charAt(0)) + s.substring(1);
+  }
+
+  /** Request 66: "Sturmtruppen roll an extra defense die at 2". */
+  private static void extraDice(
+      final List<String> clauses,
+      final List<org.triplea.util.Tuple<Integer, UnitType>> dice,
+      final UnitType type,
+      final String side,
+      final String plural) {
+    final List<Integer> values =
+        dice.stream().filter(t -> type.equals(t.getSecond())).map(t -> t.getFirst()).toList();
+    if (values.isEmpty()) {
+      return;
+    }
+    final String at =
+        values.stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(" and "));
+    clauses.add(
+        capitalize(plural)
+            + " roll "
+            + (values.size() == 1
+                ? "an extra " + side + " die"
+                : values.size() + " extra " + side + " dice")
+            + " at "
+            + at);
   }
 }

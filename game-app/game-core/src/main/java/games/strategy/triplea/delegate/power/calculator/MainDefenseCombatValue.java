@@ -151,16 +151,18 @@ class MainDefenseCombatValue implements CombatValue {
         strength = Math.min(1, strength);
         allowFriendly = false;
       }
+      // request 66: extra dice at their own values; support goes to the lowest one
       StrengthValue strengthValue =
           StrengthValue.of(gameDiceSides, strength)
+              .withExtraDice(unit.getUnitAttachment().getDefenseExtraDice(unit.getOwner()))
               .add(
                   TerritoryEffectHelper.getTerritoryCombatBonus(
                       unit.getType(), territoryEffects, true));
 
       if (allowFriendly) {
-        strengthValue = strengthValue.add(supportFromFriends.giveSupportToUnit(unit));
+        strengthValue = strengthValue.addSupport(supportFromFriends.giveSupportToUnit(unit));
       }
-      strengthValue = strengthValue.add(supportFromEnemies.giveSupportToUnit(unit));
+      strengthValue = strengthValue.addSupport(supportFromEnemies.giveSupportToUnit(unit));
       return strengthValue;
     }
 

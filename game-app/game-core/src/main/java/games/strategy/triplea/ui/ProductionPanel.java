@@ -381,9 +381,7 @@ class ProductionPanel extends JPanel {
                   .getUnitImageFactory()
                   .getIcon(ImageKey.builder().type(type).player(player).build());
           final UnitAttachment attach = type.getUnitAttachment();
-          final int attack = attach.getAttack(player);
           final int movement = attach.getMovement(player);
-          final int defense = attach.getDefense(player);
           // Flames and Steel: hits too, with the nation's hit point techs
           final int hits =
               attach.getHitPoints()
@@ -393,7 +391,13 @@ class ProductionPanel extends JPanel {
           info.setText(
               airStage
                   ? games.strategy.triplea.delegate.air.AirValues.statLineHtml(type, player)
-                  : attack + " | " + defense + " | " + movement + " | " + hits);
+                  : attach.attackText(player)
+                      + " | "
+                      + attach.defenseText(player)
+                      + " | "
+                      + movement
+                      + " | "
+                      + hits);
           tooltip.append(UnitNames.of(type)).append(": ");
           if (airStage) {
             tooltip

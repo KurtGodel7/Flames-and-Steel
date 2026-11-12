@@ -203,7 +203,20 @@ final class BattleModel extends DefaultTableModel {
             airZoneStrength != null
                 ? airZoneStrength.applyAsInt(current)
                 : unitPowerAndRollsMap.getStrength(current);
-        shift.get(strength).merge(shipSupport.getOrDefault(current, ""), 1, Integer::sum);
+        // request 66: a unit with extra dice sits at its main value, marked "also 2"
+        String mark = shipSupport.getOrDefault(current, "");
+        if (airZoneStrength == null) {
+          final var extra = unitPowerAndRollsMap.getTotalStrengthAndTotalRollsByUnit().get(current);
+          if (extra != null && !extra.getExtraDice().isEmpty()) {
+            mark =
+                (mark.isEmpty() ? "" : mark + " ")
+                    + "also "
+                    + extra.getExtraDice().stream()
+                        .map(String::valueOf)
+                        .collect(java.util.stream.Collectors.joining("+"));
+          }
+        }
+        shift.get(strength).merge(mark, 1, Integer::sum);
       }
       for (int i = 0; i <= gameData.getDiceSides(); i++) {
         final int value = i;

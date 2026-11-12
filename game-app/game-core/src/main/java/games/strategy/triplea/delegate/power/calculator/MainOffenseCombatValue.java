@@ -148,12 +148,14 @@ class MainOffenseCombatValue implements CombatValue {
         strength += ua.getIsMarine();
       }
 
+      // request 66: extra dice at their own values; support goes to the lowest one
       return StrengthValue.of(gameDiceSides, strength)
+          .withExtraDice(ua.getAttackExtraDice(unit.getOwner()))
           .add(
               TerritoryEffectHelper.getTerritoryCombatBonus(
                   unit.getType(), territoryEffects, false))
-          .add(supportFromFriends.giveSupportToUnit(unit))
-          .add(supportFromEnemies.giveSupportToUnit(unit));
+          .addSupport(supportFromFriends.giveSupportToUnit(unit))
+          .addSupport(supportFromEnemies.giveSupportToUnit(unit));
     }
 
     @Override

@@ -98,9 +98,9 @@ public class TechTracker {
 
   /**
    * Flames and Steel (request 39): the value of the bomber type's extra die against land units,
-   * surface ships or (request 43) submarines, for this nation: its starting value (the nation's
-   * own "base" value for the type if it has one, request 43, else the type's), raised to the
-   * highest "set" of the nation's techs (a set never lowers it), plus every tech's addition.
+   * surface ships or (request 43) submarines, for this nation: its starting value (the nation's own
+   * "base" value for the type if it has one, request 43, else the type's), raised to the highest
+   * "set" of the nation's techs (a set never lowers it), plus every tech's addition.
    */
   public int getStrikeBonus(GamePlayer player, UnitType type, StrikeBonusKind kind) {
     final Supplier<Integer> getter =
@@ -231,6 +231,41 @@ public class TechTracker {
                 // request 37: plus the nation's own (the Soviet -1 dive bomber)
                 + nationBonus(player, TechAttachment::getAttackBonus, type);
     return getCached(player, type, "getAttackBonus", getter);
+  }
+
+  /** Request 66: the extra attack dice the player's techs give its units of this type. */
+  public java.util.List<Integer> getAttackExtraDice(GamePlayer player, UnitType type) {
+    return extraDice(player, type, "getAttackExtraDice", TechAbilityAttachment::getAttackExtraDie);
+  }
+
+  /** Request 66: the extra defense dice the player's techs give its units of this type. */
+  public java.util.List<Integer> getDefenseExtraDice(GamePlayer player, UnitType type) {
+    return extraDice(
+        player, type, "getDefenseExtraDice", TechAbilityAttachment::getDefenseExtraDie);
+  }
+
+  @SuppressWarnings("unchecked")
+  private java.util.List<Integer> extraDice(
+      final GamePlayer player,
+      final UnitType type,
+      final String property,
+      final Function<
+              TechAbilityAttachment, java.util.List<org.triplea.util.Tuple<Integer, UnitType>>>
+          getter) {
+    if (player == null) {
+      return java.util.List.of();
+    }
+    return (java.util.List<Integer>)
+        cache.computeIfAbsent(
+            new Key(player, type, property),
+            key ->
+                getCurrentTechAdvances(player).stream()
+                    .map(TechAbilityAttachment::get)
+                    .filter(Objects::nonNull)
+                    .flatMap(taa -> getter.apply(taa).stream())
+                    .filter(t -> type.equals(t.getSecond()))
+                    .map(org.triplea.util.Tuple::getFirst)
+                    .collect(Collectors.toUnmodifiableList()));
   }
 
   /** Request 37: a bonus from the player's own techAttachment (none for a null player). */

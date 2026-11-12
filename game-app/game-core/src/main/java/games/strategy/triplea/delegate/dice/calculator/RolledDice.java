@@ -69,11 +69,14 @@ public class RolledDice {
     return activeUnits.stream()
         .flatMap(
             unitPowerStrengthAndRolls -> {
-              if (unitPowerStrengthAndRolls.getChooseBestRoll()) {
-                return getDiceForChooseBestRoll(diceQueue, unitPowerStrengthAndRolls);
-              } else {
-                return getDiceForAllRolls(diceQueue, unitPowerStrengthAndRolls);
-              }
+              final Stream<Die> main =
+                  unitPowerStrengthAndRolls.getChooseBestRoll()
+                      ? getDiceForChooseBestRoll(diceQueue, unitPowerStrengthAndRolls)
+                      : getDiceForAllRolls(diceQueue, unitPowerStrengthAndRolls);
+              // request 66: then each extra die at its own value
+              return Stream.concat(
+                  main.collect(Collectors.toList()).stream(),
+                  getExtraDice(diceQueue, unitPowerStrengthAndRolls));
             })
         .collect(Collectors.toList());
   }
@@ -83,7 +86,7 @@ public class RolledDice {
     final List<Integer> diceRolls = new ArrayList<>();
     int bestRoll = unitPowerStrengthAndRolls.getDiceSides();
     int bestRollIndex = 0;
-    for (int i = 0; i < unitPowerStrengthAndRolls.getRolls(); i++) {
+    for (int i = 0; i < unitPowerStrengthAndRolls.getMainRolls(); i++) {
       final int die = diceQueue.remove();
       diceRolls.add(die);
       if (die < bestRoll) {
@@ -95,7 +98,7 @@ public class RolledDice {
     final int diceHitIndex = bestRollIndex;
 
     final int strength = unitPowerStrengthAndRolls.getStrength();
-    return IntStream.range(0, unitPowerStrengthAndRolls.getRolls())
+    return IntStream.range(0, unitPowerStrengthAndRolls.getMainRolls())
         .mapToObj(
             rollNumber ->
                 new Die(
@@ -106,10 +109,22 @@ public class RolledDice {
                         : Die.DieType.IGNORED));
   }
 
+  /** Request 66: one die per extra die, hit below that die's own value. */
+  private static Stream<Die> getExtraDice(
+      final Deque<Integer> diceQueue, final UnitPowerStrengthAndRolls unitPowerStrengthAndRolls) {
+    final List<Die> result = new ArrayList<>();
+    for (final int strength : unitPowerStrengthAndRolls.getExtraDice()) {
+      final int diceValue = diceQueue.removeFirst();
+      result.add(
+          new Die(diceValue, strength, diceValue < strength ? Die.DieType.HIT : Die.DieType.MISS));
+    }
+    return result.stream();
+  }
+
   private static Stream<Die> getDiceForAllRolls(
       final Deque<Integer> diceQueue, final UnitPowerStrengthAndRolls unitPowerStrengthAndRolls) {
     final int strength = unitPowerStrengthAndRolls.getStrength();
-    return IntStream.range(0, unitPowerStrengthAndRolls.getRolls())
+    return IntStream.range(0, unitPowerStrengthAndRolls.getMainRolls())
         .mapToObj(
             rollNumber -> {
               final int diceValue = diceQueue.removeFirst();

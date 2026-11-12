@@ -15,6 +15,7 @@ import games.strategy.triplea.Properties;
 import games.strategy.triplea.delegate.GenericTechAdvance;
 import games.strategy.triplea.delegate.Matches;
 import games.strategy.triplea.delegate.TechAdvance;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -32,6 +33,7 @@ import lombok.Getter;
 import org.jetbrains.annotations.NonNls;
 import org.triplea.java.collections.CollectionUtils;
 import org.triplea.java.collections.IntegerMap;
+import org.triplea.util.Tuple;
 
 /**
  * Attaches to technologies. Also contains static methods of interpreting data from all technology
@@ -48,6 +50,9 @@ public class TechAbilityAttachment extends DefaultAttachment {
   // attachment fields
   private @Nullable IntegerMap<UnitType> attackBonus = null;
   private @Nullable IntegerMap<UnitType> defenseBonus = null;
+  // Flames and Steel (request 66): extra dice, each at its own value, "N:unitType[:count]"
+  private @Nullable List<Tuple<Integer, UnitType>> attackExtraDie = null;
+  private @Nullable List<Tuple<Integer, UnitType>> defenseExtraDie = null;
   private @Nullable IntegerMap<UnitType> movementBonus = null;
   private @Nullable IntegerMap<UnitType> radarBonus = null;
   private @Nullable IntegerMap<UnitType> airAttackBonus = null;
@@ -180,6 +185,57 @@ public class TechAbilityAttachment extends DefaultAttachment {
               name, allowUndefined ? " -1 (no effect), or be" : "", max, value, thisErrorMsg()));
     }
     return intValue;
+  }
+
+  /**
+   * Flames and Steel (request 66): "N:unitType" or "N:unitType:count" gives the owner's units of
+   * that type count (default 1) extra dice at value N. Repeatable.
+   */
+  private List<Tuple<Integer, UnitType>> parseExtraDie(
+      final String name, final String value, final @Nullable List<Tuple<Integer, UnitType>> list)
+      throws GameParseException {
+    final String[] s = splitOnColon(value);
+    if (s.length < 2 || s.length > 3) {
+      throw new GameParseException(
+          name + " must be 'value:unitType' or 'value:unitType:count'" + thisErrorMsg());
+    }
+    final int dieValue = getInt(s[0]);
+    if (dieValue < 0) {
+      throw new GameParseException(name + " value cannot be negative" + thisErrorMsg());
+    }
+    final UnitType type = getUnitTypeOrThrow(s[1]);
+    final int count = s.length == 3 ? getInt(s[2]) : 1;
+    final List<Tuple<Integer, UnitType>> result = list == null ? new ArrayList<>() : list;
+    for (int i = 0; i < count; i++) {
+      result.add(Tuple.of(dieValue, type));
+    }
+    return result;
+  }
+
+  private void setAttackExtraDie(final String value) throws GameParseException {
+    attackExtraDie = parseExtraDie("attackExtraDie", value, attackExtraDie);
+  }
+
+  private void setAttackExtraDie(final List<Tuple<Integer, UnitType>> value) {
+    attackExtraDie = value;
+  }
+
+  /** Request 66: extra attack dice (value, unit type), one entry per die. */
+  public List<Tuple<Integer, UnitType>> getAttackExtraDie() {
+    return getListProperty(attackExtraDie);
+  }
+
+  private void setDefenseExtraDie(final String value) throws GameParseException {
+    defenseExtraDie = parseExtraDie("defenseExtraDie", value, defenseExtraDie);
+  }
+
+  private void setDefenseExtraDie(final List<Tuple<Integer, UnitType>> value) {
+    defenseExtraDie = value;
+  }
+
+  /** Request 66: extra defense dice (value, unit type), one entry per die. */
+  public List<Tuple<Integer, UnitType>> getDefenseExtraDie() {
+    return getListProperty(defenseExtraDie);
   }
 
   private void setAttackBonus(final String value) throws GameParseException {
@@ -1350,6 +1406,20 @@ public class TechAbilityAttachment extends DefaultAttachment {
                   this::setHitPointBonus,
                   this::getHitPointBonus,
                   this::resetHitPointBonus));
+      case "attackExtraDie" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setAttackExtraDie,
+                  this::setAttackExtraDie,
+                  this::getAttackExtraDie,
+                  () -> attackExtraDie = null));
+      case "defenseExtraDie" ->
+          Optional.of(
+              MutableProperty.of(
+                  this::setDefenseExtraDie,
+                  this::setDefenseExtraDie,
+                  this::getDefenseExtraDie,
+                  () -> defenseExtraDie = null));
       case "attackBonus" ->
           Optional.of(
               MutableProperty.of(

@@ -457,10 +457,14 @@ public final class Matches {
     return ut -> {
       // if unit has attack or defense, return true
       final UnitAttachment ua = ut.getUnitAttachment();
-      if (attack && ua.getAttack(player) > 0) {
+      if (attack
+          && (ua.getAttack(player) > 0
+              || ua.getAttackExtraDice(player).stream().anyMatch(d -> d > 0))) {
         return true;
       }
-      if (!attack && ua.getDefense(player) > 0) {
+      if (!attack
+          && (ua.getDefense(player) > 0
+              || ua.getDefenseExtraDice(player).stream().anyMatch(d -> d > 0))) {
         return true;
       }
       // if unit can support other units, return true

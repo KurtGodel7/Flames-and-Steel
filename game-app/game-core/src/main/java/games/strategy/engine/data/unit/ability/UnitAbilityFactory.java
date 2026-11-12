@@ -246,10 +246,13 @@ public class UnitAbilityFactory {
       final Parameters parameters, final GamePlayer player, final UnitType unitType) {
     final UnitAttachment unitAttachment = unitType.getUnitAttachment();
     final Collection<BattleState.Side> sides = new ArrayList<>();
-    if (unitAttachment.getAttack(player) > 0) {
+    // request 66: extra dice count as being able to fire
+    if (unitAttachment.getAttack(player) > 0
+        || unitAttachment.getAttackExtraDice(player).stream().anyMatch(d -> d > 0)) {
       sides.add(BattleState.Side.OFFENSE);
     }
-    if (unitAttachment.getDefense(player) > 0) {
+    if (unitAttachment.getDefense(player) > 0
+        || unitAttachment.getDefenseExtraDice(player).stream().anyMatch(d -> d > 0)) {
       if (unitAttachment.getIsFirstStrike()
           && !Properties.getDefendingSubsSneakAttack(parameters.properties)) {
         // if the defending sub doesn't have sneak attack, then it needs to have a defensive general

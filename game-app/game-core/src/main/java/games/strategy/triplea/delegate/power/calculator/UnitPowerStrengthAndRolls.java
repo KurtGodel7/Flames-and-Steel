@@ -52,13 +52,27 @@ public class UnitPowerStrengthAndRolls {
     return strengthAndRolls.getStrength().getValue();
   }
 
+  /** The dice the unit rolls: its main rolls plus any extra dice (request 66). */
   public int getRolls() {
+    final int main = getMainRolls();
+    return main < 0 ? main : main + getExtraDice().size();
+  }
+
+  /** Request 66: the rolls at the main strength only. */
+  public int getMainRolls() {
     return strengthAndRolls.getRolls().getValue();
   }
 
+  /** Request 66: the extra dice, each at its own value (support included), lowest first. */
+  public java.util.List<Integer> getExtraDice() {
+    return strengthAndRolls.getStrength().getExtraDice();
+  }
+
   public UnitPowerStrengthAndRolls subtractStrength(final int strengthToSubtract) {
+    // request 66: support is taken back from where it was given (the lowest extra die, if any)
     return update(
-        strengthAndRolls.getStrength().add(-1 * strengthToSubtract), strengthAndRolls.getRolls());
+        strengthAndRolls.getStrength().addSupport(-1 * strengthToSubtract),
+        strengthAndRolls.getRolls());
   }
 
   private UnitPowerStrengthAndRolls update(
@@ -86,7 +100,7 @@ public class UnitPowerStrengthAndRolls {
   }
 
   UnitPowerStrengthAndRolls toZero() {
-    final StrengthValue newStrength = strengthAndRolls.getStrength().toValue(0);
+    final StrengthValue newStrength = strengthAndRolls.getStrength().withoutExtraDice().toValue(0);
     final RollValue newRolls = strengthAndRolls.getRolls().toValue(0);
     return this.toBuilder()
         .strengthAndRolls(StrengthAndRolls.of(newStrength, newRolls))
