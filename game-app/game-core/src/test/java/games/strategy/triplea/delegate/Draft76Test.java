@@ -7,7 +7,6 @@ import static org.hamcrest.Matchers.is;
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.Unit;
-import games.strategy.engine.data.gameparser.GameParser;
 import games.strategy.triplea.delegate.battle.BattleState;
 import games.strategy.triplea.delegate.power.calculator.CombatValueBuilder;
 import games.strategy.triplea.delegate.power.calculator.PowerStrengthAndRolls;
@@ -74,40 +73,36 @@ class Draft76Test {
   }
 
   @Test
-  void nightCombatIsGoneAndNightActionDescribesItself() {
+  void nightCombatIsGone() {
     assertThat(data.getTechnologyFrontier().getAdvanceByName("NightCombat") == null, is(true));
-    assertThat(
-        TechDescriptions.describe(data.getTechnologyFrontier().getAdvanceByName("NightAction")),
-        is(
-            "+1 attack and defense for cruisers; Yamato battleships roll one extra die on attack"
-                + " and defense."));
   }
 
+  // Draft 114: Night Action no longer gives cruisers +1 nor the Yamato an extra die (it swaps the
+  // Yamato's support by trigger instead). Draft 117: the Yamato's Fleet Action and Improved Shells
+  // dice are request 66 extra dice at 4.
   @Test
-  void cruisersGainOne() {
+  void nightActionAloneChangesNoCruiserOrYamatoDice() {
     final Unit cruiser = unit("cruiser", japanese);
-    final int[] attackBefore = powerAndRolls(cruiser, BattleState.Side.OFFENSE);
-    final int[] defenseBefore = powerAndRolls(cruiser, BattleState.Side.DEFENSE);
+    final Unit yamato = unit("yamatoBattleship", japanese);
+    final int[] cruiserBefore = powerAndRolls(cruiser, BattleState.Side.OFFENSE);
+    final int[] yamatoBefore = powerAndRolls(yamato, BattleState.Side.OFFENSE);
     grant("NightAction");
-    assertThat(powerAndRolls(cruiser, BattleState.Side.OFFENSE)[0], is(attackBefore[0] + 1));
-    assertThat(powerAndRolls(cruiser, BattleState.Side.DEFENSE)[0], is(defenseBefore[0] + 1));
+    assertThat(powerAndRolls(cruiser, BattleState.Side.OFFENSE), is(cruiserBefore));
+    assertThat(powerAndRolls(yamato, BattleState.Side.OFFENSE), is(yamatoBefore));
   }
 
   @Test
   void yamatoDiceAddUpWithFleetActionAndImprovedShells() {
     final Unit yamato = unit("yamatoBattleship", japanese);
     assertThat(powerAndRolls(yamato, BattleState.Side.OFFENSE)[1], is(1));
-    grant("NightAction");
-    assertThat(powerAndRolls(yamato, BattleState.Side.OFFENSE)[1], is(2));
-    assertThat(powerAndRolls(yamato, BattleState.Side.DEFENSE)[1], is(2));
     grant("FleetAction");
     grant("ImprovedShells");
     final int[] attack = powerAndRolls(yamato, BattleState.Side.OFFENSE);
     final int[] defense = powerAndRolls(yamato, BattleState.Side.DEFENSE);
-    // 1 die + 1 each from three techs; Fleet Action also takes 1 off the value (5 -> 4)
-    assertThat(attack[1], is(4));
-    assertThat(defense[1], is(4));
-    assertThat(attack[0], is(4));
-    assertThat(defense[0], is(4));
+    // main die at 5 plus two extra dice at 4
+    assertThat(attack[1], is(3));
+    assertThat(defense[1], is(3));
+    assertThat(attack[0], is(5));
+    assertThat(defense[0], is(5));
   }
 }

@@ -126,16 +126,19 @@ public class PowerStrengthAndRolls implements TotalPowerAndTotalRolls {
   /**
    * Flames and Steel (request 51): whole ships fire first, best value first; the last ship used, if
    * cut short, fires the dice it keeps at the reduced die value (or its own, if higher); later
-   * ships do not fire. Never adds dice.
+   * ships do not fire. Never adds dice. Request 67: extra dice count as dice here too.
    */
   private void capBombardDice(final int cap, final int reducedDieValue) {
     final List<UnitPowerStrengthAndRolls> byValue = new ArrayList<>(sortedStrengthAndRolls);
+    // request 67: best single die first (extra dice count); ties to more total dice value
     byValue.sort(
-        java.util.Comparator.comparingInt(UnitPowerStrengthAndRolls::getStrength).reversed());
+        java.util.Comparator.comparingInt(PowerStrengthAndRolls::bestDie)
+            .thenComparingInt(UnitPowerStrengthAndRolls::getPower)
+            .reversed());
     int left = cap;
     for (final UnitPowerStrengthAndRolls data : byValue) {
       final int rolls = data.getRolls();
-      if (rolls == 0) {
+      if (rolls <= 0) {
         continue;
       }
       final UnitPowerStrengthAndRolls capped;
@@ -143,7 +146,7 @@ public class PowerStrengthAndRolls implements TotalPowerAndTotalRolls {
         left -= rolls;
         continue;
       } else if (left > 0) {
-        capped = data.withStrengthAndRolls(Math.max(data.getStrength(), reducedDieValue), left);
+        capped = cutShort(data, left, reducedDieValue);
         left = 0;
       } else {
         capped = data.toZero();
@@ -151,6 +154,42 @@ public class PowerStrengthAndRolls implements TotalPowerAndTotalRolls {
       totalStrengthAndTotalRollsByUnit.put(data.getUnit(), capped);
       sortedStrengthAndRolls.set(sortedStrengthAndRolls.indexOf(data), capped);
     }
+  }
+
+  /** Request 67: the unit's best single die, main or extra. */
+  private static int bestDie(final UnitPowerStrengthAndRolls data) {
+    int best = data.getMainRolls() > 0 ? data.getStrength() : 0;
+    for (final int die : data.getExtraDice()) {
+      best = Math.max(best, die);
+    }
+    return best;
+  }
+
+  /**
+   * Request 67: a ship left with fewer dice than it has keeps its best dice (main before extra when
+   * equal); every kept die fires at its own value or the reduced die value, whichever is higher.
+   */
+  private static UnitPowerStrengthAndRolls cutShort(
+      final UnitPowerStrengthAndRolls data, final int keep, final int reducedDieValue) {
+    final int mainRolls = Math.max(0, data.getMainRolls());
+    final int mainValue = data.getStrength();
+    final List<Integer> extras = new ArrayList<>(data.getExtraDice());
+    extras.sort(java.util.Comparator.reverseOrder());
+    int keptMain = 0;
+    final List<Integer> keptExtras = new ArrayList<>();
+    int extraIndex = 0;
+    for (int kept = 0; kept < keep; kept++) {
+      final boolean mainLeft = keptMain < mainRolls;
+      final boolean extraLeft = extraIndex < extras.size();
+      if (mainLeft && (!extraLeft || mainValue >= extras.get(extraIndex))) {
+        keptMain++;
+      } else if (extraLeft) {
+        keptExtras.add(Math.max(extras.get(extraIndex++), reducedDieValue));
+      } else {
+        break;
+      }
+    }
+    return data.withDice(Math.max(mainValue, reducedDieValue), keptMain, keptExtras);
   }
 
   @Override

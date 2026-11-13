@@ -131,7 +131,9 @@ public class BombardmentCombatValue implements CombatValue {
       final UnitAttachment ua = unit.getUnitAttachment();
       final int strength = ua.getBombard();
 
+      // request 67: attack extra dice (request 66) bombard too, each at its own value
       return StrengthValue.of(gameDiceSides, strength)
+          .withExtraDice(ua.getAttackExtraDice(unit.getOwner()))
           .add(
               TerritoryEffectHelper.getTerritoryCombatBonus(
                   unit.getType(), territoryEffects, false))

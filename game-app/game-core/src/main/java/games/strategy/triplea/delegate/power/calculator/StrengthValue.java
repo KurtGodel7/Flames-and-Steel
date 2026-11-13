@@ -66,6 +66,14 @@ class StrengthValue {
     return new StrengthValue(diceSides, value, extraDice, extraDiceSupport);
   }
 
+  /**
+   * Request 67: a bombarding ship cut short by the dice cap: this main value and exactly these
+   * extra dice (final values, no further support).
+   */
+  StrengthValue withDice(final int mainValue, final List<Integer> finalExtraDice) {
+    return new StrengthValue(diceSides, mainValue, List.copyOf(finalExtraDice), 0);
+  }
+
   /** Request 66: the same strength without extra dice. */
   StrengthValue withoutExtraDice() {
     return new StrengthValue(diceSides, value, List.of(), 0);
