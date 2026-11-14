@@ -58,6 +58,23 @@ public class HeadedPlayerTypes {
     };
   }
 
+  /**
+   * Flames and Steel (request 68, part B): the types offered for one nation of this game. For a
+   * human-players-only game: Human (and the hidden network type), or only "Does Nothing" for a
+   * nation that never takes a turn. {@code player} null means the "set all" list.
+   */
+  public static Collection<PlayerTypes.Type> getPlayerTypes(
+      final @javax.annotation.Nullable games.strategy.engine.data.GameState data,
+      final @javax.annotation.Nullable games.strategy.engine.data.GamePlayer player) {
+    if (!games.strategy.triplea.delegate.HumanPlayersOnly.applies(data)) {
+      return getPlayerTypes();
+    }
+    if (player != null && games.strategy.triplea.delegate.TurnlessPlayers.isTurnless(player)) {
+      return List.of(DOES_NOTHING_PLAYER, CLIENT_PLAYER);
+    }
+    return List.of(HUMAN_PLAYER, CLIENT_PLAYER);
+  }
+
   public static Collection<PlayerTypes.Type> getPlayerTypes() {
     return Stream.of(
             // The first item in this list will be the default when hosting

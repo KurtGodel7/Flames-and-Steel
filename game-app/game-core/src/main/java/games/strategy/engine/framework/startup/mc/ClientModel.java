@@ -339,6 +339,18 @@ Check:
     if (data == null) {
       return;
     }
+    // Flames and Steel (request 68): a different map draft would draw wrong or fail mid-game
+    final Optional<String> mapProblem =
+        games.strategy.engine.framework.startup.MapVersionCheck.problem(data);
+    if (mapProblem.isPresent()) {
+      log.info(mapProblem.get()); // info: a warning would also open an error report window
+      messenger.shutDown();
+      gameLoadingWindow.doneWait();
+      EventThreadJOptionPane.showMessageDialog(
+          ui, mapProblem.get(), "Cannot join", JOptionPane.ERROR_MESSAGE);
+      clientLeftGame.run();
+      return;
+    }
     objectStreamFactory.setData(data);
     final Map<String, PlayerTypes.Type> playerMapping =
         playersToNodes.entrySet().stream()

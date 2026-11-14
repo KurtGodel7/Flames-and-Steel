@@ -857,7 +857,11 @@ public class TripleAPlayer extends AbstractBasePlayer {
 
   private @javax.annotation.Nullable IAirStageDelegate airStageDelegate() {
     try {
-      return getPlayerBridge().getRemoteDelegate() instanceof IAirStageDelegate d ? d : null;
+      // request 68: by class, not by the current step: a networked client may still show an
+      // earlier step when the host's air stage question arrives
+      return getPlayerBridge()
+          .getRemoteDelegateOfType(
+              games.strategy.triplea.delegate.AirStageDelegate.class, IAirStageDelegate.class);
     } catch (final RuntimeException e) {
       return null;
     }

@@ -1,7 +1,9 @@
 package games.strategy.engine.framework.startup.login;
 
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.nullValue;
 
 import games.strategy.engine.framework.startup.login.ClientLoginValidator.ErrorMessages;
 import java.util.Map;
@@ -14,6 +16,19 @@ import org.mockito.junit.jupiter.MockitoExtension;
 final class ClientLoginValidatorTest {
   @NonNls private static final String PASSWORD = "password";
   @NonNls private static final String OTHER_PASSWORD = "otherPassword";
+
+  /** Request 68: a client with another build is turned away with the host's build named. */
+  @Test
+  void versionMismatchNamesTheHostBuild() {
+    assertThat(
+        ClientLoginValidator.versionProblem("2026-11.16.146", "2026-11.16.146"), is(nullValue()));
+    assertThat(
+        ClientLoginValidator.versionProblem("2026-11.16.146", "2026-11.16.145"),
+        containsString("host is running Flames and Steel game build 2026-11.16.146"));
+    assertThat(
+        ClientLoginValidator.versionProblem("2026-11.16.146", null),
+        containsString("you have an older build"));
+  }
 
   @ExtendWith(MockitoExtension.class)
   @Nested

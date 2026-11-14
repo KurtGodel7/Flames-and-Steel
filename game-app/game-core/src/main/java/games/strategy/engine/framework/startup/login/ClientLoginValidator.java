@@ -42,6 +42,34 @@ public final class ClientLoginValidator implements ILoginValidator {
     String YOU_HAVE_BEEN_BANNED = "The host has banned you from this game";
   }
 
+  /** This computer's game build, as the release names it (e.g. 2026-11.16.146). */
+  static String engineVersion() {
+    try {
+      return org.triplea.config.product.ProductVersionReader.getCurrentVersion();
+    } catch (final RuntimeException e) {
+      return "unknown";
+    }
+  }
+
+  /**
+   * Flames and Steel (request 68): why a client with another build may not join, or null. Builds
+   * must match exactly: the fork changes what the computers send each other from build to build, so
+   * a different build would fail mid-game instead of at the door.
+   */
+  @VisibleForTesting
+  static @Nullable String versionProblem(
+      final String hostVersion, final @Nullable String clientVersion) {
+    if (hostVersion.equals(clientVersion)) {
+      return null;
+    }
+    return "Version mismatch: the host is running Flames and Steel game build "
+        + hostVersion
+        + ", but you have "
+        + (clientVersion == null ? "an older build" : "build " + clientVersion)
+        + ". Everyone in a game must use the same release. Download the release the host is"
+        + " using, then join again.";
+  }
+
   /** Set the password required for the game. If {@code null} or empty, no password is required. */
   @ChangeOnNextMajorRelease
   public void setGamePassword(final @Nullable String password) {
@@ -79,6 +107,13 @@ public final class ClientLoginValidator implements ILoginValidator {
 
     if (hashedMac == null) {
       return ErrorMessages.UNABLE_TO_OBTAIN_MAC;
+    }
+
+    final String versionError =
+        versionProblem(
+            engineVersion(), propertiesReadFromClient.get(ClientLogin.ENGINE_VERSION_PROPERTY));
+    if (versionError != null) {
+      return versionError;
     }
 
     if (Boolean.TRUE.toString().equals(propertiesSentToClient.get(PASSWORD_REQUIRED_PROPERTY))) {

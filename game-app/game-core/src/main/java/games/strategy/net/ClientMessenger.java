@@ -111,8 +111,9 @@ public class ClientMessenger implements IClientMessenger, NioSocketListener {
       nioSocket.shutDown();
       if (conversation.getErrorMessage() != null) {
         String msg = conversation.getErrorMessage();
-        if (connectionRefusedError != null) {
-          msg += ", " + connectionRefusedError;
+        // request 68: the host's reason alone; the closed connection's exception carries no words
+        if (connectionRefusedError != null && connectionRefusedError.getMessage() != null) {
+          msg += ", " + connectionRefusedError.getMessage();
         }
         throw new CouldNotLogInException(msg);
       } else if (connectionRefusedError instanceof CouldNotLogInException) {

@@ -266,6 +266,21 @@ public class ServerSetupPanel extends SetupPanel implements IRemoteModelListener
       players.add(row.getAlliance());
       row.getAlliance().addActionListener(e -> allianceRowButtonFired(row));
     }
+    if (games.strategy.triplea.delegate.HumanPlayersOnly.applies(gameSelectorModel.getGameData())) {
+      // request 68 part B: say why there is no computer player
+      final GridBagConstraints noteConstraints = new GridBagConstraints();
+      noteConstraints.anchor = GridBagConstraints.WEST;
+      noteConstraints.gridx = 0;
+      noteConstraints.gridwidth = GridBagConstraints.REMAINDER;
+      noteConstraints.insets = new Insets(10, 16, 0, 16);
+      final JLabel note =
+          new JLabel(
+              "<html><div style='width:420px'>"
+                  + games.strategy.triplea.delegate.HumanPlayersOnly.NOTE
+                  + "</div></html>");
+      layout.setConstraints(note, noteConstraints);
+      players.add(note);
+    }
     removeAll();
     add(infoPanel, BorderLayout.NORTH);
     final JScrollPane scroll =
@@ -339,8 +354,6 @@ public class ServerSetupPanel extends SetupPanel implements IRemoteModelListener
     final Map<String, Boolean> playersEnabled = model.getPlayersEnabledListing();
     final Map<String, String> reloadSelections =
         GamePlayer.currentPlayers(gameSelectorModel.getGameData());
-    final List<PlayerTypes.Type> visiblePlayerTypes =
-        CollectionUtils.getMatches(HeadedPlayerTypes.getPlayerTypes(), PlayerTypes.Type::isVisible);
     for (final Map.Entry<String, Collection<String>> entry :
         model.getPlayerNamesAndAlliancesInTurnOrder().entrySet()) {
       final String playerName = entry.getKey();
@@ -348,9 +361,17 @@ public class ServerSetupPanel extends SetupPanel implements IRemoteModelListener
       if (gameSelectorModel.getGameData() != null) {
         player = gameSelectorModel.getGameData().getPlayerList().getPlayerId(playerName);
       }
+      // request 68 part B: a human-players-only game offers each nation only human types
+      final List<PlayerTypes.Type> rowTypes =
+          CollectionUtils.getMatches(
+              HeadedPlayerTypes.getPlayerTypes(gameSelectorModel.getGameData(), player),
+              PlayerTypes.Type::isVisible);
       PlayerTypes.Type playerType =
-          determinePlayerType(playerName, player, reloadSelections, visiblePlayerTypes);
-      PlayerRow row = new PlayerRow(playerName, playerType, visiblePlayerTypes, entry.getValue());
+          determinePlayerType(playerName, player, reloadSelections, rowTypes);
+      if (!rowTypes.contains(playerType) && !rowTypes.isEmpty()) {
+        playerType = rowTypes.get(0);
+      }
+      PlayerRow row = new PlayerRow(playerName, playerType, rowTypes, entry.getValue());
       row.update(players, playersEnabled);
       playerRows.add(row);
     }

@@ -44,7 +44,8 @@ class Draft83Test {
     "AmericansPacific, 4, 4, 6, 4",
     "Americans, 5, 3, 4, 3",
     "Japanese, 4, 3, 6, 4",
-    "Italians, 4, 3, 5, 3",
+    // draft 118: Italy gets Picchiatelli (the Stuka tech, dive bomber land bonus 2)
+    "Italians, 5, 3, 5, 3",
     "British, 4, 3, 5, 3",
     "Russians, 3, 2, 4, 3"
   })
@@ -61,9 +62,12 @@ class Draft83Test {
     }
     data.getTechTracker().clearCache();
     assertThat(nation + " dive vs land", power(p, "diveBomber", TargetKind.LAND), is(diveLand));
-    assertThat(nation + " dive vs ships", power(p, "diveBomber", TargetKind.SURFACE), is(diveShips));
     assertThat(
-        nation + " torpedo vs ships", power(p, "torpedoBomber", TargetKind.SURFACE), is(torpedoShips));
+        nation + " dive vs ships", power(p, "diveBomber", TargetKind.SURFACE), is(diveShips));
+    assertThat(
+        nation + " torpedo vs ships",
+        power(p, "torpedoBomber", TargetKind.SURFACE),
+        is(torpedoShips));
     assertThat(
         nation + " medium vs ships", power(p, "mediumBomber", TargetKind.SURFACE), is(mediumShips));
   }

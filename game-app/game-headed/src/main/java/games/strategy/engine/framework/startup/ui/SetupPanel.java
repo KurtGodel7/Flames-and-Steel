@@ -120,7 +120,7 @@ public abstract class SetupPanel extends JPanel implements SetupModel {
             new Insets(0, 5, 5, 0),
             0,
             0));
-    final PlayerTypes playerTypes = new PlayerTypes(HeadedPlayerTypes.getPlayerTypes());
+    final PlayerTypes playerTypes = new PlayerTypes(HeadedPlayerTypes.getPlayerTypes(data, null));
     final JComboBox<String> setAllTypes = new JComboBox<>(playerTypes.getAvailablePlayerLabels());
     setAllTypes.insertItemAt(SET_ALL_DEFAULT_LABEL, 0);
     setAllTypes.setSelectedIndex(-1);
@@ -230,7 +230,7 @@ public abstract class SetupPanel extends JPanel implements SetupModel {
               data.getAllianceTracker().getAlliancesPlayerIsIn(player),
               this,
               data.getProperties(),
-              new PlayerTypes(HeadedPlayerTypes.getPlayerTypes()));
+              new PlayerTypes(HeadedPlayerTypes.getPlayerTypes(data, player)));
       playerRows.add(selector);
       // Flames and Steel: a player that never takes a turn (the Dutch) is not shown as a seat
       if (!player.isHidden()
@@ -238,6 +238,26 @@ public abstract class SetupPanel extends JPanel implements SetupModel {
         selector.layout(++gridY, panel);
         selector.setResourceModifiersVisible(false);
       }
+    }
+    if (games.strategy.triplea.delegate.HumanPlayersOnly.applies(data)) {
+      // request 68 part B: say why there is no computer player
+      panel.add(
+          new JLabel(
+              "<html><div style='width:420px'>"
+                  + games.strategy.triplea.delegate.HumanPlayersOnly.NOTE
+                  + "</div></html>"),
+          new GridBagConstraints(
+              0,
+              ++gridY,
+              8,
+              1,
+              0,
+              0,
+              GridBagConstraints.WEST,
+              GridBagConstraints.NONE,
+              new Insets(10, 5, 5, 0),
+              0,
+              0));
     }
 
     resourceModifiers.setAction(

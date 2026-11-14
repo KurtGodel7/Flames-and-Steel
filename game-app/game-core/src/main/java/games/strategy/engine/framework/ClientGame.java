@@ -93,7 +93,9 @@ public class ClientGame extends AbstractGame {
                   gameData.getHistory().getHistoryWriter().startNextRound(++currentRound);
                 }
                 while (!gameData.getSequence().getStep().getName().equals(stepName)
-                    || !gameData.getSequence().getStep().getPlayerId().equals(player)
+                    // request 68: Flames and Steel's air steps belong to no nation (null)
+                    || !java.util.Objects.equals(
+                        gameData.getSequence().getStep().getPlayerId(), player)
                     || !gameData
                         .getSequence()
                         .getStep()

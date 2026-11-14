@@ -104,6 +104,38 @@ public class PlayerBridge {
   }
 
   /**
+   * Flames and Steel (request 68): a remote reference to the first delegate of this class, whatever
+   * this computer thinks the current step is. On a networked client the step shown can lag behind
+   * the host's, so a question the host asks mid-step (the simultaneous air stages) must not look
+   * the delegate up by the current step. Null if the game has no such delegate.
+   */
+  @Nullable
+  public <T extends IRemote> T getRemoteDelegateOfType(
+      final Class<? extends IDelegate> delegateClass, final Class<T> remoteType) {
+    if (game.isGameOver()) {
+      throw new GameOverException("Game Over");
+    }
+    try {
+      try (GameData.Unlocker ignored = game.getData().acquireReadLock()) {
+        for (final IDelegate delegate : game.getData().getDelegates()) {
+          if (delegateClass.isInstance(delegate)) {
+            final IRemote remote =
+                getRemoteThatChecksForGameOver(
+                    game.getMessengers().getRemote(ServerGame.getRemoteName(delegate)));
+            return remoteType.isInstance(remote) ? remoteType.cast(remote) : null;
+          }
+        }
+        return null;
+      }
+    } catch (final RuntimeException e) {
+      if (e.getCause() instanceof MessengerException) {
+        throw new GameOverException("Game Over!", e);
+      }
+      throw e;
+    }
+  }
+
+  /**
    * Get a remote reference to the named delegate, the type of the reference is declared by the
    * delegates getRemoteType() method.
    */

@@ -123,6 +123,8 @@ public class ServerLauncher implements ILauncher {
       messengers.registerRemote(serverReady, ClientModel.CLIENT_READY_CHANNEL);
       playerListing.doPreGameStartDataModifications(gameData);
       abortLaunch = testShouldWeAbort();
+      // Flames and Steel (request 68): clients check their map copy against the host's
+      games.strategy.engine.framework.startup.MapVersionCheck.stampHostVersion(gameData);
       final byte[] gameDataAsBytes = gameData.toBytes();
       final Set<Player> localPlayerSet =
           gameData

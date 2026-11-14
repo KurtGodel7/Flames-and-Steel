@@ -28,6 +28,8 @@ public class ClientLogin implements IConnectionLogin {
   @Override
   public Map<String, String> getProperties(final Map<String, String> challenge) {
     final Map<String, String> response = new HashMap<>();
+    // Flames and Steel (request 68): the host refuses a different build with a plain message
+    response.put(ENGINE_VERSION_PROPERTY, ClientLoginValidator.engineVersion());
 
     if (Boolean.TRUE
         .toString()

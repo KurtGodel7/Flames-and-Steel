@@ -1799,6 +1799,11 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
         notifyError(problem);
       }
       requestWindowFocus();
+      // request 68: a step played by no person (Vichy's income) puts the screen in history view,
+      // and the air steps that follow have no nation to take it out again
+      if (inHistory.get()) {
+        showGame();
+      }
       SwingUtilities.invokeLater(this::showActionPanelTab);
       if (home) {
         final games.strategy.triplea.ui.air.AirHomePanel panel =
@@ -2128,7 +2133,10 @@ public final class TripleAFrame extends JFrame implements QuitHandler {
     bottomBar.gameDataChanged();
     // Flames and Steel (request 16): a step no local player plays gets no panel from a player, so
     // the last step's panel (e.g. Italy's bomber targets) must not stay in the Actions tab
+    // request 68: on a networked client the step change can arrive after the host's air stage
+    // question; an open air screen must not be replaced by the step text
     if (actionButtonsPanel != null
+        && !airStageTurnstile.isBusy()
         && (player == null || player.isNull() || uiContext.isCurrentPlayerRemote())) {
       actionButtonsPanel.changeToStepInfo(
           player,

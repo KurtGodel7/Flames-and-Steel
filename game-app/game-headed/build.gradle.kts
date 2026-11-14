@@ -61,6 +61,24 @@ tasks.named<ProcessResources>("processResources") {
     }
 }
 
+// Flames and Steel (request 68): the jar's own build number (as in its file name), so networked
+// players can be told apart by build; read by ProductVersionReader
+val forkVersionFile = tasks.register("forkVersionFile") {
+    val out = project.layout.buildDirectory.dir("generated/fork-version")
+    val version = releaseVersion
+    inputs.property("version", version)
+    outputs.dir(out)
+    doLast {
+        val f = out.get().file("META-INF/triplea/fork-version.txt").asFile
+        f.parentFile.mkdirs()
+        f.writeText(version)
+    }
+}
+
+tasks.named<ProcessResources>("processResources") {
+    from(forkVersionFile)
+}
+
 // Constructs release version in the form: YYYY-MM.[release number].[commit number]
 // EG: 2026-08.30.12345
 val releaseVersion = run {
