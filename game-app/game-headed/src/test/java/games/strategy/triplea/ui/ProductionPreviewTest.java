@@ -2,12 +2,10 @@ package games.strategy.triplea.ui;
 
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
-import games.strategy.engine.data.gameparser.GameParser;
 import games.strategy.triplea.settings.ClientSetting;
 import java.awt.Window;
 import java.awt.image.BufferedImage;
 import java.io.File;
-import java.nio.file.Path;
 import javax.imageio.ImageIO;
 import javax.swing.JDialog;
 import javax.swing.JFrame;
@@ -33,8 +31,7 @@ class ProductionPreviewTest {
   @Test
   void render() throws Exception {
     ClientSetting.initialize();
-    final GameData data =
-        games.strategy.triplea.ui.TestMaps.load();
+    final GameData data = games.strategy.triplea.ui.TestMaps.load();
     final UiContext ui = TestUi.create(data);
     final GamePlayer germans = data.getPlayerList().getPlayerId("Germans");
     SwingUtilities.invokeAndWait(

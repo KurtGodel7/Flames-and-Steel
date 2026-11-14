@@ -130,7 +130,10 @@ public class CasualtySelection {
               chooserScrollPane, JOptionPane.PLAIN_MESSAGE, JOptionPane.OK_CANCEL_OPTION);
     }
 
-    dialog = optionPane.createDialog(dialogParent, games.strategy.triplea.formatter.PlayerNames.display(player) + " select casualties");
+    dialog =
+        optionPane.createDialog(
+            dialogParent,
+            games.strategy.triplea.formatter.PlayerNames.display(player) + " select casualties");
   }
 
   /**

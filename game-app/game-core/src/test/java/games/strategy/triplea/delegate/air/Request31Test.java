@@ -7,10 +7,8 @@ import static org.hamcrest.Matchers.is;
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.TechnologyFrontier;
-import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.UnitType;
-import games.strategy.engine.data.gameparser.GameParser;
 import games.strategy.triplea.attachments.TechAbilityAttachment;
 import games.strategy.triplea.delegate.InitializationDelegate;
 import games.strategy.triplea.delegate.TechAdvance;
@@ -20,7 +18,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -96,8 +93,7 @@ class Request31Test {
     // American bombers in the same raid benefit
     assertThat(AirCombat.interceptionPower(heavy, AirCombat.interceptionPenalty(raid)), is(3));
     // a raid without a British strategic bomber does not
-    assertThat(
-        AirCombat.interceptionPenalty(List.of(unit("strategicBomber", americans))), is(0));
+    assertThat(AirCombat.interceptionPenalty(List.of(unit("strategicBomber", americans))), is(0));
     // Airborne Intercept Radar (+1) and Window cancel exactly
     grant(germans, "AirborneInterceptRadar");
     assertThat(AirCombat.interceptionPower(heavy, AirCombat.interceptionPenalty(raid)), is(4));
@@ -137,10 +133,12 @@ class Request31Test {
     grant(germans, "He177Greif");
     final Unit renzan = unit("strategicBomber", japanese);
     final Unit greif = unit("strategicBomber", germans);
-    assertThat(List.of(AirCombat.bombingDamage(renzan), Unit.maxHitPoints(renzan)), is(List.of(3, 3)));
+    assertThat(
+        List.of(AirCombat.bombingDamage(renzan), Unit.maxHitPoints(renzan)), is(List.of(3, 3)));
     assertThat(AirCombat.airDefenseValue(renzan), is(2));
     // draft 102: He177Greif gives +1 bombing only, no extra hit point
-    assertThat(List.of(AirCombat.bombingDamage(greif), Unit.maxHitPoints(greif)), is(List.of(3, 2)));
+    assertThat(
+        List.of(AirCombat.bombingDamage(greif), Unit.maxHitPoints(greif)), is(List.of(3, 2)));
     assertThat(AirCombat.airDefenseValue(greif), is(1));
   }
 
@@ -192,7 +190,8 @@ class Request31Test {
     final String xml = Files.readString(XML);
     final var players =
         java.util.regex.Pattern.compile(
-                "<playerTech player=\"([^\"]+)\">(.*?)</playerTech>", java.util.regex.Pattern.DOTALL)
+                "<playerTech player=\"([^\"]+)\">(.*?)</playerTech>",
+                java.util.regex.Pattern.DOTALL)
             .matcher(xml);
     int checked = 0;
     while (players.find()) {
@@ -209,7 +208,10 @@ class Request31Test {
           listed.add(techs.group(1));
         }
         final List<String> engine =
-            ResearchCenters.getCategory(player, categories.group(1)).orElseThrow().getTechs().stream()
+            ResearchCenters.getCategory(player, categories.group(1))
+                .orElseThrow()
+                .getTechs()
+                .stream()
                 .map(TechAdvance::getName)
                 .toList();
         assertThat(player.getName() + " " + categories.group(1), engine, is(listed));

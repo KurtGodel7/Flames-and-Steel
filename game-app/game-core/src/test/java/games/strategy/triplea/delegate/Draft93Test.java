@@ -15,9 +15,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * Flames and Steel requests 50 and 51 on the installed map (draft 93 or later): Speer's Panther every
- * other turn; Naval Gunfire Support allows 2 bombardment dice per unit unloaded; cut ships fire at
- * 5. Skipped when the map is not installed or has no Naval Gunfire Support.
+ * Flames and Steel requests 50 and 51 on the installed map (draft 93 or later): Speer's Panther
+ * every other turn; Naval Gunfire Support allows 2 bombardment dice per unit unloaded; cut ships
+ * fire at 5. Skipped when the map is not installed or has no Naval Gunfire Support.
  */
 class Draft93Test {
   private static final Path XML =

@@ -32,8 +32,8 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Request 45 on the installed map: rebase orders in the air stages. Aircraft sent with no attack
- * are airborne for the round, join no battle, and land at their destination at Planes Go Home if
- * it is still legal.
+ * are airborne for the round, join no battle, and land at their destination at Planes Go Home if it
+ * is still legal.
  */
 class Request45Test {
   private GameData data;
@@ -66,7 +66,8 @@ class Request45Test {
     return data.getUnitTypeList().getUnitTypeOrThrow(name);
   }
 
-  private List<Unit> add(final Territory t, final GamePlayer owner, final String type, final int n) {
+  private List<Unit> add(
+      final Territory t, final GamePlayer owner, final String type, final int n) {
     final List<Unit> units = type(type).create(n, owner);
     addTo(t, units);
     return units;
@@ -121,9 +122,7 @@ class Request45Test {
   @Test
   void planesGoHomeStartsWithTheRebaseLanded() {
     diveBomberInSicily();
-    new AirStageRunner(data)
-        .bombers(italians, rebase(sicily, type("diveBomber"), 1, serbia))
-        .run();
+    new AirStageRunner(data).bombers(italians, rebase(sicily, type("diveBomber"), 1, serbia)).run();
     final List<AirStage.Landing> start = AirHome.withRebases(italians, List.of());
     assertThat(start.size(), is(1));
     assertThat(start.get(0).to(), is(serbia));
@@ -141,8 +140,10 @@ class Request45Test {
     war(russians, italians);
     data.performChange(ChangeFactory.changeOwner(serbia, russians));
     runner.planesHome();
-    assertThat(dive.getData().getMap().getTerritories().stream()
-        .anyMatch(t -> t.getUnitCollection().contains(dive)), is(false));
+    assertThat(
+        dive.getData().getMap().getTerritories().stream()
+            .anyMatch(t -> t.getUnitCollection().contains(dive)),
+        is(false));
   }
 
   @Test

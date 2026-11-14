@@ -60,7 +60,10 @@ public class StickyCasualtyChoice {
 
     /** The unit left damaged (alive) by this group's hits, if any. */
     public Optional<Unit> leftDamaged() {
-      return allocations().stream().filter(a -> !a.killed()).map(StickyHits.Allocation::unit).findFirst();
+      return allocations().stream()
+          .filter(a -> !a.killed())
+          .map(StickyHits.Allocation::unit)
+          .findFirst();
     }
 
     /** Whether every unit of the group has one hit point (it looks like a stock entry). */
@@ -207,8 +210,7 @@ public class StickyCasualtyChoice {
     for (final Group group : groups) {
       final int killed = group.killed();
       if (killed > 0) {
-        parts.add(
-            killed + " " + plural(group.name(), killed) + " " + fate(group.units.get(0)));
+        parts.add(killed + " " + plural(group.name(), killed) + " " + fate(group.units.get(0)));
       }
     }
     for (final Group group : groups) {

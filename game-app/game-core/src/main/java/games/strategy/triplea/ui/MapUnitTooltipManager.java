@@ -1,10 +1,10 @@
 package games.strategy.triplea.ui;
 
-import games.strategy.triplea.formatter.PlayerNames;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.UnitType;
+import games.strategy.triplea.formatter.PlayerNames;
 import games.strategy.triplea.formatter.UnitNames;
 import games.strategy.triplea.image.HitPointBar;
 import java.awt.MouseInfo;

@@ -81,8 +81,8 @@ public class UnitScroller {
   private final JPanel selectUnitImagePanel = new JPanel();
 
   /**
-   * Flames and Steel (request 47): in the air stages the scroller goes through the aircraft
-   * without orders instead of units to move; the same buttons and keys.
+   * Flames and Steel (request 47): in the air stages the scroller goes through the aircraft without
+   * orders instead of units to move; the same buttons and keys.
    */
   public interface Source {
     /** The scroller's one-line title, e.g. "Aircraft without orders: 1". */

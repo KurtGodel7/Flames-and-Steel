@@ -17,8 +17,8 @@ import lombok.experimental.UtilityClass;
  * Russians|British:AmericansPacific:Americans:Chinese}: once the first nation sends aircraft to a
  * territory or sea zone this round (a bomber target, or fighters escorting or defending there), the
  * listed nations may not send any there. Never the other way round, with one exception (James, 25
- * October): its fighters may not join a battle the listed nations' bombers were already sent to in the
- * bomber stage. Several rules are separated by ";".
+ * October): its fighters may not join a battle the listed nations' bombers were already sent to in
+ * the bomber stage. Several rules are separated by ";".
  */
 @UtilityClass
 public class AirPriority {
@@ -155,7 +155,9 @@ public class AirPriority {
    * one side, the first earlier in turn order (with the property on).
    */
   public static boolean raidLocks(final GamePlayer earlier, final GamePlayer later) {
-    if (earlier.equals(later) || !oneNationPerRaid(later.getData()) || !AirCover.sameSide(earlier, later)) {
+    if (earlier.equals(later)
+        || !oneNationPerRaid(later.getData())
+        || !AirCover.sameSide(earlier, later)) {
       return false;
     }
     final List<GamePlayer> order = turnOrder(later.getData());
@@ -176,7 +178,8 @@ public class AirPriority {
     if (target.kind() != AirCombat.TargetKind.STRATEGIC) {
       return Optional.empty();
     }
-    for (final Map.Entry<GamePlayer, ? extends Collection<TargetAssignment>> e : choices.entrySet()) {
+    for (final Map.Entry<GamePlayer, ? extends Collection<TargetAssignment>> e :
+        choices.entrySet()) {
       if (raidLocks(e.getKey(), player)
           && e.getValue().stream().anyMatch(a -> a.target().equals(target))) {
         return Optional.of(e.getKey());

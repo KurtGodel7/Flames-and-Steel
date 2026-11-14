@@ -2,7 +2,6 @@ package games.strategy.triplea.ui.air;
 
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.Unit;
-import games.strategy.engine.data.gameparser.GameParser;
 import games.strategy.triplea.image.HitPointBar;
 import games.strategy.triplea.image.UnitImageFactory.ImageKey;
 import games.strategy.triplea.settings.ClientSetting;
@@ -12,7 +11,6 @@ import java.awt.Image;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.File;
-import java.nio.file.Path;
 import java.util.List;
 import javax.imageio.ImageIO;
 import org.junit.jupiter.api.Test;
@@ -24,8 +22,7 @@ class DamagePreviewTest {
   @Test
   void render() throws Exception {
     ClientSetting.initialize();
-    final GameData data =
-        games.strategy.triplea.ui.TestMaps.load();
+    final GameData data = games.strategy.triplea.ui.TestMaps.load();
     final var ui = TestUi.create(data);
     final var f = ui.getUnitImageFactory();
     final List<Sample> samples =

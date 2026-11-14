@@ -10,7 +10,6 @@ import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.TechnologyFrontier;
 import games.strategy.engine.data.Unit;
-import games.strategy.engine.data.gameparser.GameParser;
 import games.strategy.triplea.delegate.air.AirCombat;
 import games.strategy.triplea.delegate.research.ResearchCenters;
 import java.nio.file.Files;

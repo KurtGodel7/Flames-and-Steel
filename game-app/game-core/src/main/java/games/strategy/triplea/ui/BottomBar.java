@@ -1,6 +1,5 @@
 package games.strategy.triplea.ui;
 
-import games.strategy.triplea.formatter.PlayerNames;
 import static games.strategy.engine.framework.lookandfeel.LookAndFeel.convertColorToHex;
 import static games.strategy.engine.framework.lookandfeel.LookAndFeel.getRelationshipTypeAttachmentColor;
 
@@ -16,6 +15,7 @@ import games.strategy.engine.framework.GameDataUtils;
 import games.strategy.triplea.Constants;
 import games.strategy.triplea.attachments.RelationshipTypeAttachment;
 import games.strategy.triplea.attachments.TerritoryAttachment;
+import games.strategy.triplea.formatter.PlayerNames;
 import java.awt.Image;
 import java.util.ArrayList;
 import java.util.Collection;

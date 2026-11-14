@@ -112,8 +112,7 @@ class Request39Test {
     assertThat(AirCombat.strikePower(unit(medium), TargetKind.SURFACE), is(5));
     // other nations are untouched
     final GamePlayer japanese = data.getPlayerList().getPlayerId("Japanese");
-    assertThat(
-        AirCombat.strikeText(dive.create(1, japanese).get(0), TargetKind.LAND), is("3 + 1"));
+    assertThat(AirCombat.strikeText(dive.create(1, japanese).get(0), TargetKind.LAND), is("3 + 1"));
   }
 
   @Test

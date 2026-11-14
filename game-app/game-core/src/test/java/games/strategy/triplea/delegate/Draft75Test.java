@@ -11,7 +11,6 @@ import static org.mockito.Mockito.when;
 
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
-import games.strategy.engine.data.gameparser.GameParser;
 import games.strategy.engine.delegate.IDelegateBridge;
 import games.strategy.engine.history.IDelegateHistoryWriter;
 import java.nio.file.Files;

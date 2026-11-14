@@ -19,7 +19,6 @@ import games.strategy.engine.data.GameStep;
 import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.changefactory.ChangeFactory;
-import games.strategy.engine.data.gameparser.GameParser;
 import games.strategy.engine.delegate.IDelegateBridge;
 import games.strategy.engine.framework.GameDataManager;
 import games.strategy.triplea.delegate.air.AirCombat.Target;
@@ -58,7 +57,8 @@ class Request32Test {
     final GameData data = games.strategy.triplea.delegate.air.BasedMap.load();
     final InitializationDelegate start = new InitializationDelegate();
     start.initialize("initDelegate", "Initializing Delegates");
-    start.setDelegateBridgeAndPlayer(newDelegateBridge(data.getPlayerList().getPlayerId("Germans")));
+    start.setDelegateBridgeAndPlayer(
+        newDelegateBridge(data.getPlayerList().getPlayerId("Germans")));
     start.start();
     start.end();
     return data;
@@ -179,7 +179,8 @@ class Request32Test {
   }
 
   private List<Unit> munitions(final GamePlayer owner, final int count, final int firstStamp) {
-    final List<Unit> units = data.getUnitTypeList().getUnitTypeOrThrow("munitions").create(count, owner);
+    final List<Unit> units =
+        data.getUnitTypeList().getUnitTypeOrThrow("munitions").create(count, owner);
     addTo(pacificLand(), units);
     for (int i = 0; i < units.size(); i++) {
       data.performChange(

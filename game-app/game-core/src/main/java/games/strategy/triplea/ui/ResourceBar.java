@@ -98,8 +98,7 @@ public class ResourceBar extends JPanel implements GameDataChangeListener {
                     Mobilization.statusText(player, round)
                         .map(
                             text ->
-                                games.strategy.triplea.formatter.PlayerNames.inText(
-                                    text, gameData))
+                                games.strategy.triplea.formatter.PlayerNames.inText(text, gameData))
                         .orElse(null);
                 mobilizationSchedule = Mobilization.scheduleText(player);
                 // Flames and Steel: say so when the nation is at peace on fixed income

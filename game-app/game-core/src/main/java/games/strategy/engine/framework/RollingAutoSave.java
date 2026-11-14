@@ -37,9 +37,9 @@ import lombok.extern.slf4j.Slf4j;
  *   <li>Each client keeps its own copy, at round starts and at nation turn starts outside the air
  *       phase, where no choice is secret and no step is half done; in "autoSave/network-copy".
  *   <li>The game is read into memory on the game thread (so the copy is consistent); writing the
- *       file, the rename and the clean-up run on a background thread. A save due while one is
- *       being written replaces any save still waiting (only the newest waits). The file is written
- *       to a temporary file and moved over the target, so a crash leaves the previous file.
+ *       file, the rename and the clean-up run on a background thread. A save due while one is being
+ *       written replaces any save still waiting (only the newest waits). The file is written to a
+ *       temporary file and moved over the target, so a crash leaves the previous file.
  *   <li>Request 45: nothing is offered at start-up; the start screen's "Autosave" button lists the
  *       saves newest first ({@link #all}).
  * </ul>
@@ -123,8 +123,7 @@ public final class RollingAutoSave {
     if (newRound) {
       saveHost(data, executionManager, roundFile(data.getSequence().getRound()), false);
     }
-    final boolean playedStep =
-        finished.getPlayerId() != null && !finished.getPlayerId().isNull();
+    final boolean playedStep = finished.getPlayerId() != null && !finished.getPlayerId().isNull();
     final boolean due =
         isTurnStart(next, previousNation) || (perStep && (playedStep || isAirPhase(finished)));
     if (due) {
@@ -146,7 +145,8 @@ public final class RollingAutoSave {
   // ---- names
 
   static String roundFileName(final int round) {
-    return String.format(Locale.ROOT, "%s%02d_start%s", PREFIX, round, GameDataFileUtils.getExtension());
+    return String.format(
+        Locale.ROOT, "%s%02d_start%s", PREFIX, round, GameDataFileUtils.getExtension());
   }
 
   private static Path roundFile(final int round) {
@@ -251,8 +251,7 @@ public final class RollingAutoSave {
         out.write(bytes);
       }
       try {
-        Files.move(
-            temp, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        Files.move(temp, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
       } catch (final AtomicMoveNotSupportedException e) {
         Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING);
       }

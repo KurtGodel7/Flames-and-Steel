@@ -60,7 +60,8 @@ public class Unit extends GameDataComponent implements DynamicallyModifiable {
     // Flames and Steel (request 38): an airborne aircraft's territory and the range it has left
     FLIGHT_OVER("flightOver"),
     FLIGHT_RANGE_LEFT("flightRangeLeft"),
-    // Flames and Steel (request 45): an airborne aircraft sent to rebase, and the carrier it flies to
+    // Flames and Steel (request 45): an airborne aircraft sent to rebase, and the carrier it flies
+    // to
     FLIGHT_REBASE("flightRebase"),
     FLIGHT_CARRIER("flightCarrier"),
     ;
@@ -325,7 +326,8 @@ public class Unit extends GameDataComponent implements DynamicallyModifiable {
                         case CHARGED_FLAT_FUEL_COST ->
                             MutableProperty.ofSimple(
                                 this::setChargedFlatFuelCost, this::getChargedFlatFuelCost);
-                        case ARRIVED -> MutableProperty.ofSimple(this::setArrived, this::getArrived);
+                        case ARRIVED ->
+                            MutableProperty.ofSimple(this::setArrived, this::getArrived);
                         case FLIGHT_OVER ->
                             MutableProperty.ofSimple(this::setFlightOver, this::getFlightOver);
                         case FLIGHT_RANGE_LEFT ->

@@ -6,7 +6,6 @@ import static org.hamcrest.Matchers.is;
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.Unit;
-import games.strategy.engine.data.gameparser.GameParser;
 import games.strategy.triplea.delegate.battle.BattleState;
 import java.nio.file.Files;
 import java.nio.file.Path;

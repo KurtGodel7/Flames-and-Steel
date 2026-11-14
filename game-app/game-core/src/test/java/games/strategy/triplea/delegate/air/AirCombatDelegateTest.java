@@ -18,16 +18,14 @@ import static games.strategy.triplea.delegate.MockDelegateBridge.newDelegateBrid
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.notNullValue;
-import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -35,10 +33,10 @@ import games.strategy.engine.data.DefaultAttachment;
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.GameStep;
-import games.strategy.engine.data.changefactory.ChangeFactory;
 import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.UnitType;
+import games.strategy.engine.data.changefactory.ChangeFactory;
 import games.strategy.engine.delegate.IDelegateBridge;
 import games.strategy.engine.player.Player;
 import games.strategy.triplea.Constants;
@@ -60,9 +58,9 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Flames and Steel air combat on the Revised test map, with aircraft in the air over their targets
- * (request 38): a hidden "Air - Airborne" territory is added to the map. Every
- * remainder die rolls 0 (a hit), and casualties are the offered defaults. Unit values used: fighter
- * dogfight 3, bomber attack 4 and bombing damage 5.
+ * (request 38): a hidden "Air - Airborne" territory is added to the map. Every remainder die rolls
+ * 0 (a hit), and casualties are the offered defaults. Unit values used: fighter dogfight 3, bomber
+ * attack 4 and bombing damage 5.
  */
 class AirCombatDelegateTest {
   private final GameData gameData = TestMapGameData.REVISED.getGameData();
@@ -111,7 +109,8 @@ class AirCombatDelegateTest {
     delegate.initialize("airCombat", "Air combat");
     gameData
         .getSequence()
-        .addStep(new GameStep("airStrikes", "airStrikes", null, delegate, gameData, new Properties()));
+        .addStep(
+            new GameStep("airStrikes", "airStrikes", null, delegate, gameData, new Properties()));
     // request 30: the older tests send more than 4 aircraft to one place
     gameData.getProperties().set(AirCover.CAP_BOMBERS, 99);
     gameData.getProperties().set(AirCover.CAP_FIGHTERS, 99);
@@ -441,7 +440,8 @@ class AirCombatDelegateTest {
     addTo(seaZone, destroyer().create(1, british));
     final IDelegateBridge bridge = bridge(germans);
 
-    targets(germans, new TargetAssignment(naval, bomber, 1, new Target(seaZone, TargetKind.SURFACE)));
+    targets(
+        germans, new TargetAssignment(naval, bomber, 1, new Target(seaZone, TargetKind.SURFACE)));
     runStep("airStrikes", bridge);
 
     assertThat(count(seaZone, british), is(1));
@@ -472,7 +472,8 @@ class AirCombatDelegateTest {
     addTo(seaZone, battleship(gameData).create(1, british));
     final IDelegateBridge bridge = bridge(germans);
 
-    targets(germans, new TargetAssignment(naval, bomber, 2, new Target(seaZone, TargetKind.SURFACE)));
+    targets(
+        germans, new TargetAssignment(naval, bomber, 2, new Target(seaZone, TargetKind.SURFACE)));
     runStep("airStrikes", bridge);
 
     // round 1: the battleship takes 2 of 3 and fires back (4: one hit), one bomber damaged and
@@ -492,7 +493,8 @@ class AirCombatDelegateTest {
     addTo(seaZone, carrier().create(1, british));
     final IDelegateBridge bridge = bridge(germans);
 
-    targets(germans, new TargetAssignment(naval, bomber, 3, new Target(seaZone, TargetKind.SURFACE)));
+    targets(
+        germans, new TargetAssignment(naval, bomber, 3, new Target(seaZone, TargetKind.SURFACE)));
     runStep("airStrikes", bridge);
 
     // the carrier (3, the remainder die hits) shoots one bomber down in the interception; the
@@ -509,7 +511,8 @@ class AirCombatDelegateTest {
     addTo(seaZone, carrier().create(1, british));
     final IDelegateBridge bridge = bridge(germans);
 
-    targets(germans, new TargetAssignment(naval, bomber, 3, new Target(seaZone, TargetKind.SURFACE)));
+    targets(
+        germans, new TargetAssignment(naval, bomber, 3, new Target(seaZone, TargetKind.SURFACE)));
     runStep("airStrikes", bridge);
 
     // no interception; the three bombers (12) sink the carrier, which fires back (3) and shoots
@@ -558,7 +561,8 @@ class AirCombatDelegateTest {
       tech.addAttachment(Constants.TECH_ABILITY_ATTACHMENT_NAME, ability);
     }
     set(ability, option, value);
-    games.strategy.triplea.delegate.TechTracker.addAdvance(british, newDelegateBridge(british), tech);
+    games.strategy.triplea.delegate.TechTracker.addAdvance(
+        british, newDelegateBridge(british), tech);
     gameData.getTechTracker().clearCache();
   }
 
@@ -750,7 +754,9 @@ class AirCombatDelegateTest {
     }
   }
 
-  /** That many of the nation's aircraft of the type in the air, not yet over a place, go over it. */
+  /**
+   * That many of the nation's aircraft of the type in the air, not yet over a place, go over it.
+   */
   private void fly(final GamePlayer player, final TargetAssignment a) {
     final List<Unit> units =
         front.getUnitCollection().stream()
@@ -764,7 +770,8 @@ class AirCombatDelegateTest {
             .toList();
     for (final Unit u : units) {
       gameData.performChange(
-          ChangeFactory.unitPropertyChange(u, a.target().territory(), Unit.PropertyName.FLIGHT_OVER));
+          ChangeFactory.unitPropertyChange(
+              u, a.target().territory(), Unit.PropertyName.FLIGHT_OVER));
     }
   }
 
@@ -792,7 +799,8 @@ class AirCombatDelegateTest {
     delegate.end();
     // the next battle starts with nobody over anything
     for (final Unit u : front.getUnits()) {
-      gameData.performChange(ChangeFactory.unitPropertyChange(u, null, Unit.PropertyName.FLIGHT_OVER));
+      gameData.performChange(
+          ChangeFactory.unitPropertyChange(u, null, Unit.PropertyName.FLIGHT_OVER));
     }
   }
 

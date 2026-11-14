@@ -3,7 +3,6 @@ package games.strategy.triplea.ui.research;
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.changefactory.ChangeFactory;
-import games.strategy.engine.data.gameparser.GameParser;
 import games.strategy.triplea.delegate.data.ResearchResults;
 import games.strategy.triplea.delegate.data.ResearchResults.Breakthrough;
 import java.awt.Component;

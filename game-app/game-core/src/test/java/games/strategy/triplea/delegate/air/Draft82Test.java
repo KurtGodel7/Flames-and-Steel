@@ -35,7 +35,9 @@ class Draft82Test {
     assertThat(airborne.getUnits().isEmpty(), is(true));
   }
 
-  /** Every starting aircraft is on its own (or allowed allied) land, or on its own carriers' room. */
+  /**
+   * Every starting aircraft is on its own (or allowed allied) land, or on its own carriers' room.
+   */
   @Test
   void everyStartingAircraftIsOnALegalBase() {
     final List<String> wrong = new ArrayList<>();
@@ -54,7 +56,12 @@ class Draft82Test {
           .getOrDefault(p, Map.of())
           .forEach(
               (t, units) ->
-                  wrong.add(units.size() + " " + p.getName() + " aircraft without carrier room in " + t.getName()));
+                  wrong.add(
+                      units.size()
+                          + " "
+                          + p.getName()
+                          + " aircraft without carrier room in "
+                          + t.getName()));
     }
     assertThat(aircraft > 0, is(true));
     assertThat(wrong, is(empty()));

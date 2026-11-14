@@ -22,7 +22,6 @@ import games.strategy.triplea.delegate.air.AirStage.Choice;
 import games.strategy.triplea.delegate.air.AirStage.Landing;
 import games.strategy.triplea.delegate.air.AirStage.Stage;
 import games.strategy.triplea.delegate.remote.IAirStageDelegate;
-import games.strategy.triplea.formatter.MyFormatter;
 import games.strategy.triplea.formatter.PlayerNames;
 import java.io.Serial;
 import java.io.Serializable;
@@ -56,14 +55,14 @@ import lombok.extern.slf4j.Slf4j;
  *       and may rebase the others ({@link AirHome}); nothing is hidden.
  * </ul>
  *
- * <p>Each answer is checked as it arrives (range, landing spots for every flying aircraft, caps with
- * the allies' choices, priority); a refused one goes back to that nation with the reason. While a
- * nation's screen is open its choices so far are sent here ({@link #draft}) and passed to its
- * allies only. Request 38 section 12: when a nation with priority ({@link AirPriority}) chooses a
- * territory an ally it locks out has already finished with, that ally's aircraft there are handed
+ * <p>Each answer is checked as it arrives (range, landing spots for every flying aircraft, caps
+ * with the allies' choices, priority); a refused one goes back to that nation with the reason.
+ * While a nation's screen is open its choices so far are sent here ({@link #draft}) and passed to
+ * its allies only. Request 38 section 12: when a nation with priority ({@link AirPriority}) chooses
+ * a territory an ally it locks out has already finished with, that ally's aircraft there are handed
  * back and it is asked again, even after Done; the stage waits for that. In the fighter stage it
- * may not join a battle that ally's bombers were already sent to. Answers are kept here,
- * hidden from enemies until the reveal, and saved with the game.
+ * may not join a battle that ally's bombers were already sent to. Answers are kept here, hidden
+ * from enemies until the reveal, and saved with the game.
  */
 @Slf4j
 public class AirStageDelegate extends BaseTripleADelegate implements IAirStageDelegate {
@@ -321,11 +320,12 @@ public class AirStageDelegate extends BaseTripleADelegate implements IAirStageDe
   private Map<GamePlayer, List<TargetAssignment>> othersOf(final GamePlayer p, final Stage stage) {
     final Map<GamePlayer, List<TargetAssignment>> result = new LinkedHashMap<>();
     choices(stage).forEach((q, c) -> result.put(q, c.targets()));
-    drafts.forEach((q, list) -> {
-      if (choosing.contains(q)) {
-        result.put(q, list);
-      }
-    });
+    drafts.forEach(
+        (q, list) -> {
+          if (choosing.contains(q)) {
+            result.put(q, list);
+          }
+        });
     result.remove(p);
     return result;
   }
@@ -568,8 +568,7 @@ public class AirStageDelegate extends BaseTripleADelegate implements IAirStageDe
     }
     bridge.getHistoryWriter().startEvent("Planes go home");
     for (final GamePlayer p : turnOrder()) {
-      final List<Landing> chosen =
-          accepted.getOrDefault(p, Choice.none()).landings();
+      final List<Landing> chosen = accepted.getOrDefault(p, Choice.none()).landings();
       AirHome.apply(bridge, p, AirHome.withDefaults(p, chosen));
     }
     synchronized (lock) {

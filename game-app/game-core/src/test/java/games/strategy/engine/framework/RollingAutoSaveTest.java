@@ -8,7 +8,6 @@ import static org.hamcrest.Matchers.lessThan;
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.GameStep;
-import games.strategy.engine.data.gameparser.GameParser;
 import games.strategy.engine.delegate.DelegateExecutionManager;
 import games.strategy.triplea.delegate.InitializationDelegate;
 import games.strategy.triplea.formatter.PlayerNames;
@@ -98,8 +97,11 @@ class RollingAutoSaveTest {
     assertThat(names.contains("FS_R02_start.tsvg"), is(true));
     // every nation's turn has its own save, by its display name
     for (final GamePlayer p : data.getPlayerList().getPlayers()) {
-      if (due.stream().anyMatch(n -> data.getSequence().getSteps().stream()
-          .anyMatch(s -> s.getName().equals(n) && p.equals(s.getPlayerId())))) {
+      if (due.stream()
+          .anyMatch(
+              n ->
+                  data.getSequence().getSteps().stream()
+                      .anyMatch(s -> s.getName().equals(n) && p.equals(s.getPlayerId())))) {
         final String nation = PlayerNames.display(p).replaceAll("[^A-Za-z0-9]+", "-");
         assertThat(
             p.getName(), names.stream().anyMatch(n -> n.contains("_" + nation + "_")), is(true));
@@ -107,8 +109,7 @@ class RollingAutoSaveTest {
     }
     // research and the air phase are among them
     assertThat(names.stream().anyMatch(n -> n.contains("Research")), is(true));
-    assertThat(
-        names.stream().anyMatch(n -> n.contains("Air") || n.contains("Bomber")), is(true));
+    assertThat(names.stream().anyMatch(n -> n.contains("Air") || n.contains("Bomber")), is(true));
     // at least one save for every step a nation played
     assertThat(names.size() >= due.size(), is(true));
     // the game is read on the game thread; the file is written in the background
@@ -137,7 +138,8 @@ class RollingAutoSaveTest {
   void aCrashWhileWritingLeavesThePreviousSaveLoadable() throws Exception {
     loadMap();
     final Path file = RollingAutoSave.hostFolder().resolve("FS_R01_000_All_Test.tsvg");
-    final byte[] good = org.triplea.io.IoUtils.writeToMemory(out -> GameDataManager.saveGame(out, data));
+    final byte[] good =
+        org.triplea.io.IoUtils.writeToMemory(out -> GameDataManager.saveGame(out, data));
     RollingAutoSave.write(good, file);
     try {
       RollingAutoSave.write(new byte[good.length], file, good.length / 2);

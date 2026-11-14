@@ -8,7 +8,6 @@ import static org.hamcrest.Matchers.nullValue;
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.Unit;
-import games.strategy.engine.data.gameparser.GameParser;
 import games.strategy.triplea.delegate.battle.casualty.StickyCasualtyChoice.Group;
 import games.strategy.triplea.delegate.battle.casualty.StickyHits;
 import games.strategy.triplea.delegate.data.CasualtyList;

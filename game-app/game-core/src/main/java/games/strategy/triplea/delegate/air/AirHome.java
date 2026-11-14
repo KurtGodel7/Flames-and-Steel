@@ -37,7 +37,8 @@ import org.triplea.java.collections.IntegerMap;
 public class AirHome {
 
   /** One kind of aircraft waiting to land or rebase: where it is, and how far it may fly. */
-  public record Group(Territory from, boolean airborne, UnitType type, int range, List<Unit> units) {}
+  public record Group(
+      Territory from, boolean airborne, UnitType type, int range, List<Unit> units) {}
 
   /** The nation's airborne aircraft, by territory, type and range left. */
   public static List<Group> airborneGroups(final GamePlayer player) {
@@ -62,11 +63,11 @@ public class AirHome {
         .forEach(
             (base, units) -> {
               final Map<UnitType, List<Unit>> byType = new LinkedHashMap<>();
-              units.forEach(u -> byType.computeIfAbsent(u.getType(), k -> new ArrayList<>()).add(u));
+              units.forEach(
+                  u -> byType.computeIfAbsent(u.getType(), k -> new ArrayList<>()).add(u));
               byType.forEach(
                   (type, list) ->
-                      result.add(
-                          new Group(base, false, type, AirRange.range(type, player), list)));
+                      result.add(new Group(base, false, type, AirRange.range(type, player), list)));
             });
     return result;
   }
@@ -105,7 +106,9 @@ public class AirHome {
     for (final Landing l : landings) {
       final List<Unit> units = new ArrayList<>();
       for (final Group g : groups) {
-        if (g.from().equals(l.from()) && g.airborne() == l.airborne() && g.type().equals(l.unitType())) {
+        if (g.from().equals(l.from())
+            && g.airborne() == l.airborne()
+            && g.type().equals(l.unitType())) {
           for (final Unit u : g.units()) {
             if (units.size() < l.count() && used.add(u)) {
               units.add(u);
@@ -119,7 +122,8 @@ public class AirHome {
   }
 
   /** Why these landings are not allowed, or empty. */
-  public static Optional<String> problem(final GamePlayer player, final Collection<Landing> landings) {
+  public static Optional<String> problem(
+      final GamePlayer player, final Collection<Landing> landings) {
     final Map<Landing, List<Unit>> units = unitsFor(player, landings);
     for (final Landing l : landings) {
       if (l.count() <= 0) {
@@ -137,7 +141,8 @@ public class AirHome {
                 + ".");
       }
       for (final Unit u : these) {
-        final int range = l.airborne() ? u.getFlightRangeLeft() : AirRange.range(u.getType(), player);
+        final int range =
+            l.airborne() ? u.getFlightRangeLeft() : AirRange.range(u.getType(), player);
         final Group g = new Group(l.from(), l.airborne(), u.getType(), range, List.of(u));
         if (!spots(player, g).containsKey(l.to())) {
           return Optional.of(
@@ -162,7 +167,8 @@ public class AirHome {
     units.forEach(
         (l, list) -> {
           if (l.to().isWater()) {
-            list.forEach(u -> arriving.computeIfAbsent(l.to(), k -> new ArrayList<>()).add(u.getType()));
+            list.forEach(
+                u -> arriving.computeIfAbsent(l.to(), k -> new ArrayList<>()).add(u.getType()));
           }
         });
     for (final Map.Entry<Territory, List<UnitType>> e : arriving.entrySet()) {
@@ -282,7 +288,8 @@ public class AirHome {
     units.forEach(
         (l, list) -> {
           if (l.to().isWater()) {
-            list.forEach(u -> load.computeIfAbsent(l.to(), k -> new ArrayList<>()).add(u.getType()));
+            list.forEach(
+                u -> load.computeIfAbsent(l.to(), k -> new ArrayList<>()).add(u.getType()));
           }
         });
     for (final Group g : airborneGroups(player)) {
@@ -290,12 +297,14 @@ public class AirHome {
         if (landed.contains(u)) {
           continue;
         }
-        final Group one = new Group(g.from(), true, u.getType(), u.getFlightRangeLeft(), List.of(u));
+        final Group one =
+            new Group(g.from(), true, u.getType(), u.getFlightRangeLeft(), List.of(u));
         for (final Territory spot : spots(player, one).keySet()) {
           if (spot.isWater()) {
             final List<UnitType> planes = new ArrayList<>(load.getOrDefault(spot, List.of()));
             spot.getUnitCollection()
-                .getMatches(x -> x.isOwnedBy(player) && AirBases.isAircraft(x) && !leaving.contains(x))
+                .getMatches(
+                    x -> x.isOwnedBy(player) && AirBases.isAircraft(x) && !leaving.contains(x))
                 .forEach(x -> planes.add(x.getType()));
             planes.add(u.getType());
             if (!fit(player, spot, planes)) {
@@ -332,7 +341,13 @@ public class AirHome {
   }
 
   private static String key(final Landing l) {
-    return l.from().getName() + "|" + l.airborne() + "|" + l.unitType().getName() + "|" + l.to().getName();
+    return l.from().getName()
+        + "|"
+        + l.airborne()
+        + "|"
+        + l.unitType().getName()
+        + "|"
+        + l.to().getName();
   }
 
   /** Request 53: whether the landing lands the aircraft where they already are. */
@@ -345,9 +360,16 @@ public class AirHome {
     final Map<String, Landing> result = new LinkedHashMap<>();
     for (final Landing l : landings) {
       result.merge(
-          l.from().getName() + "|" + l.airborne() + "|" + l.unitType().getName() + "|" + l.to().getName(),
+          l.from().getName()
+              + "|"
+              + l.airborne()
+              + "|"
+              + l.unitType().getName()
+              + "|"
+              + l.to().getName(),
           l,
-          (a, b) -> new Landing(a.from(), a.airborne(), a.unitType(), a.count() + b.count(), a.to()));
+          (a, b) ->
+              new Landing(a.from(), a.airborne(), a.unitType(), a.count() + b.count(), a.to()));
     }
     return new ArrayList<>(result.values());
   }
@@ -357,7 +379,8 @@ public class AirHome {
     final Set<Unit> landed = new HashSet<>();
     unitsFor(player, landings).values().forEach(landed::addAll);
     final List<Unit> result = new ArrayList<>();
-    airborneGroups(player).forEach(g -> g.units().stream().filter(u -> !landed.contains(u)).forEach(result::add));
+    airborneGroups(player)
+        .forEach(g -> g.units().stream().filter(u -> !landed.contains(u)).forEach(result::add));
     return result;
   }
 

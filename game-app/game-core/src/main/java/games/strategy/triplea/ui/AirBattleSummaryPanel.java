@@ -59,6 +59,7 @@ public class AirBattleSummaryPanel extends JPanel implements Scrollable {
   public static final String ALLIES_LOSSES = "Allies' losses";
   public static final String NEUTRAL_LOSSES = "Neutral losses";
   public static final String NO_LOSSES = "No losses";
+
   /**
    * Request 47: optional game property naming neutral garrisons, "Ireland=Irish,Andalusia=Spanish";
    * a territory not named is "Ireland garrison".
@@ -296,7 +297,8 @@ public class AirBattleSummaryPanel extends JPanel implements Scrollable {
       notes.setOpaque(false);
       notes.setAlignmentX(Component.LEFT_ALIGNMENT);
       for (int i = 0; i < row.notes().size(); i++) {
-        notes.add(new JLabel(text(row.notes().get(i)) + (i < row.notes().size() - 1 ? "  ·  " : "")));
+        notes.add(
+            new JLabel(text(row.notes().get(i)) + (i < row.notes().size() - 1 ? "  ·  " : "")));
       }
       panel.add(notes);
     }
@@ -416,10 +418,10 @@ public class AirBattleSummaryPanel extends JPanel implements Scrollable {
   }
 
   /**
-   * Request 49: the unit, its nation and what happened: "America Pacific cruiser: destroyed by
-   * the strike", "America Pacific battleship: 4 of 5 hit points left, damaged by the strike",
-   * "Japanese torpedo bomber: damaged in the interception, aborted, then destroyed by the ships'
-   * return fire".
+   * Request 49: the unit, its nation and what happened: "America Pacific cruiser: destroyed by the
+   * strike", "America Pacific battleship: 4 of 5 hit points left, damaged by the strike", "Japanese
+   * torpedo bomber: damaged in the interception, aborted, then destroyed by the ships' return
+   * fire".
    */
   String describe(
       final GamePlayer owner, final UnitType type, final Stack stack, final String place) {

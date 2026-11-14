@@ -36,8 +36,8 @@ import lombok.experimental.UtilityClass;
  *   <li>sea zones are not capped unless {@value #CAP_SEA_ZONES} is true.
  * </ul>
  *
- * <p>Over a territory whose factory its own side bombs, a nation's fighters escort only if they
- * are of a type in {@value #ESCORT_UNITS} (default advancedFighter) and it has the tech in {@value
+ * <p>Over a territory whose factory its own side bombs, a nation's fighters escort only if they are
+ * of a type in {@value #ESCORT_UNITS} (default advancedFighter) and it has the tech in {@value
  * #ESCORT_TECH} (default P51Mustang).
  */
 @UtilityClass
@@ -159,8 +159,8 @@ public class AirCover {
   }
 
   /**
-   * How many aircraft the nation's side sends over the territory: bombers (all their targets
-   * there) or fighters (cover).
+   * How many aircraft the nation's side sends over the territory: bombers (all their targets there)
+   * or fighters (cover).
    *
    * @param assignments every nation's assignments the count may use (the nation's own and its
    *     allies'; enemies' are ignored)

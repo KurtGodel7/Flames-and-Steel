@@ -44,7 +44,8 @@ class Request49Test {
     final GameData data = GameDataManager.loadGame(SAVE).orElseThrow();
     final GamePlayer japanese = data.getPlayerList().getPlayerId("Japanese");
     final GamePlayer germans = data.getPlayerList().getPlayerId("Germans");
-    final Territory from = data.getMap().getTerritoryOrThrow("Sea Zone 210 Central Pacific - South");
+    final Territory from =
+        data.getMap().getTerritoryOrThrow("Sea Zone 210 Central Pacific - South");
     final Territory pearl = data.getMap().getTerritoryOrThrow(PEARL);
     final AirStageRunner stages =
         new AirStageRunner(data)
@@ -74,8 +75,10 @@ class Request49Test {
     System.out.println("PEARL " + row);
 
     final List<Stack> lost =
-        row.defenders().stream().filter(s -> s.owner().equals("AmericansPacific"))
-            .filter(Stack::destroyed).toList();
+        row.defenders().stream()
+            .filter(s -> s.owner().equals("AmericansPacific"))
+            .filter(Stack::destroyed)
+            .toList();
     assertThat(lost.isEmpty(), is(false));
     final int value = lost.stream().mapToInt(Stack::value).sum();
     assertThat(value > 0, is(true));
@@ -92,11 +95,15 @@ class Request49Test {
     assertThat(texts, hasItem("Lost · " + value + " PU"));
     // every lost ship is named in its tooltip
     for (final Stack s : lost) {
-      final String name = games.strategy.triplea.delegate.air.AirCombat.unitName(
-          data.getUnitTypeList().getUnitTypeOrThrow(s.unitType()));
+      final String name =
+          games.strategy.triplea.delegate.air.AirCombat.unitName(
+              data.getUnitTypeList().getUnitTypeOrThrow(s.unitType()));
       assertThat(
-          texts.stream().anyMatch(t -> t.startsWith("America Pacific " + name)
-              || t.matches("\\d+ America Pacific " + name + "s?:.*")),
+          texts.stream()
+              .anyMatch(
+                  t ->
+                      t.startsWith("America Pacific " + name)
+                          || t.matches("\\d+ America Pacific " + name + "s?:.*")),
           is(true));
     }
     // a damaged ship with more than 2 hit points says how many are left
@@ -104,9 +111,14 @@ class Request49Test {
     final boolean damagedBig =
         row.defenders().stream()
             .anyMatch(
-                s -> !s.destroyed() && s.hits() > 0
-                    && data.getUnitTypeList().getUnitTypeOrThrow(s.unitType()).getUnitAttachment()
-                        .getHitPoints() > 2);
+                s ->
+                    !s.destroyed()
+                        && s.hits() > 0
+                        && data.getUnitTypeList()
+                                .getUnitTypeOrThrow(s.unitType())
+                                .getUnitAttachment()
+                                .getHitPoints()
+                            > 2);
     if (damagedBig) {
       assertThat(texts.stream().anyMatch(t -> hp.matcher(t).matches()), is(true));
     }

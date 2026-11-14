@@ -1615,8 +1615,7 @@ public class MovePanel extends AbstractMovePanel {
   }
 
   private void registerKeyBindings(final JFrame frame) {
-    SwingKeyBinding.addKeyBinding(
-        frame, KeyCode.S, scrollerKey(unitScroller::skipCurrentUnits));
+    SwingKeyBinding.addKeyBinding(frame, KeyCode.S, scrollerKey(unitScroller::skipCurrentUnits));
     SwingKeyBinding.addKeyBinding(
         frame, KeyCode.PERIOD, scrollerKey(unitScroller::centerOnNextMovableUnit));
     SwingKeyBinding.addKeyBinding(

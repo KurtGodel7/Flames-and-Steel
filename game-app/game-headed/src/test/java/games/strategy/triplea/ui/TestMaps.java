@@ -10,9 +10,9 @@ import java.util.regex.Pattern;
 import org.junit.jupiter.api.Assumptions;
 
 /**
- * Request 38, for the screen tests: the installed Flames and Steel map with aircraft on the map.
- * A draft that still has air boxes is changed in memory the way the next draft will be (the same
- * as the engine tests' BasedMap); a draft without boxes is used as it is.
+ * Request 38, for the screen tests: the installed Flames and Steel map with aircraft on the map. A
+ * draft that still has air boxes is changed in memory the way the next draft will be (the same as
+ * the engine tests' BasedMap); a draft without boxes is used as it is.
  */
 public final class TestMaps {
   public static final Path XML =
@@ -83,6 +83,10 @@ public final class TestMaps {
   private static String remove(final String s, final String regex, final String marker) {
     return Pattern.compile(regex)
         .matcher(s)
-        .replaceAll(m -> m.group().contains(marker) ? "" : java.util.regex.Matcher.quoteReplacement(m.group()));
+        .replaceAll(
+            m ->
+                m.group().contains(marker)
+                    ? ""
+                    : java.util.regex.Matcher.quoteReplacement(m.group()));
   }
 }

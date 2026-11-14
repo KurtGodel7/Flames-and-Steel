@@ -24,8 +24,8 @@ import lombok.extern.slf4j.Slf4j;
  * Flames and Steel (request 38 section 5): aircraft that lose their base mid-round. When a carrier
  * is sunk with aircraft on it (by an air strike or in a sea battle), or land with aircraft on it is
  * captured, those aircraft get a free move of one space to a legal landing spot: land their nation
- * may use, or one of its own carriers with room. The owner is asked where; any that cannot land
- * are lost. Island-based aircraft may sometimes be lost this way: intended.
+ * may use, or one of its own carriers with room. The owner is asked where; any that cannot land are
+ * lost. Island-based aircraft may sometimes be lost this way: intended.
  */
 @Slf4j
 @UtilityClass
@@ -46,7 +46,8 @@ public class AirBaseLoss {
         continue;
       }
       final Map<GamePlayer, List<Unit>> byOwner = new LinkedHashMap<>();
-      t.getUnitCollection().getMatches(AirBases::isAircraft)
+      t.getUnitCollection()
+          .getMatches(AirBases::isAircraft)
           .forEach(u -> byOwner.computeIfAbsent(u.getOwner(), k -> new ArrayList<>()).add(u));
       for (final Map.Entry<GamePlayer, List<Unit>> e : byOwner.entrySet()) {
         final List<Unit> without =
@@ -62,7 +63,8 @@ public class AirBaseLoss {
   }
 
   /** The aircraft in the sea zone that its owner's carriers there cannot hold. */
-  static List<Unit> overflow(final GamePlayer player, final Territory zone, final List<Unit> planes) {
+  static List<Unit> overflow(
+      final GamePlayer player, final Territory zone, final List<Unit> planes) {
     final List<Unit> kept = new ArrayList<>();
     final List<Unit> out = new ArrayList<>();
     // jets first, so they take the fleet carriers' room
@@ -88,7 +90,8 @@ public class AirBaseLoss {
    *
    * @param why for the question and the history, e.g. "Carrier sunk in Sea Zone 12"
    */
-  public static void freeMoves(final IDelegateBridge bridge, final boolean seaOnly, final String why) {
+  public static void freeMoves(
+      final IDelegateBridge bridge, final boolean seaOnly, final String why) {
     final GameState data = bridge.getData();
     if (!AirBases.usesBases(data)) {
       return;
@@ -127,7 +130,8 @@ public class AirBaseLoss {
   }
 
   /** Where the aircraft could land with its free move: one space at most, nearest first. */
-  public static List<Territory> spots(final GamePlayer player, final Unit plane, final Territory at) {
+  public static List<Territory> spots(
+      final GamePlayer player, final Unit plane, final Territory at) {
     final List<Territory> result = new ArrayList<>();
     AirBases.distances(player, at, 1).entrySet().stream()
         .filter(x -> !x.getKey().equals(at) || !at.isWater() && AirBases.isLandBase(player, at))
@@ -136,12 +140,17 @@ public class AirBaseLoss {
                 .thenComparing(x -> x.getKey().isWater())
                 .thenComparing(x -> x.getKey().getName()))
         .map(Map.Entry::getKey)
-        .filter(t -> t.isWater() ? AirBases.canUseCarriers(plane.getType()) && hasCarrier(player, t, plane) : AirBases.isLandBase(player, t))
+        .filter(
+            t ->
+                t.isWater()
+                    ? AirBases.canUseCarriers(plane.getType()) && hasCarrier(player, t, plane)
+                    : AirBases.isLandBase(player, t))
         .forEach(result::add);
     return result;
   }
 
-  private static boolean hasCarrier(final GamePlayer player, final Territory zone, final Unit plane) {
+  private static boolean hasCarrier(
+      final GamePlayer player, final Territory zone, final Unit plane) {
     return zone.anyUnitsMatch(u -> u.isOwnedBy(player) && AirBases.fits(plane.getType(), u));
   }
 

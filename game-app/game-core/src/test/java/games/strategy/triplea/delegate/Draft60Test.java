@@ -7,7 +7,6 @@ import static org.hamcrest.Matchers.is;
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.GameStep;
-import games.strategy.engine.data.gameparser.GameParser;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;

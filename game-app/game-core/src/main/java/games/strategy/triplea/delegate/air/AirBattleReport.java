@@ -26,8 +26,8 @@ public record AirBattleReport(List<Row> rows, Map<String, Integer> bombingTotals
    *
    * @param place the territory or sea zone name
    * @param attackers the attacking side's units (the bombers' side, or the aircraft from outside)
-   * @param defenders the other side's units: aircraft, units struck, AA guns that fired, a factory or
-   *     SPC bombed
+   * @param defenders the other side's units: aircraft, units struck, AA guns that fired, a factory
+   *     or SPC bombed
    * @param notes what pictures can't say, in plain words with XML nation names
    * @param lossValue PU value each nation lost here (units destroyed plus PUs bombed away)
    * @param hurt the nations that lost or had damaged any unit, or lost PUs

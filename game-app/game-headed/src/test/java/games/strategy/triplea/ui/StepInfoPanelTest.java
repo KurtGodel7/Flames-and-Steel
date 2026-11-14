@@ -7,7 +7,6 @@ import static org.mockito.Mockito.when;
 
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
-import games.strategy.engine.data.gameparser.GameParser;
 import games.strategy.triplea.settings.ClientSetting;
 import games.strategy.triplea.ui.panels.map.MapPanel;
 import java.awt.Component;
@@ -76,8 +75,7 @@ class StepInfoPanelTest {
         });
     flush();
     assertThat(
-        panel[0].getText(),
-        is("America Atlantic · Research / Choose in the research window."));
+        panel[0].getText(), is("America Atlantic · Research / Choose in the research window."));
     assertThat(panel[0].getButton().getText(), is("Open research window"));
     SwingUtilities.invokeAndWait(() -> panel[0].getButton().doClick());
     assertThat(reopened.get(), is(true));

@@ -123,8 +123,7 @@ class Request53Test {
     BasedMap.add(data, sea, japanese, "carrier", 2);
     flyFighters(sea, 2, 3);
     final List<Landing> defaults = AirHome.defaultLandings(japanese, List.of());
-    final List<Landing> here =
-        defaults.stream().filter(l -> l.from().equals(sea)).toList();
+    final List<Landing> here = defaults.stream().filter(l -> l.from().equals(sea)).toList();
     assertThat(here.isEmpty(), is(false));
     for (final Landing l : here) {
       assertThat(l.to().getName(), AirHome.landsInPlace(l), is(true));

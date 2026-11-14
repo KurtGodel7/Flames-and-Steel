@@ -26,7 +26,8 @@ class StickyCasualtyChoiceTest {
   @BeforeEach
   void setUp() {
     gameData.performChange(
-        ChangeFactory.attachmentPropertyChange(armour(gameData).getUnitAttachment(), 2, "hitPoints"));
+        ChangeFactory.attachmentPropertyChange(
+            armour(gameData).getUnitAttachment(), 2, "hitPoints"));
   }
 
   private List<Unit> units(final int infantry, final int tanks) {
@@ -102,8 +103,7 @@ class StickyCasualtyChoiceTest {
   @Test
   void twoUnitsLeftDamagedIsNotLegal() {
     final List<Unit> units = new ArrayList<>(armour(gameData).create(1, british));
-    units.addAll(
-        gameData.getUnitTypeList().getUnitTypeOrThrow("battleship").create(1, british));
+    units.addAll(gameData.getUnitTypeList().getUnitTypeOrThrow("battleship").create(1, british));
     gameData.performChange(
         ChangeFactory.attachmentPropertyChange(
             gameData.getUnitTypeList().getUnitTypeOrThrow("battleship").getUnitAttachment(),

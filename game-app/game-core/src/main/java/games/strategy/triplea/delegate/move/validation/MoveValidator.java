@@ -1360,7 +1360,8 @@ public class MoveValidator {
               && baseUnit.getUnitAttachment().getTransportCost() != -1
               && route.getEnd().getUnitCollection().stream()
                   .noneMatch(
-                      Matches.unitIsSeaTransport().and(OwnTransports.usableBy(baseUnit.getOwner())))) {
+                      Matches.unitIsSeaTransport()
+                          .and(OwnTransports.usableBy(baseUnit.getOwner())))) {
             route.getEnd().getUnitCollection().stream()
                 .filter(Matches.unitIsSeaTransport().and(Matches.alliedUnit(player)))
                 .findFirst()

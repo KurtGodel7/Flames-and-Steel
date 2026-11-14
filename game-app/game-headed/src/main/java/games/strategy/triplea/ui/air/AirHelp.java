@@ -15,9 +15,9 @@ import javax.swing.UIManager;
 
 /**
  * Request 47: the how-to sentences of the air stages. They are always in the banner's tooltip; in
- * the side panel (small grey text) they show the first time each stage opens for a nation in a
- * game (request 48: until the first move there), or every time while the View menu's "Show Air
- * Stage Help" is on. That option is off unless the player turns it on.
+ * the side panel (small grey text) they show the first time each stage opens for a nation in a game
+ * (request 48: until the first move there), or every time while the View menu's "Show Air Stage
+ * Help" is on. That option is off unless the player turns it on.
  */
 public final class AirHelp {
   private static final Map<GameData, Set<String>> seen =
@@ -36,10 +36,11 @@ public final class AirHelp {
   }
 
   /**
-   * Whether the stage's help shows now, as the stage opens for the nation. Counts the opening:
-   * call once per stage.
+   * Whether the stage's help shows now, as the stage opens for the nation. Counts the opening: call
+   * once per stage.
    */
-  public static boolean showAsStageOpens(final GameData data, final GamePlayer player, final String stage) {
+  public static boolean showAsStageOpens(
+      final GameData data, final GamePlayer player, final String stage) {
     final boolean first =
         seen.computeIfAbsent(data, d -> Collections.synchronizedSet(new HashSet<>()))
             .add(player.getName() + "|" + stage);

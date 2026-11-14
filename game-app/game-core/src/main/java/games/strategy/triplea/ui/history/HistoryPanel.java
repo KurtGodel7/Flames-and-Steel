@@ -1,11 +1,11 @@
 package games.strategy.triplea.ui.history;
 
-import games.strategy.triplea.formatter.PlayerNames;
 import com.google.common.base.Preconditions;
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.history.HistoryNode;
 import games.strategy.engine.history.Step;
+import games.strategy.triplea.formatter.PlayerNames;
 import games.strategy.triplea.ui.UiContext;
 import games.strategy.ui.Util;
 import java.awt.BorderLayout;

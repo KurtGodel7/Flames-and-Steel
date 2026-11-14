@@ -31,8 +31,8 @@ public class PlayerNames {
 
   /**
    * The text with every player that has a display name written with it: "Americans fire" becomes
-   * "America Atlantic fire". Whole words only, the longest names first (so "AmericansPacific" is not
-   * read as "Americans"), and never inside a file name such as "flags/Americans.png".
+   * "America Atlantic fire". Whole words only, the longest names first (so "AmericansPacific" is
+   * not read as "Americans"), and never inside a file name such as "flags/Americans.png".
    */
   public static String inText(final @Nullable String text, final @Nullable GameState data) {
     if (text == null || text.isEmpty() || data == null) {
@@ -53,8 +53,7 @@ public class PlayerNames {
               "(?<![A-Za-z0-9_/])"
                   + Pattern.quote(p.getName())
                   + "(?![A-Za-z0-9_]|\\.(?:png|gif|jpg))");
-      result =
-          pattern.matcher(result).replaceAll(Matcher.quoteReplacement(display(p)));
+      result = pattern.matcher(result).replaceAll(Matcher.quoteReplacement(display(p)));
     }
     return result;
   }

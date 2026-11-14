@@ -87,7 +87,9 @@ public class StickyCasualtyPanel extends JPanel {
     top.add(Box.createVerticalStrut(4));
     top.add(
         new JLabel(
-            html(player.getName() + ": click a unit to give it a hit; right-click to take it back.")));
+            html(
+                player.getName()
+                    + ": click a unit to give it a hit; right-click to take it back.")));
     for (final java.awt.Component c : top.getComponents()) {
       ((JComponent) c).setAlignmentX(LEFT_ALIGNMENT);
     }
@@ -231,8 +233,11 @@ public class StickyCasualtyPanel extends JPanel {
         bar.setToolTipText(
             a.killed()
                 ? "This one is " + StickyCasualtyChoice.fate(a.unit())
-                : "This one: " + (a.unit().getHits() + a.hitsTaken()) + " of "
-                    + Unit.maxHitPoints(a.unit()) + " hit points lost");
+                : "This one: "
+                    + (a.unit().getHits() + a.hitsTaken())
+                    + " of "
+                    + Unit.maxHitPoints(a.unit())
+                    + " hit points lost");
         bars.add(bar);
       }
     }
@@ -285,7 +290,8 @@ public class StickyCasualtyPanel extends JPanel {
   private Icon iconFor(final Unit unit) {
     if (uiContext == null) {
       return new ImageIcon(
-          new java.awt.image.BufferedImage(1, ICON_HEIGHT, java.awt.image.BufferedImage.TYPE_INT_ARGB));
+          new java.awt.image.BufferedImage(
+              1, ICON_HEIGHT, java.awt.image.BufferedImage.TYPE_INT_ARGB));
     }
     final ImageIcon full = uiContext.getUnitImageFactory().getIcon(ImageKey.of(unit));
     if (full.getIconHeight() <= 0) {

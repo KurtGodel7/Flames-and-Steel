@@ -59,7 +59,9 @@ public final class GameFileSelector {
     return path;
   }
 
-  /** Request 36: an open dialog in the autosave folder (the fork's autosaves sort in play order). */
+  /**
+   * Request 36: an open dialog in the autosave folder (the fork's autosaves sort in play order).
+   */
   public static Optional<Path> selectAutoSave(final Frame frame) {
     return FileChooser.builder()
         .parent(frame)

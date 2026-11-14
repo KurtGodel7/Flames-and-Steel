@@ -26,9 +26,9 @@ import lombok.experimental.UtilityClass;
  * Flames and Steel lend-lease munitions: conversion into PUs, and capture.
  *
  * <p>Request 32: the nations listed in {@value #ABSORB_PLAYERS} (the two American nations) absorb
- * each other's munitions on their land at the end of their own turn, at most {@value
- * #ABSORB_BASE} plus one per tech in {@value #ABSORB_TECHS} they have, newest arrivals first; the
- * rest wait for a later turn.
+ * each other's munitions on their land at the end of their own turn, at most {@value #ABSORB_BASE}
+ * plus one per tech in {@value #ABSORB_TECHS} they have, newest arrivals first; the rest wait for a
+ * later turn.
  */
 @UtilityClass
 public class Munitions {

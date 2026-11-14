@@ -112,7 +112,8 @@ public class AirStage {
     if (AirBases.isAirborneTerritory(base)) {
       return List.of();
     }
-    return base.getUnitCollection()
+    return base
+        .getUnitCollection()
         .getMatches(u -> u.isOwnedBy(player) && isOfStage(u.getType(), stage))
         .stream()
         .sorted(Comparator.comparingInt(Unit::getHits))
@@ -134,9 +135,13 @@ public class AirStage {
   public static Set<Territory> bomberPlaces(
       final Map<GamePlayer, ? extends Collection<TargetAssignment>> bombers) {
     final Set<Territory> result = new LinkedHashSet<>();
-    bombers.values().forEach(
-        list ->
-            list.stream().filter(a -> !isRebase(a)).forEach(a -> result.add(a.target().territory())));
+    bombers
+        .values()
+        .forEach(
+            list ->
+                list.stream()
+                    .filter(a -> !isRebase(a))
+                    .forEach(a -> result.add(a.target().territory())));
     return result;
   }
 
@@ -176,16 +181,22 @@ public class AirStage {
     }
     if (!AirCombat.targetsIn(player, to).isEmpty()
         || to.anyUnitsMatch(u -> AirCombat.atWar(player, u.getOwner()))) {
-      return Optional.of(to.getName() + " has enemy units: a move there is an attack, not a rebase.");
+      return Optional.of(
+          to.getName() + " has enemy units: a move there is an attack, not a rebase.");
     }
     if (stage == Stage.FIGHTERS && bomberPlaces(bombers).contains(to)) {
       return Optional.of(
-          "Bombers are going to " + to.getName() + " this round: fighters sent there escort or defend.");
+          "Bombers are going to "
+              + to.getName()
+              + " this round: fighters sent there escort or defend.");
     }
     if (to.isWater()) {
       if (!AirBases.canUseCarriers(type)) {
-        return Optional.of(to.getName() + ": " + typeName(type).toLowerCase(java.util.Locale.ROOT)
-            + " can't land on carriers.");
+        return Optional.of(
+            to.getName()
+                + ": "
+                + typeName(type).toLowerCase(java.util.Locale.ROOT)
+                + " can't land on carriers.");
       }
       if (AirBases.rebaseCarrier(player, type, to).isEmpty()) {
         return Optional.of(
@@ -262,7 +273,12 @@ public class AirStage {
     final List<Unit> here =
         aircraftAt(player, base, stage).stream().filter(u -> u.getType().equals(type)).toList();
     if (here.isEmpty()) {
-      return Optional.of("No " + typeName(type).toLowerCase(java.util.Locale.ROOT) + " at " + base.getName() + ".");
+      return Optional.of(
+          "No "
+              + typeName(type).toLowerCase(java.util.Locale.ROOT)
+              + " at "
+              + base.getName()
+              + ".");
     }
     if (target.kind() == TargetKind.REBASE) {
       return rebaseProblem(player, base, type, target.territory(), stage, bombers);
@@ -272,7 +288,8 @@ public class AirStage {
         return Optional.of("Fighters escort or defend; they make no strikes.");
       }
       if (!bomberPlaces(bombers).contains(target.territory())) {
-        return Optional.of("No bombers are going to " + target.territory().getName() + " this round.");
+        return Optional.of(
+            "No bombers are going to " + target.territory().getName() + " this round.");
       }
       final Optional<String> rule = AirCover.coverRule(player, type, target.territory(), bombers);
       if (rule.isPresent()) {
@@ -305,8 +322,7 @@ public class AirStage {
               .toList();
       for (final Unit u : units) {
         used.add(u);
-        final int left =
-            AirBases.rangeLeftAt(u, a.zone(), a.target().territory()).orElse(-1);
+        final int left = AirBases.rangeLeftAt(u, a.zone(), a.target().territory()).orElse(-1);
         result.add(new Flight(u, a.target().territory(), left));
       }
     }
@@ -371,7 +387,8 @@ public class AirStage {
                           + a.target().describe()
                           + "."));
         }
-        final Optional<GamePlayer> locker = AirPriority.lockedBy(player, a.target().territory(), others);
+        final Optional<GamePlayer> locker =
+            AirPriority.lockedBy(player, a.target().territory(), others);
         if (locker.isPresent()) {
           return Optional.of(AirPriority.lockedText(a.target().territory(), locker.get()));
         }

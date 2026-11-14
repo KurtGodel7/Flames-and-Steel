@@ -118,7 +118,11 @@ public final class BasedMap {
   private static String remove(final String s, final String regex, final String marker) {
     return Pattern.compile(regex)
         .matcher(s)
-        .replaceAll(m -> m.group().contains(marker) ? "" : java.util.regex.Matcher.quoteReplacement(m.group()));
+        .replaceAll(
+            m ->
+                m.group().contains(marker)
+                    ? ""
+                    : java.util.regex.Matcher.quoteReplacement(m.group()));
   }
 
   // ---- small helpers for scenarios
@@ -145,8 +149,11 @@ public final class BasedMap {
     final List<String> names = List.of(types);
     for (final Territory t : data.getMap().getTerritories()) {
       final List<Unit> gone =
-          t.getUnitCollection().getMatches(
-              u -> u.isOwnedBy(owner) && (names.isEmpty() || names.contains(u.getType().getName())));
+          t.getUnitCollection()
+              .getMatches(
+                  u ->
+                      u.isOwnedBy(owner)
+                          && (names.isEmpty() || names.contains(u.getType().getName())));
       t.getUnitCollection().removeAll(gone);
     }
   }
@@ -155,7 +162,8 @@ public final class BasedMap {
   public static void fly(final GameData data, final Territory over, final List<Unit> units) {
     final Territory airborne = AirBases.airborne(data).orElseThrow();
     for (final Territory t : data.getMap().getTerritories()) {
-      final List<Unit> here = units.stream().filter(u -> t.getUnitCollection().contains(u)).toList();
+      final List<Unit> here =
+          units.stream().filter(u -> t.getUnitCollection().contains(u)).toList();
       if (!here.isEmpty() && !t.equals(airborne)) {
         data.performChange(
             games.strategy.engine.data.changefactory.ChangeFactory.moveUnits(t, airborne, here));
@@ -173,7 +181,11 @@ public final class BasedMap {
 
   /** Puts new units on the map. */
   public static List<Unit> add(
-      final GameData data, final Territory t, final GamePlayer owner, final String type, final int n) {
+      final GameData data,
+      final Territory t,
+      final GamePlayer owner,
+      final String type,
+      final int n) {
     final List<Unit> units = data.getUnitTypeList().getUnitTypeOrThrow(type).create(n, owner);
     t.getUnitCollection().addAll(units);
     return units;

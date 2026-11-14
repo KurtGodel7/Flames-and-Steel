@@ -20,11 +20,11 @@ import java.util.Set;
 import lombok.experimental.UtilityClass;
 
 /**
- * Flames and Steel (request 53 item 1): the unit types a nation can ever have, for Edit mode's
- * "Add Units": what its production frontiers offer (its own, and any a trigger switches it to),
- * the purchase rules its techs unlock (trigger "productionRule" entries on those frontiers), units
- * from its SPCs and free-unit techs, and anything it already owns on the map. Never another
- * nation's special units.
+ * Flames and Steel (request 53 item 1): the unit types a nation can ever have, for Edit mode's "Add
+ * Units": what its production frontiers offer (its own, and any a trigger switches it to), the
+ * purchase rules its techs unlock (trigger "productionRule" entries on those frontiers), units from
+ * its SPCs and free-unit techs, and anything it already owns on the map. Never another nation's
+ * special units.
  */
 @UtilityClass
 public class NationUnits {
@@ -66,7 +66,9 @@ public class NationUnits {
     // 3. free units from its techs, and units its SPCs build with a tech it can research
     final Set<String> techNames = new LinkedHashSet<>();
     for (final TechAdvance t :
-        player.isNull() ? java.util.List.<TechAdvance>of() : player.getTechnologyFrontierList().getAdvances()) {
+        player.isNull()
+            ? java.util.List.<TechAdvance>of()
+            : player.getTechnologyFrontierList().getAdvances()) {
       techNames.add(t.getName());
       final TechAbilityAttachment ability = TechAbilityAttachment.get(t);
       if (ability != null) {
@@ -122,8 +124,8 @@ public class NationUnits {
   }
 
   /**
-   * Whether a unit of this type may be added to the territory in Edit mode: on land, land units
-   * and aircraft; at sea, ships and aircraft that can sit on a carrier.
+   * Whether a unit of this type may be added to the territory in Edit mode: on land, land units and
+   * aircraft; at sea, ships and aircraft that can sit on a carrier.
    */
   public static boolean fits(final UnitType type, final Territory territory) {
     final var ua = type.getUnitAttachment();

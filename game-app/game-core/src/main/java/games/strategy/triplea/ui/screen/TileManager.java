@@ -354,7 +354,8 @@ public class TileManager {
     UnitCategory previousCategory = null;
     // request 53: the pictures already drawn here; a stack never goes on top of one of them
     final List<Rectangle> taken = new ArrayList<>();
-    for (final UnitCategory category : UnitSeparator.getSortedUnitCategories(territory, mapData, unitsOffMap)) {
+    for (final UnitCategory category :
+        UnitSeparator.getSortedUnitCategories(territory, mapData, unitsOffMap)) {
       final Image image = unitImageFactory.getImage(ImageKey.of(category));
       final int w = Math.max(unitImageFactory.getUnitImageWidth(), image.getWidth(null));
       final int h = Math.max(unitImageFactory.getUnitImageHeight(), image.getHeight(null));
@@ -401,9 +402,9 @@ public class TileManager {
   }
 
   /**
-   * Request 53: whether a unit picture at this point would cover part of one already drawn. A
-   * pixel of touching is allowed (map makers place stacks edge to edge); more is an overlap that
-   * would run two count labels together ("1" and "2" reading as "12").
+   * Request 53: whether a unit picture at this point would cover part of one already drawn. A pixel
+   * of touching is allowed (map makers place stacks edge to edge); more is an overlap that would
+   * run two count labels together ("1" and "2" reading as "12").
    */
   static boolean overlaps(final List<Rectangle> taken, final Point p, final int w, final int h) {
     final Rectangle r = new Rectangle(p.x + 1, p.y + 1, Math.max(1, w - 2), Math.max(1, h - 2));

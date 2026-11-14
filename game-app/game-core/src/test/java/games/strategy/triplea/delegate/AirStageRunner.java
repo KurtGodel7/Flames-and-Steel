@@ -141,8 +141,7 @@ public final class AirStageRunner {
   public IDelegateBridge bridge() {
     final GamePlayer any = data.getPlayerList().getPlayers().get(0);
     final IDelegateBridge bridge = newDelegateBridge(any);
-    when(bridge.getRemotePlayer(any(GamePlayer.class)))
-        .thenAnswer(i -> client(i.getArgument(0)));
+    when(bridge.getRemotePlayer(any(GamePlayer.class))).thenAnswer(i -> client(i.getArgument(0)));
     when(bridge.getRandom(anyInt(), any(), any(), anyString()))
         .thenAnswer(i -> Math.min(die, i.<Integer>getArgument(0) - 1));
     setUp.accept(bridge);

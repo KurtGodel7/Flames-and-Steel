@@ -259,8 +259,7 @@ public class AirUnitAttachment extends DefaultAttachment {
                   this::setFighter, this::setFighter, this::isFighter, () -> fighter = false));
       case "airRole" ->
           Optional.of(
-              MutableProperty.ofString(
-                  this::setAirRole, this::getAirRole, () -> fighter = false));
+              MutableProperty.ofString(this::setAirRole, this::getAirRole, () -> fighter = false));
       case "interception" ->
           Optional.of(
               MutableProperty.of(
@@ -338,17 +337,11 @@ public class AirUnitAttachment extends DefaultAttachment {
       case "landBonus" ->
           Optional.of(
               MutableProperty.of(
-                  this::setLandBonus,
-                  this::setLandBonus,
-                  this::getLandBonus,
-                  () -> landBonus = 0));
+                  this::setLandBonus, this::setLandBonus, this::getLandBonus, () -> landBonus = 0));
       case "subBonus" ->
           Optional.of(
               MutableProperty.of(
-                  this::setSubBonus,
-                  this::setSubBonus,
-                  this::getSubBonus,
-                  () -> subBonus = 0));
+                  this::setSubBonus, this::setSubBonus, this::getSubBonus, () -> subBonus = 0));
       case "navalBonus" ->
           Optional.of(
               MutableProperty.of(

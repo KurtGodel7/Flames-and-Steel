@@ -29,8 +29,8 @@ public final class AirBattleWindowPreview {
 
   private AirBattleWindowPreview() {}
 
-  public static Seen draw(final GameData data, final AirBattleReport report, final GamePlayer viewer)
-      throws Exception {
+  public static Seen draw(
+      final GameData data, final AirBattleReport report, final GamePlayer viewer) throws Exception {
     ClientSetting.initialize();
     final UiContext ui = new UiContext(data);
     final Seen[] seen = new Seen[1];

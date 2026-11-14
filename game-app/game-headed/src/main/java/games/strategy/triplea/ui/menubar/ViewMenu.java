@@ -263,8 +263,8 @@ final class ViewMenu {
   }
 
   /**
-   * Flames and Steel (request 44): the small markers for aircraft in the air outside the air
-   * phase can be hidden altogether (the air map still shows them in full).
+   * Flames and Steel (request 44): the small markers for aircraft in the air outside the air phase
+   * can be hidden altogether (the air map still shows them in full).
    */
   private static JCheckBoxMenuItem getShowAircraftInAir(final TripleAFrame frame) {
     return new JMenuItemCheckBoxBuilder("Show Aircraft in the Air", KeyCode.A)
@@ -287,12 +287,10 @@ final class ViewMenu {
           public void addNotify() {
             // the menu opens: show the option as it is now
             super.addNotify();
-            setSelected(
-                games.strategy.triplea.ui.air.AirHelp.isOn(frame.getGameDataForNames()));
+            setSelected(games.strategy.triplea.ui.air.AirHelp.isOn(frame.getGameDataForNames()));
           }
         };
-    item.addActionListener(
-        e -> games.strategy.triplea.ui.air.AirHelp.setOn(item.isSelected()));
+    item.addActionListener(e -> games.strategy.triplea.ui.air.AirHelp.setOn(item.isSelected()));
     return item;
   }
 

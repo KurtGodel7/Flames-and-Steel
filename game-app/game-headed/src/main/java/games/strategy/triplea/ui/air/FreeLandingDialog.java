@@ -75,9 +75,7 @@ public final class FreeLandingDialog {
       c.gridx = 0;
       final Unit u = e.getKey();
       panel.add(
-          new JLabel(
-              PlayerNames.display(u.getOwner()) + " " + AirCombat.unitName(u.getType())),
-          c);
+          new JLabel(PlayerNames.display(u.getOwner()) + " " + AirCombat.unitName(u.getType())), c);
       c.gridx = 1;
       if (e.getValue().isEmpty()) {
         panel.add(new JLabel("nowhere to land: lost"), c);
@@ -111,7 +109,8 @@ public final class FreeLandingDialog {
       c.gridwidth = 2;
       panel.add(next, c);
     }
-    JOptionPane.showMessageDialog(parent, panel, "Aircraft without a base", JOptionPane.PLAIN_MESSAGE);
+    JOptionPane.showMessageDialog(
+        parent, panel, "Aircraft without a base", JOptionPane.PLAIN_MESSAGE);
     final Map<Unit, Territory> result = new LinkedHashMap<>();
     boxes.forEach(
         (u, box) -> {

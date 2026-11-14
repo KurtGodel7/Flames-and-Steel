@@ -1,12 +1,12 @@
 package games.strategy.triplea.ui.air;
 
 import games.strategy.engine.data.GameData;
+import games.strategy.engine.data.GameDataEvent;
 import games.strategy.engine.data.GamePlayer;
 import games.strategy.engine.data.GameStep;
 import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.UnitType;
-import games.strategy.engine.data.GameDataEvent;
 import games.strategy.engine.delegate.IDelegate;
 import games.strategy.triplea.delegate.AirCombatDelegate;
 import games.strategy.triplea.delegate.AirStageDelegate;
@@ -14,9 +14,9 @@ import games.strategy.triplea.delegate.air.AirBases;
 import games.strategy.triplea.delegate.air.AirCombat;
 import games.strategy.triplea.image.UnitImageFactory;
 import games.strategy.triplea.image.UnitImageFactory.ImageKey;
-import games.strategy.triplea.ui.panels.map.MapPanel;
 import games.strategy.triplea.ui.UiContext;
 import games.strategy.triplea.ui.panels.map.MapOverlay;
+import games.strategy.triplea.ui.panels.map.MapPanel;
 import java.awt.AlphaComposite;
 import java.awt.BasicStroke;
 import java.awt.Color;
@@ -241,9 +241,9 @@ public final class AirMapMode implements MapOverlay {
    * Every nation's aircraft in the air over the territory they are over. During the air phase (and
    * in the air map) they are drawn in full, stacked as the map stacks units, with "lands at round
    * end" under them; in a territory where enemies meet the air map adds "Air battle". Request 44:
-   * the rest of the round each nation shows only a small faded marker in a corner of the
-   * territory (the View menu hides them), so they don't get in the way of the turn. Aircraft an
-   * air screen draws elsewhere (they have landing orders) are left out.
+   * the rest of the round each nation shows only a small faded marker in a corner of the territory
+   * (the View menu hides them), so they don't get in the way of the turn. Aircraft an air screen
+   * draws elsewhere (they have landing orders) are left out.
    */
   private void paintAirborne(final Graphics2D g, final Territory airborne, final List<Drawn> out) {
     final Set<Unit> elsewhere = mapPanel == null ? Set.of() : mapPanel.getUnitsOffMap();
@@ -308,8 +308,8 @@ public final class AirMapMode implements MapOverlay {
   }
 
   /**
-   * Request 44: one small faded marker per nation (its most common aircraft, small, and the
-   * total count) in the spot of the territory furthest from where its units are drawn.
+   * Request 44: one small faded marker per nation (its most common aircraft, small, and the total
+   * count) in the spot of the territory furthest from where its units are drawn.
    */
   private void paintMarkers(
       final Graphics2D g, final Territory over, final List<Unit> units, final List<Drawn> out) {
@@ -489,8 +489,8 @@ public final class AirMapMode implements MapOverlay {
   }
 
   /**
-   * Pointing at aircraft in the air says what they are and how far they can still fly (request
-   * 44: a marker lists all of its nation's aircraft there).
+   * Pointing at aircraft in the air says what they are and how far they can still fly (request 44:
+   * a marker lists all of its nation's aircraft there).
    */
   private void pointedAt(final Point mapPoint) {
     // request 47: the banner's tooltip says how the stage works
@@ -560,7 +560,9 @@ public final class AirMapMode implements MapOverlay {
     final FontMetrics fm = g.getFontMetrics(plain);
     final FontMetrics fmBold = g.getFontMetrics(bold);
     final int textWidth =
-        fm.stringWidth(text.before()) + fmBold.stringWidth(text.bold()) + fm.stringWidth(text.after());
+        fm.stringWidth(text.before())
+            + fmBold.stringWidth(text.bold())
+            + fm.stringWidth(text.after());
     final int w = Math.min(view.width - 20, textWidth + 30);
     final int h = fm.getHeight() + 14;
     final int x = view.x + (view.width - w) / 2;

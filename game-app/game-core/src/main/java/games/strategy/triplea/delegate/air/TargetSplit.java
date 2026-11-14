@@ -24,7 +24,8 @@ public class TargetSplit {
       final UnitType type,
       final Target target) {
     return staged.stream()
-        .filter(a -> a.zone().equals(zone) && a.unitType().equals(type) && a.target().equals(target))
+        .filter(
+            a -> a.zone().equals(zone) && a.unitType().equals(type) && a.target().equals(target))
         .mapToInt(TargetAssignment::count)
         .sum();
   }
@@ -52,8 +53,8 @@ public class TargetSplit {
   }
 
   /**
-   * The assignments with {@code delta} more (or fewer) bombers of the type against the target,
-   * kept within the bombers available: never below 0 at the target, never more in all than {@code
+   * The assignments with {@code delta} more (or fewer) bombers of the type against the target, kept
+   * within the bombers available: never below 0 at the target, never more in all than {@code
    * available}. Assignments that drop to 0 are removed; one target keeps one entry.
    *
    * @param available how many bombers of the type are in the zone

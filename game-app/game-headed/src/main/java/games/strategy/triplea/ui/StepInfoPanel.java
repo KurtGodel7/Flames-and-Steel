@@ -2,8 +2,8 @@ package games.strategy.triplea.ui;
 
 import games.strategy.engine.data.GameData;
 import games.strategy.engine.data.GamePlayer;
-import games.strategy.triplea.ui.panels.map.MapPanel;
 import games.strategy.triplea.formatter.PlayerNames;
+import games.strategy.triplea.ui.panels.map.MapPanel;
 import javax.annotation.Nullable;
 import javax.swing.JButton;
 import javax.swing.JLabel;

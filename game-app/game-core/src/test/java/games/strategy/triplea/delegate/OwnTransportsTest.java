@@ -13,7 +13,6 @@ import games.strategy.engine.data.Territory;
 import games.strategy.engine.data.Unit;
 import games.strategy.engine.data.UnitType;
 import games.strategy.engine.data.changefactory.ChangeFactory;
-import games.strategy.engine.data.gameparser.GameParser;
 import games.strategy.triplea.util.TransportUtils;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -96,8 +95,7 @@ class OwnTransportsTest {
         forceMapping
             ? Map.of(infantry.get(0), transport.get(0))
             : TransportUtils.mapTransports(route, infantry, transport);
-    final Optional<String> result =
-        move.performMove(new MoveDescription(infantry, route, mapping));
+    final Optional<String> result = move.performMove(new MoveDescription(infantry, route, mapping));
     move.end();
     return result;
   }

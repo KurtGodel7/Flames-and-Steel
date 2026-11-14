@@ -239,9 +239,9 @@ public interface Player extends IRemote {
    * @param why what happened, for the question ("Carrier sunk in Sea Zone 12")
    */
   @RemoteActionCode(30)
-  default java.util.Map<games.strategy.engine.data.Unit, games.strategy.engine.data.Territory>
+  default Map<games.strategy.engine.data.Unit, games.strategy.engine.data.Territory>
       selectFreeLandings(
-          final java.util.Map<
+          final Map<
                   games.strategy.engine.data.Unit,
                   java.util.List<games.strategy.engine.data.Territory>>
               options,
@@ -256,16 +256,16 @@ public interface Player extends IRemote {
   @RemoteActionCode(31)
   default void airStageAllied(
       final GamePlayer player,
-      final java.util.Map<
+      final Map<
               GamePlayer,
               java.util.List<games.strategy.triplea.delegate.air.AirCombat.TargetAssignment>>
           allied) {}
 
   /**
-   * Flames and Steel (requests 35 and 38): the nation's choice in a simultaneous air stage (bombers:
-   * targets; fighters: places to escort or defend; planes go home: landings). Every nation is asked
-   * at once; a computer playing several nations shows them one after another in the given order.
-   * Players that don't ask (AI) make no choices.
+   * Flames and Steel (requests 35 and 38): the nation's choice in a simultaneous air stage
+   * (bombers: targets; fighters: places to escort or defend; planes go home: landings). Every
+   * nation is asked at once; a computer playing several nations shows them one after another in the
+   * given order. Players that don't ask (AI) make no choices.
    *
    * @param stage the stage
    * @param order the nations being asked, in turn order
@@ -276,9 +276,9 @@ public interface Player extends IRemote {
   @RemoteActionCode(32)
   default games.strategy.triplea.delegate.air.AirStage.Choice selectAirStage(
       final games.strategy.triplea.delegate.air.AirStage.Stage stage,
-      final java.util.List<GamePlayer> order,
+      final List<GamePlayer> order,
       final games.strategy.triplea.delegate.air.AirStage.Choice start,
-      final java.util.Map<
+      final Map<
               GamePlayer,
               java.util.List<games.strategy.triplea.delegate.air.AirCombat.TargetAssignment>>
           bombers,
@@ -291,7 +291,7 @@ public interface Player extends IRemote {
    * player whose nations are done can see who is left (names only, never choices).
    */
   @RemoteActionCode(33)
-  default void airStageWaiting(final java.util.List<String> waitingFor) {}
+  default void airStageWaiting(final List<String> waitingFor) {}
 
   /**
    * Ask the player if he wishes to retreat.
