@@ -441,17 +441,21 @@ public final class ProMoveUtils {
       moveDel
           .performMove(move)
           .ifPresent(
-              result ->
-                  ProLogger.warn(
-                      data.getSequence().getRound()
-                          + "-"
-                          + data.getSequence().getStep().getName()
-                          + ": could not move "
-                          + move.getUnits()
-                          + " over "
-                          + move.getRoute()
-                          + " because: "
-                          + result));
+              result -> {
+                // request 69: the AI test runner records refused moves
+                games.strategy.triplea.ai.AiTestHooks.moveRefused(
+                    proData.getPlayer(), move, result);
+                ProLogger.warn(
+                    data.getSequence().getRound()
+                        + "-"
+                        + data.getSequence().getStep().getName()
+                        + ": could not move "
+                        + move.getUnits()
+                        + " over "
+                        + move.getRoute()
+                        + " because: "
+                        + result);
+              });
       if (!proData.isSimulation()) {
         AbstractAi.movePause();
       }

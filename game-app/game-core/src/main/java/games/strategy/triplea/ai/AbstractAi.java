@@ -525,6 +525,44 @@ public abstract class AbstractAi extends AbstractBasePlayer {
       place(GameStep.isBidStepName(name), placeDel, getGameData(), gamePlayer);
     } else if (GameStep.isEndTurnStepName(name)) {
       endTurn((IAbstractForumPosterDelegate) getPlayerBridge().getRemoteDelegate(), gamePlayer);
+    } else if (name.endsWith("ApcProduction")
+        && getPlayerBridge().getRemoteDelegate()
+            instanceof games.strategy.triplea.delegate.remote.IApcDelegate apcDelegate) {
+      apcProduction(apcDelegate, gamePlayer);
+    }
+    // Flames and Steel research steps need nothing here: an unanswered research step researches
+    // with each centre's stored focus when it ends (request 69)
+  }
+
+  /**
+   * Flames and Steel (request 69): each SPC that builds nothing yet builds the first unit it may
+   * build; ships go to the first adjacent sea zone (the engine's default). Simple and legal; a
+   * better choice is later work.
+   */
+  private static void apcProduction(
+      final games.strategy.triplea.delegate.remote.IApcDelegate apcDelegate,
+      final GamePlayer gamePlayer) {
+    final var data = gamePlayer.getData();
+    final List<games.strategy.engine.data.UnitType> buildable =
+        games.strategy.triplea.delegate.apc.Apcs.getBuildableTypes(gamePlayer);
+    if (buildable.isEmpty()) {
+      return;
+    }
+    final Map<Unit, games.strategy.engine.data.UnitType> choices = new HashMap<>();
+    try (GameData.Unlocker ignored = data.acquireReadLock()) {
+      for (final Unit apc :
+          games.strategy.triplea.delegate.apc.Apcs.getOwnApcs(gamePlayer, data.getMap())) {
+        if (games.strategy.triplea.delegate.apc.Apcs.getProduction(apc, gamePlayer).isEmpty()) {
+          choices.put(apc, buildable.get(0));
+        }
+      }
+    }
+    if (choices.isEmpty()) {
+      return;
+    }
+    final String error = apcDelegate.setProduction(choices);
+    if (error != null) {
+      log.warn("AI SPC production refused for " + gamePlayer.getName() + ": " + error);
     }
   }
 

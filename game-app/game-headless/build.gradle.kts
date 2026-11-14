@@ -72,3 +72,14 @@ tasks.register<Copy>("copyShadow") {
 tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
     archiveClassifier.set("")
 }
+
+// Flames and Steel (request 69): AI-only test games without a user interface, e.g.
+//   gradlew :game-headless:runAiTest --args="--rounds 15 --games 5 --seed 1 --out ai-test-results"
+// (or run-ai-test.bat / run-ai-test.sh in the repository root)
+tasks.register<JavaExec>("runAiTest") {
+    group = "verification"
+    description = "Runs AI-only Flames and Steel games and writes logs (request 69)"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("org.triplea.game.server.aitest.AiTestRunner")
+    workingDir = rootDir
+}
