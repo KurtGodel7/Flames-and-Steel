@@ -542,20 +542,9 @@ public abstract class AbstractAi extends AbstractBasePlayer {
   private static void apcProduction(
       final games.strategy.triplea.delegate.remote.IApcDelegate apcDelegate,
       final GamePlayer gamePlayer) {
-    final var data = gamePlayer.getData();
-    final List<games.strategy.engine.data.UnitType> buildable =
-        games.strategy.triplea.delegate.apc.Apcs.getBuildableTypes(gamePlayer);
-    if (buildable.isEmpty()) {
-      return;
-    }
-    final Map<Unit, games.strategy.engine.data.UnitType> choices = new HashMap<>();
-    try (GameData.Unlocker ignored = data.acquireReadLock()) {
-      for (final Unit apc :
-          games.strategy.triplea.delegate.apc.Apcs.getOwnApcs(gamePlayer, data.getMap())) {
-        if (games.strategy.triplea.delegate.apc.Apcs.getProduction(apc, gamePlayer).isEmpty()) {
-          choices.put(apc, buildable.get(0));
-        }
-      }
+    final Map<Unit, games.strategy.engine.data.UnitType> choices;
+    try (GameData.Unlocker ignored = gamePlayer.getData().acquireReadLock()) {
+      choices = defaultApcChoices(gamePlayer);
     }
     if (choices.isEmpty()) {
       return;
@@ -564,6 +553,25 @@ public abstract class AbstractAi extends AbstractBasePlayer {
     if (error != null) {
       log.warn("AI SPC production refused for " + gamePlayer.getName() + ": " + error);
     }
+  }
+
+  /** Request 69: the AI's SPC choices: the first buildable unit for each SPC not yet building. */
+  public static Map<Unit, games.strategy.engine.data.UnitType> defaultApcChoices(
+      final GamePlayer gamePlayer) {
+    final Map<Unit, games.strategy.engine.data.UnitType> choices = new HashMap<>();
+    final List<games.strategy.engine.data.UnitType> buildable =
+        games.strategy.triplea.delegate.apc.Apcs.getBuildableTypes(gamePlayer);
+    if (buildable.isEmpty()) {
+      return choices;
+    }
+    for (final Unit apc :
+        games.strategy.triplea.delegate.apc.Apcs.getOwnApcs(
+            gamePlayer, gamePlayer.getData().getMap())) {
+      if (games.strategy.triplea.delegate.apc.Apcs.getProduction(apc, gamePlayer).isEmpty()) {
+        choices.put(apc, buildable.get(0));
+      }
+    }
+    return choices;
   }
 
   // The following methods are called when the AI starts a phase.
